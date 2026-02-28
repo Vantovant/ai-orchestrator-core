@@ -426,6 +426,8 @@ export default function BankImportTab() {
   const [parsing, setParsing] = useState(false);
   const [activeImport, setActiveImport] = useState<BankStatementImport | null>(null);
   const [mappingData, setMappingData] = useState<{ headers: string[]; sample_rows: string[][] } | null>(null);
+  const [parsingPdf, setParsingPdf] = useState(false);
+  const [parsingImportId, setParsingImportId] = useState<string | null>(null);
 
   const imports = useQuery({
     queryKey: ["bank_imports", selectedAccountId],
@@ -453,7 +455,11 @@ export default function BankImportTab() {
       const presetKey = account ? Object.entries(SA_BANK_PRESETS).find(([, v]) => v.name.toLowerCase() === account.bank_name.toLowerCase())?.[0] : undefined;
 
       if (fileType === "pdf") {
+        setParsingPdf(true);
+        setParsingImportId(importRec.id);
         await parseImport(importRec.id, undefined as any, 0);
+        setParsingPdf(false);
+        setParsingImportId(null);
       } else if (presetKey) {
         await parseImport(importRec.id, SA_BANK_PRESETS[presetKey].mapping, SA_BANK_PRESETS[presetKey].skipRows || 1);
       } else {
@@ -544,7 +550,32 @@ export default function BankImportTab() {
           {(uploading || parsing) && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <RefreshCw className="h-4 w-4 animate-spin" />
-              {uploading ? "Uploading..." : "Parsing transactions..."}
+              {uploading ? "Uploading..." : parsingPdf ? (
+                <span className="flex items-center gap-2">
+                  Parsing PDF… <span className="text-xs text-warning">(Beta — prefer CSV for accuracy)</span>
+                </span>
+              ) : "Parsing transactions..."}
+              {parsingPdf && parsingImportId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-destructive hover:text-destructive"
+                  onClick={async () => {
+                    try {
+                      await supabase.functions.invoke("bank-import-parse", {
+                        body: { import_id: parsingImportId, action: "cancel" },
+                      });
+                      setParsing(false);
+                      setParsingPdf(false);
+                      setParsingImportId(null);
+                      qc.invalidateQueries({ queryKey: ["bank_imports"] });
+                      toast.info("PDF parsing cancelled");
+                    } catch { /* ignore */ }
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
             </div>
           )}
           <p className="text-xs text-muted-foreground">Supported formats: CSV (recommended), OFX, QIF, PDF (Beta). Max file size: 5 MB.</p>
@@ -580,18 +611,24 @@ export default function BankImportTab() {
           ) : (
             <div className="space-y-1">
               {(imports.data ?? []).map(imp => (
-                <div key={imp.id} className="flex items-center justify-between rounded border border-border p-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    {imp.status === "committed" ? <CheckCircle className="h-4 w-4 text-success" /> :
-                     imp.status === "failed" ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
-                     imp.status === "review" ? <FileSpreadsheet className="h-4 w-4 text-warning" /> :
-                     <RefreshCw className="h-4 w-4 text-muted-foreground" />}
-                    <span>{new Date(imp.imported_at).toLocaleDateString("en-ZA")}</span>
-                    <Badge variant="outline" className="text-xs">{imp.file_type.toUpperCase()}</Badge>
-                    <Badge variant={imp.status === "committed" ? "default" : imp.status === "failed" ? "destructive" : "secondary"} className="text-xs">{imp.status}</Badge>
+                <div key={imp.id} className="flex flex-col rounded border border-border p-2 text-sm gap-1">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {imp.status === "committed" ? <CheckCircle className="h-4 w-4 text-success" /> :
+                       imp.status === "failed" || imp.status === "cancelled" ? <AlertTriangle className="h-4 w-4 text-destructive" /> :
+                       imp.status === "review" ? <FileSpreadsheet className="h-4 w-4 text-warning" /> :
+                       imp.status === "parsing" ? <RefreshCw className="h-4 w-4 animate-spin text-primary" /> :
+                       <RefreshCw className="h-4 w-4 text-muted-foreground" />}
+                      <span>{new Date(imp.imported_at).toLocaleDateString("en-ZA")}</span>
+                      <Badge variant="outline" className="text-xs">{imp.file_type.toUpperCase()}</Badge>
+                      <Badge variant={imp.status === "committed" ? "default" : (imp.status === "failed" || imp.status === "cancelled") ? "destructive" : "secondary"} className="text-xs">{imp.status}</Badge>
+                    </div>
+                    {imp.stats_json && (imp.stats_json as any).row_count && (
+                      <span className="text-xs text-muted-foreground">{(imp.stats_json as any).row_count} rows</span>
+                    )}
                   </div>
-                  {imp.stats_json && (imp.stats_json as any).row_count && (
-                    <span className="text-xs text-muted-foreground">{(imp.stats_json as any).row_count} rows</span>
+                  {imp.error_message && (
+                    <p className="text-xs text-destructive pl-6">{imp.error_message}</p>
                   )}
                 </div>
               ))}

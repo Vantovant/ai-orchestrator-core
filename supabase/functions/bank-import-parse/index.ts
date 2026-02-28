@@ -50,20 +50,17 @@ function extractMerchant(desc: string): string {
 
 function parseDate(dateStr: string): string | null {
   const cleaned = dateStr.trim();
-  // Try various formats
   const formats = [
-    /^(\d{4})[/-](\d{2})[/-](\d{2})$/, // YYYY/MM/DD or YYYY-MM-DD
-    /^(\d{2})[/-](\d{2})[/-](\d{4})$/, // DD/MM/YYYY or MM/DD/YYYY
+    /^(\d{4})[/-](\d{2})[/-](\d{2})$/,
+    /^(\d{2})[/-](\d{2})[/-](\d{4})$/,
   ];
   for (const fmt of formats) {
     const m = cleaned.match(fmt);
     if (m) {
       if (m[1].length === 4) return `${m[1]}-${m[2]}-${m[3]}`;
-      // Assume DD/MM/YYYY for SA
       return `${m[3]}-${m[2]}-${m[1]}`;
     }
   }
-  // Fallback: try native Date parse
   const d = new Date(cleaned);
   if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   return null;
@@ -85,6 +82,17 @@ function parseCSV(content: string): string[][] {
   });
 }
 
+// Timeout helper: rejects after ms milliseconds
+function withTimeout<T>(promise: Promise<T>, ms: number, msg: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ]);
+}
+
+const PDF_PARSE_TIMEOUT_MS = 55_000; // 55s to leave room for cleanup
+const SCANNED_PDF_MIN_CHARS = 50; // Minimum extracted text to consider valid
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -94,7 +102,6 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? serviceKey;
 
-    // Auth client for user verification
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader ?? "" } },
     });
@@ -103,17 +110,21 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Service client for storage + writes
     const adminClient = createClient(supabaseUrl, serviceKey);
 
     const body = await req.json();
     const { import_id, mapping, skip_rows = 1 } = body;
 
+    // Handle cancel request
+    if (body.action === "cancel") {
+      await adminClient.from("bank_statement_imports").update({ status: "cancelled", error_message: "Cancelled by user" }).eq("id", import_id);
+      return new Response(JSON.stringify({ status: "cancelled" }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (!import_id) {
       return new Response(JSON.stringify({ error: "import_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Fetch import record (verify ownership via user client)
     const { data: importRec, error: importErr } = await userClient
       .from("bank_statement_imports")
       .select("*")
@@ -123,10 +134,9 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Import not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Update status to parsing
-    await adminClient.from("bank_statement_imports").update({ status: "parsing" }).eq("id", import_id);
+    // Heartbeat: set status to parsing
+    await adminClient.from("bank_statement_imports").update({ status: "parsing", error_message: null }).eq("id", import_id);
 
-    // Download file from storage
     const { data: fileData, error: fileErr } = await adminClient.storage.from("statements").download(importRec.file_path);
     if (fileErr || !fileData) {
       await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Failed to download file" }).eq("id", import_id);
@@ -145,7 +155,6 @@ serve(async (req) => {
 
       if (!m || m.date === undefined || m.description === undefined) {
         await adminClient.from("bank_statement_imports").update({ status: "needs_mapping" }).eq("id", import_id);
-        // Return headers for mapping UI
         const headers = rows.length > 0 ? rows[0] : [];
         return new Response(JSON.stringify({ status: "needs_mapping", headers, sample_rows: rows.slice(1, 6) }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
@@ -173,7 +182,6 @@ serve(async (req) => {
         transactions.push({ txn_date: date, description: desc, reference: ref, amount, balance });
       }
     } else if (fileType === "ofx" || fileType === "qif") {
-      // Minimal OFX parser
       if (fileType === "ofx") {
         const stmtTrnRegex = /<STMTTRN>([\s\S]*?)<\/STMTTRN>/gi;
         let match;
@@ -190,7 +198,6 @@ serve(async (req) => {
           if (date) transactions.push({ txn_date: date, description: desc, reference: getTag("FITID") || null, amount, balance: null });
         }
       } else {
-        // QIF
         let currentTxn: any = {};
         for (const line of content.split(/\r?\n/)) {
           if (line.startsWith("D")) {
@@ -211,14 +218,12 @@ serve(async (req) => {
         }
       }
     } else if (fileType === "pdf") {
-      // PDF: Send as base64 to Gemini multimodal endpoint
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
       if (!lovableApiKey) {
         await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "AI service not configured for PDF parsing" }).eq("id", import_id);
         return new Response(JSON.stringify({ error: "AI service not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Re-download as arrayBuffer for base64 encoding
       const { data: pdfData, error: pdfErr } = await adminClient.storage.from("statements").download(importRec.file_path);
       if (pdfErr || !pdfData) {
         await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Failed to download PDF" }).eq("id", import_id);
@@ -242,7 +247,8 @@ Rules:
 - If you cannot parse any transactions, return an empty array []`;
 
       try {
-        const aiResponse = await fetch("https://api.lovable.dev/v1/chat/completions", {
+        // Wrap AI call in a timeout
+        const aiResponsePromise = fetch("https://api.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${lovableApiKey}`,
@@ -261,6 +267,8 @@ Rules:
           }),
         });
 
+        const aiResponse = await withTimeout(aiResponsePromise, PDF_PARSE_TIMEOUT_MS, "PDF parsing timed out. Please use CSV format instead.");
+
         if (!aiResponse.ok) {
           const errText = await aiResponse.text();
           console.error("AI service error:", aiResponse.status, errText);
@@ -270,14 +278,33 @@ Rules:
         const aiData = await aiResponse.json();
         const aiText = aiData.choices?.[0]?.message?.content || "[]";
 
-        // Extract JSON from AI response (may be wrapped in markdown code blocks)
+        // Scanned PDF detection: if AI returns very little text content
         const jsonMatch = aiText.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
+          // Check if AI response indicates scanned/image PDF
+          const lowerText = aiText.toLowerCase();
+          if (lowerText.includes("cannot") || lowerText.includes("image") || lowerText.includes("scanned") || lowerText.includes("unable")) {
+            await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Scanned PDF detected. Export a CSV from your bank's online portal instead." }).eq("id", import_id);
+            return new Response(JSON.stringify({ error: "Scanned PDF detected", scanned: true }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+          }
           await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Could not extract transactions from PDF. Try CSV format instead." }).eq("id", import_id);
           return new Response(JSON.stringify({ error: "PDF parsing failed - no transactions found" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const parsedTxns = JSON.parse(jsonMatch[0]);
+
+        // Scanned PDF threshold: if fewer than threshold chars in all descriptions
+        const totalDescChars = parsedTxns.reduce((sum: number, t: any) => sum + (String(t.description || "")).length, 0);
+        if (parsedTxns.length === 0 || totalDescChars < SCANNED_PDF_MIN_CHARS) {
+          await adminClient.from("bank_statement_imports").update({
+            status: "failed",
+            error_message: parsedTxns.length === 0
+              ? "No transactions found in PDF. Export a CSV from your bank's online portal instead."
+              : "Scanned PDF detected — text quality too low for reliable extraction. Export a CSV from your bank instead.",
+          }).eq("id", import_id);
+          return new Response(JSON.stringify({ error: "Scanned PDF detected", scanned: true }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
         for (const pt of parsedTxns) {
           const date = parseDate(pt.date || "");
           if (!date) continue;
@@ -293,8 +320,12 @@ Rules:
         }
       } catch (aiErr: any) {
         console.error("PDF AI parsing error:", aiErr);
-        await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: `PDF parsing failed: ${aiErr.message}. Try CSV format instead.` }).eq("id", import_id);
-        return new Response(JSON.stringify({ error: "PDF parsing failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const isTimeout = aiErr.message?.includes("timed out");
+        const errorMsg = isTimeout
+          ? "PDF parsing timed out. Please use CSV format instead."
+          : `PDF parsing failed: ${aiErr.message}. Try CSV format instead.`;
+        await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: errorMsg }).eq("id", import_id);
+        return new Response(JSON.stringify({ error: errorMsg, timeout: isTimeout }), { status: isTimeout ? 408 : 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     } else {
       await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Unsupported file type. Use CSV, OFX, QIF, or PDF." }).eq("id", import_id);
@@ -365,8 +396,21 @@ Rules:
     }).eq("id", import_id);
 
     return new Response(JSON.stringify({ status: "review", stats }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (e) {
+  } catch (e: any) {
     console.error("bank-import-parse error:", e);
+    // Best-effort: try to mark the import as failed
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      if (body.import_id) {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const adminClient = createClient(supabaseUrl, serviceKey);
+        await adminClient.from("bank_statement_imports").update({
+          status: "failed",
+          error_message: e.message || "Internal error during parsing",
+        }).eq("id", body.import_id);
+      }
+    } catch (_) { /* ignore cleanup errors */ }
     return new Response(JSON.stringify({ error: e.message || "Internal error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
