@@ -1,8 +1,8 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
-  LayoutDashboard, CheckSquare, Bell, Calendar, Mail,
+  LayoutDashboard, ClipboardList, Mail,
   DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu
 } from "lucide-react";
 import { useState } from "react";
@@ -10,15 +10,20 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
-  { to: "/reminders", label: "Reminders", icon: Bell },
-  { to: "/meetings", label: "Meetings", icon: Calendar },
-  { to: "/calendar", label: "Calendar", icon: Calendar },
+  { to: "/plan", label: "Plan", icon: ClipboardList },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
   { to: "/travel", label: "Travel", icon: Plane },
   { to: "/shopping", label: "Shopping", icon: ShoppingCart },
   { to: "/settings", label: "Settings", icon: Settings },
+];
+
+const mobileNavItems = [
+  { to: "/", label: "Home", icon: LayoutDashboard },
+  { to: "/plan", label: "Plan", icon: ClipboardList },
+  { to: "/email", label: "Email", icon: Mail },
+  { to: "/finance", label: "Finance", icon: DollarSign },
+  { to: "/settings", label: "More", icon: Settings },
 ];
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
@@ -63,6 +68,30 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
+function MobileBottomNav() {
+  const location = useLocation();
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card md:hidden">
+      <div className="flex items-center justify-around">
+        {mobileNavItems.map(({ to, label, icon: Icon }) => {
+          const isActive = to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              className="flex flex-col items-center gap-0.5 py-2 px-3 min-w-0"
+            >
+              <Icon className={`h-5 w-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+              <span className={`text-[10px] font-medium ${isActive ? "text-primary" : "text-muted-foreground"}`}>{label}</span>
+            </NavLink>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -86,7 +115,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Sheet>
           <span className="font-bold">VantoOS</span>
         </header>
-        <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
+        <MobileBottomNav />
       </div>
     </div>
   );
