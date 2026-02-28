@@ -80,6 +80,51 @@ export type Database = {
         }
         Relationships: []
       }
+      debts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          due_day: number | null
+          id: string
+          interest_rate: number | null
+          lender_name: string
+          notes: string | null
+          principal: number
+          repayment_amount: number | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          due_day?: number | null
+          id?: string
+          interest_rate?: number | null
+          lender_name: string
+          notes?: string | null
+          principal?: number
+          repayment_amount?: number | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          due_day?: number | null
+          id?: string
+          interest_rate?: number | null
+          lender_name?: string
+          notes?: string | null
+          principal?: number
+          repayment_amount?: number | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       entity_tags: {
         Row: {
           created_at: string
@@ -146,6 +191,129 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_entries: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string
+          deleted_at: string | null
+          entry_date: string
+          id: string
+          notes: string | null
+          source: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          entry_date?: string
+          id?: string
+          notes?: string | null
+          source?: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          entry_date?: string
+          id?: string
+          notes?: string | null
+          source?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_profiles: {
+        Row: {
+          bankability: string
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          id: string
+          payroll_employer: boolean
+          provisional_tax: boolean
+          role_profile: string
+          updated_at: string
+          user_id: string
+          vat_registered: boolean
+        }
+        Insert: {
+          bankability?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          payroll_employer?: boolean
+          provisional_tax?: boolean
+          role_profile?: string
+          updated_at?: string
+          user_id: string
+          vat_registered?: boolean
+        }
+        Update: {
+          bankability?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          payroll_employer?: boolean
+          provisional_tax?: boolean
+          role_profile?: string
+          updated_at?: string
+          user_id?: string
+          vat_registered?: boolean
+        }
+        Relationships: []
+      }
+      income_streams: {
+        Row: {
+          created_at: string
+          current_month_income: number
+          deleted_at: string | null
+          id: string
+          label: string
+          monthly_target: number
+          notes: string | null
+          stream_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_month_income?: number
+          deleted_at?: string | null
+          id?: string
+          label?: string
+          monthly_target?: number
+          notes?: string | null
+          stream_type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_month_income?: number
+          deleted_at?: string | null
+          id?: string
+          label?: string
+          monthly_target?: number
+          notes?: string | null
+          stream_type?: string
           updated_at?: string
           user_id?: string
         }
@@ -223,6 +391,51 @@ export type Database = {
           id?: string
           message?: string
           read_at?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      opportunities: {
+        Row: {
+          ai_generated: boolean
+          created_at: string
+          deleted_at: string | null
+          difficulty: string
+          estimated_value: number | null
+          id: string
+          notes: string | null
+          status: string
+          title: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_generated?: boolean
+          created_at?: string
+          deleted_at?: string | null
+          difficulty?: string
+          estimated_value?: number | null
+          id?: string
+          notes?: string | null
+          status?: string
+          title: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_generated?: boolean
+          created_at?: string
+          deleted_at?: string | null
+          difficulty?: string
+          estimated_value?: number | null
+          id?: string
+          notes?: string | null
+          status?: string
+          title?: string
           type?: string
           updated_at?: string
           user_id?: string

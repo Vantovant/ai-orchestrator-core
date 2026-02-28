@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const CONTEXT_CHAR_LIMIT = 2000;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -14,7 +16,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? serviceKey;
-    
+
     const supabase = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader ?? "" } },
     });
@@ -32,7 +34,6 @@ serve(async (req) => {
     const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
     const next48h = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
 
-    // Parallel queries — token-disciplined: only curated fields
     const [tasksRes, meetingsRes, remindersRes, contextRes] = await Promise.all([
       supabase
         .from("tasks")
@@ -63,14 +64,25 @@ serve(async (req) => {
         .limit(20),
     ]);
 
+    // Token-bloat firewall: truncate executive_context to 2000 chars total
+    const contextMap: Record<string, string> = {};
+    let totalChars = 0;
+    for (const c of (contextRes.data ?? []) as any[]) {
+      const val = String(c.context_value).slice(0, 500);
+      if (totalChars + val.length > CONTEXT_CHAR_LIMIT) {
+        contextMap[c.context_key] = val.slice(0, CONTEXT_CHAR_LIMIT - totalChars) + " (truncated)";
+        break;
+      }
+      contextMap[c.context_key] = val;
+      totalChars += val.length;
+    }
+
     const snapshot = {
       generatedAt: now.toISOString(),
       topTasks: tasksRes.data ?? [],
       todayMeetings: meetingsRes.data ?? [],
       urgentReminders: remindersRes.data ?? [],
-      executiveContext: Object.fromEntries(
-        (contextRes.data ?? []).map((c: any) => [c.context_key, c.context_value])
-      ),
+      executiveContext: contextMap,
     };
 
     return new Response(JSON.stringify(snapshot), {
