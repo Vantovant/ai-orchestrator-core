@@ -72,6 +72,12 @@ export const profileWizardService = {
       logistics: "Logistics & Transport",
       construction: "Construction & Engineering",
       agriculture: "Agriculture",
+      web_developer: "Web Developer",
+      app_developer: "App Developer",
+      ai_expert: "AI & Data Expert",
+      social_media: "Social Media & Consulting",
+      influencer: "Influencer & Creator",
+      podcaster: "Podcaster & Media",
     };
     return labels[role] ?? role;
   },
@@ -91,6 +97,12 @@ export const profileWizardService = {
     if (roles.includes("logistics")) tips.push("Focus: fleet optimization, delivery SLAs, cost management");
     if (roles.includes("construction")) tips.push("Focus: project timelines, contractor management, material costs");
     if (roles.includes("agriculture")) tips.push("Focus: seasonal planning, yield optimization, supply chain");
+    if (roles.includes("web_developer")) tips.push("Focus: project delivery, client billing, tech stack decisions");
+    if (roles.includes("app_developer")) tips.push("Focus: release cycles, monetization, user acquisition");
+    if (roles.includes("ai_expert")) tips.push("Focus: model deployment, data pipelines, client deliverables");
+    if (roles.includes("social_media")) tips.push("Focus: campaign ROI, content calendar, client reporting");
+    if (roles.includes("influencer")) tips.push("Focus: brand partnerships, audience growth, revenue streams");
+    if (roles.includes("podcaster")) tips.push("Focus: episode scheduling, sponsorship deals, audience metrics");
     return tips;
   },
 };
