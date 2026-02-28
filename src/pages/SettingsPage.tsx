@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contextService } from "@/services/contextService";
 import { financeEntryService, debtService } from "@/services/financeService";
+import { clientService } from "@/services/clientService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, Settings, Pencil, Download, User, Clock, Bell, Keyboard } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import ProfileWizard from "@/components/settings/ProfileWizard";
 
 const CONTEXT_CHAR_LIMIT = 500;
 
@@ -29,16 +30,19 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const contexts = useQuery({ queryKey: ["executive_context"], queryFn: contextService.list });
+  const clients = useQuery({ queryKey: ["clients"], queryFn: clientService.list });
 
   const [open, setOpen] = useState(false);
   const [editKey, setEditKey] = useState("");
   const [editValue, setEditValue] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
-  // Preferences (local for now)
+  // Client management
+  const [clientOpen, setClientOpen] = useState(false);
+  const [clientName, setClientName] = useState("");
+  const [clientType, setClientType] = useState("client");
+
   const [showKeyCoach, setShowKeyCoach] = useState(() => localStorage.getItem("vanto_key_coach") !== "false");
-  const [workHoursStart, setWorkHoursStart] = useState(() => localStorage.getItem("vanto_work_start") || "08:00");
-  const [workHoursEnd, setWorkHoursEnd] = useState(() => localStorage.getItem("vanto_work_end") || "17:00");
 
   const upsertMut = useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) => contextService.upsert(key, value),
@@ -57,6 +61,17 @@ export default function SettingsPage() {
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["executive_context"] }); toast.success("Context removed"); },
     onError: (e: any) => toast.error(e.message),
+  });
+
+  const createClientMut = useMutation({
+    mutationFn: () => clientService.create({ name: clientName, type: clientType }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["clients"] }); setClientOpen(false); setClientName(""); toast.success("Client/Matter added"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteClientMut = useMutation({
+    mutationFn: (id: string) => clientService.softDelete(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["clients"] }); toast.success("Removed"); },
   });
 
   const openEdit = (key: string, value: string) => { setEditKey(key); setEditValue(value); setIsEditing(true); setOpen(true); };
@@ -86,13 +101,6 @@ export default function SettingsPage() {
     } catch { toast.error("Export failed"); }
   };
 
-  const saveWorkHours = (start: string, end: string) => {
-    localStorage.setItem("vanto_work_start", start);
-    localStorage.setItem("vanto_work_end", end);
-    setWorkHoursStart(start); setWorkHoursEnd(end);
-    toast.success("Work hours updated");
-  };
-
   const toggleKeyCoach = (val: boolean) => {
     localStorage.setItem("vanto_key_coach", val.toString());
     setShowKeyCoach(val);
@@ -103,7 +111,7 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Preferences, executive context, and data exports.</p>
+        <p className="text-sm text-muted-foreground">Profile, preferences, clients, and data exports.</p>
       </div>
 
       {/* Account */}
@@ -114,19 +122,58 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Work hours */}
+      {/* Executive Profile Wizard */}
+      <ProfileWizard />
+
+      {/* Clients/Matters Management */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4" /> Work Hours</CardTitle>
-          <CardDescription>Used for scheduling and AI briefing context.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2"><Users className="h-4 w-4" /> Clients & Matters</CardTitle>
+          <Dialog open={clientOpen} onOpenChange={setClientOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1"><Plus className="h-4 w-4" /> Add</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Add Client / Matter</DialogTitle></DialogHeader>
+              <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); createClientMut.mutate(); }}>
+                <Input placeholder="Name" value={clientName} onChange={(e) => setClientName(e.target.value)} required />
+                <select
+                  value={clientType}
+                  onChange={(e) => setClientType(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="client">Client</option>
+                  <option value="matter">Matter</option>
+                  <option value="project">Project</option>
+                </select>
+                <Button type="submit" className="w-full" disabled={createClientMut.isPending}>
+                  {createClientMut.isPending ? "Adding..." : "Add"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3">
-            <Input type="time" value={workHoursStart} onChange={e => setWorkHoursStart(e.target.value)} className="w-32" />
-            <span className="text-sm text-muted-foreground">to</span>
-            <Input type="time" value={workHoursEnd} onChange={e => setWorkHoursEnd(e.target.value)} className="w-32" />
-            <Button variant="outline" size="sm" onClick={() => saveWorkHours(workHoursStart, workHoursEnd)}>Save</Button>
-          </div>
+          {clients.isLoading ? (
+            <div className="space-y-2">{[1,2].map((i) => <Skeleton key={i} className="h-10" />)}</div>
+          ) : (clients.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No clients yet. Add clients or matters to tag tasks, meetings, and finance entries.</p>
+          ) : (
+            <div className="space-y-2">
+              {(clients.data ?? []).map((c) => (
+                <div key={c.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-sm font-medium">{c.name}</span>
+                    <span className="text-xs text-muted-foreground">({c.type})</span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteClientMut.mutate(c.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
