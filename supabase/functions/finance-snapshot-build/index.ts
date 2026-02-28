@@ -31,7 +31,7 @@ serve(async (req) => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const [entriesRes, debtsRes, streamsRes, profileRes, contextRes] = await Promise.all([
+    const [entriesRes, debtsRes, streamsRes, profileRes, contextRes, bankTxnRes] = await Promise.all([
       supabase
         .from("finance_entries")
         .select("id, type, category, amount, entry_date, source")
@@ -58,6 +58,12 @@ serve(async (req) => {
         .select("context_key, context_value")
         .is("deleted_at", null)
         .limit(20),
+      supabase
+        .from("bank_transactions")
+        .select("category, amount, merchant")
+        .is("deleted_at", null)
+        .gte("txn_date", thirtyDaysAgo)
+        .limit(500),
     ]);
 
     const entries = entriesRes.data ?? [];
@@ -108,6 +114,11 @@ serve(async (req) => {
       totalChars += val.length;
     }
 
+    // Bank transaction insights (summary only for AI)
+    const bankTxns = bankTxnRes.data ?? [];
+    const bankFees = bankTxns.filter((t: any) => t.category === "bank_fees").reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0);
+    const subscriptionDrain = bankTxns.filter((t: any) => t.category === "subscriptions").reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0);
+
     const snapshot = {
       generatedAt: now.toISOString(),
       currency: profile?.currency ?? "ZAR",
@@ -124,6 +135,11 @@ serve(async (req) => {
       incomeStreams: streamsSummary,
       latestEntries: entries.slice(0, 5),
       executiveContext: contextMap,
+      bankInsights: {
+        bankFees,
+        subscriptionDrain,
+        importedTransactions: bankTxns.length,
+      },
     };
 
     // Hard cap

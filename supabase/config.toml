@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.finance-mentor]
 verify_jwt = false
+
+[functions.bank-import-parse]
+verify_jwt = false

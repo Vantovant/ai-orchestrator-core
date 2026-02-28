@@ -80,6 +80,167 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_accounts: {
+        Row: {
+          account_name: string
+          bank_name: string
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          id: string
+          last4: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_name?: string
+          bank_name: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          last4?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string
+          bank_name?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          last4?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      bank_statement_imports: {
+        Row: {
+          bank_account_id: string
+          created_at: string
+          deleted_at: string | null
+          error_message: string | null
+          file_path: string
+          file_type: string
+          id: string
+          imported_at: string
+          stats_json: Json
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          bank_account_id: string
+          created_at?: string
+          deleted_at?: string | null
+          error_message?: string | null
+          file_path: string
+          file_type?: string
+          id?: string
+          imported_at?: string
+          stats_json?: Json
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          bank_account_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          error_message?: string | null
+          file_path?: string
+          file_type?: string
+          id?: string
+          imported_at?: string
+          stats_json?: Json
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_statement_imports_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_transactions: {
+        Row: {
+          amount: number
+          balance: number | null
+          bank_account_id: string
+          category: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string
+          finance_entry_id: string | null
+          fingerprint_hash: string
+          id: string
+          import_id: string
+          merchant: string | null
+          reference: string | null
+          txn_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          balance?: number | null
+          bank_account_id: string
+          category?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string
+          finance_entry_id?: string | null
+          fingerprint_hash: string
+          id?: string
+          import_id: string
+          merchant?: string | null
+          reference?: string | null
+          txn_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          balance?: number | null
+          bank_account_id?: string
+          category?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          description?: string
+          finance_entry_id?: string | null
+          fingerprint_hash?: string
+          id?: string
+          import_id?: string
+          merchant?: string | null
+          reference?: string | null
+          txn_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bank_statement_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       debts: {
         Row: {
           created_at: string
@@ -359,6 +520,39 @@ export type Database = {
           notes?: string | null
           start_time?: string
           title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      merchant_rules: {
+        Row: {
+          category: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          pattern: string
+          priority: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          pattern: string
+          priority?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          pattern?: string
+          priority?: number
           updated_at?: string
           user_id?: string
         }
