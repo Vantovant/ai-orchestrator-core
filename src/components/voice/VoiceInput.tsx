@@ -12,6 +12,7 @@ interface Props {
   onTranscript: (text: string) => void;
   className?: string;
   compact?: boolean;
+  noiseMode?: boolean;
 }
 
 const VOICE_EXAMPLES = [
@@ -26,7 +27,7 @@ const VOICE_EXAMPLES = [
 
 const MAX_RETRIES = 1;
 
-export default function VoiceInput({ onTranscript, className = "", compact = false }: Props) {
+export default function VoiceInput({ onTranscript, className = "", compact = false, noiseMode = false }: Props) {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [supported, setSupported] = useState(true);
@@ -61,7 +62,8 @@ export default function VoiceInput({ onTranscript, className = "", compact = fal
       setTranscript(finalTranscript || interimTranscript);
       if (finalTranscript) {
         const trimmed = finalTranscript.trim();
-        if (trimmed.length < 3) {
+        const minLength = noiseMode ? 8 : 3;
+        if (trimmed.length < minLength) {
           // Too short — retry once
           if (retryCount < MAX_RETRIES) {
             setRetryCount((c) => c + 1);

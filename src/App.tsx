@@ -14,6 +14,8 @@ import TravelPage from "@/pages/TravelPage";
 import ShoppingPage from "@/pages/ShoppingPage";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
+import WeeklyReportPage from "@/pages/WeeklyReportPage";
+import AdminHealthPage from "@/pages/AdminHealthPage";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,8 @@ function AppRoutes() {
         <Route path="/travel" element={<TravelPage />} />
         <Route path="/shopping" element={<ShoppingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/weekly-report" element={<WeeklyReportPage />} />
+        <Route path="/admin/health" element={<AdminHealthPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>

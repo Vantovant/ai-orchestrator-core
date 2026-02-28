@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target, RefreshCw, AlertTriangle } from "lucide-react";
+import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target, RefreshCw, AlertTriangle, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
@@ -195,9 +195,31 @@ export default function DashboardPage() {
       {/* AI-Generated Daily Agenda */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-accent" /> AI Daily Agenda
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-accent" /> AI Daily Agenda
+            </CardTitle>
+            {aiResult?.dailyPlan?.greeting && (
+              <Button variant="ghost" size="sm" className="gap-1 text-xs" onClick={() => {
+                const plan = aiResult.dailyPlan;
+                const lines = [
+                  `📋 DAILY BRIEFING`,
+                  plan.greeting,
+                  plan.dayOverview || "",
+                  "",
+                  plan.topPriorities?.length ? `🎯 Focus Areas:\n${plan.topPriorities.map((p: string) => `• ${p}`).join("\n")}` : "",
+                  "",
+                  plan.timeBlocks?.length ? `⏰ Time Blocks:\n${plan.timeBlocks.map((tb: any) => `${tb.time} [${tb.type}] ${tb.activity}`).join("\n")}` : "",
+                  "",
+                  aiResult.commands3?.length ? `⚡ 3 Commands for Today:\n${aiResult.commands3.map((c: string, i: number) => `${i+1}. ${c}`).join("\n")}` : "",
+                ];
+                navigator.clipboard.writeText(lines.filter(Boolean).join("\n"));
+                toast.success("Briefing copied to clipboard");
+              }}>
+                <Copy className="h-3.5 w-3.5" /> Copy
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {latestRun.isLoading ? (
@@ -235,6 +257,15 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {/* 3 Commands for Today */}
+              {aiResult.commands3?.length > 0 && (
+                <div className="rounded-lg bg-primary/5 border border-primary/20 p-3">
+                  <h4 className="mb-2 text-sm font-medium flex items-center gap-1"><Zap className="h-3.5 w-3.5 text-primary" /> 3 Commands for Today</h4>
+                  <ol className="list-decimal pl-5 text-sm space-y-1">
+                    {aiResult.commands3.map((c: string, i: number) => <li key={i}>{c}</li>)}
+                  </ol>
                 </div>
               )}
               <p className="text-xs text-muted-foreground">

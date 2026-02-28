@@ -1,6 +1,8 @@
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem, CommandSeparator } from "@/components/ui/command";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Archive, Clock, CheckSquare, CalendarPlus, Bell, Eye, Search, Inbox } from "lucide-react";
+import { Archive, Clock, CheckSquare, CalendarPlus, Bell, Eye, Search, Inbox, Mic } from "lucide-react";
+import VoiceInput from "@/components/voice/VoiceInput";
+import { useState } from "react";
 
 interface Props {
   open: boolean;
@@ -38,7 +40,12 @@ export default function CommandBar({ open, onClose, hasSelected, onAction }: Pro
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="overflow-hidden p-0 max-w-lg">
         <Command className="rounded-lg border shadow-md">
-          <CommandInput placeholder="Type a command or search..." />
+          <div className="flex items-center border-b border-border">
+            <CommandInput placeholder="Type a command or search..." className="flex-1" />
+            <div className="pr-2">
+              <VoiceInput onTranscript={(text) => { run("voice_command", text); }} compact />
+            </div>
+          </div>
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
 
