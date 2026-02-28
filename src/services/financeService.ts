@@ -159,22 +159,26 @@ export const financeEntryService = {
     if (error) throw error;
   },
 
-  async monthlySummary() {
+  async monthlySummary(year?: number, month?: number) {
     const entries = await this.list();
     const now = new Date();
-    const thisMonth = entries.filter((e) => {
+    const targetYear = year ?? now.getFullYear();
+    const targetMonth = month ?? now.getMonth(); // 0-indexed
+    const monthEntries = entries.filter((e) => {
       const d = new Date(e.entry_date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return d.getMonth() === targetMonth && d.getFullYear() === targetYear;
     });
-    const totalIncome = thisMonth.filter((e) => e.type === "income").reduce((s, e) => s + Number(e.amount), 0);
-    const totalExpense = thisMonth.filter((e) => e.type === "expense").reduce((s, e) => s + Number(e.amount), 0);
+    const totalIncome = monthEntries.filter((e) => e.type === "income").reduce((s, e) => s + Math.abs(Number(e.amount)), 0);
+    const totalExpense = monthEntries.filter((e) => e.type === "expense").reduce((s, e) => s + Math.abs(Number(e.amount)), 0);
 
     const categories: Record<string, number> = {};
-    thisMonth.filter((e) => e.type === "expense").forEach((e) => {
-      categories[e.category] = (categories[e.category] || 0) + Number(e.amount);
+    monthEntries.filter((e) => e.type === "expense").forEach((e) => {
+      categories[e.category] = (categories[e.category] || 0) + Math.abs(Number(e.amount));
     });
 
-    return { totalIncome, totalExpense, net: totalIncome - totalExpense, categories };
+    const monthLabel = new Date(targetYear, targetMonth).toLocaleDateString("en-ZA", { month: "short", year: "numeric" });
+
+    return { totalIncome, totalExpense, net: totalIncome - totalExpense, categories, monthLabel };
   },
 
   async exportCsv() {
