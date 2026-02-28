@@ -28,20 +28,30 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
     patterns: [
       /^(add|create|new)\s+(a\s+)?task\b/i,
       /^task\b/i,
+      /^i\s+need\s+to\b/i,
+      /^please\s+add\s+a\s+task\s+to\b/i,
+      /^can\s+you\s+create\s+a\s+task\s+to\b/i,
+      /^remind\s+me\s+to\s+do\b/i,
+      /^i\s+have\s+to\b/i,
+      /^i\s+must\b/i,
+      /^todo\b/i,
     ],
   },
   {
     intent: "create_reminder",
     patterns: [
       /^(add|create|new|set)\s+(a\s+)?reminder\b/i,
+      /^please\s+remind\s+me\s+to\b/i,
       /^remind\s+(me\s+)?(to\s+)?/i,
+      /^don'?t\s+let\s+me\s+forget\s+to\b/i,
       /^reminder\b/i,
     ],
   },
   {
     intent: "create_meeting",
     patterns: [
-      /^(add|create|new|schedule|book)\s+(a\s+)?meeting\b/i,
+      /^(add|create|new|schedule|book|set)\s+(a\s+)?meeting\b/i,
+      /^meeting\s+with\b/i,
       /^meeting\b/i,
     ],
   },
@@ -50,6 +60,10 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
     patterns: [
       /^(add|log|record)\s+(an?\s+)?expense\b/i,
       /^expense\b/i,
+      /^i\s+spent\s+R/i,
+      /^i\s+paid\s+R/i,
+      /^i\s+bought\b/i,
+      /^expense:\s*/i,
     ],
   },
   {
@@ -57,6 +71,9 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
     patterns: [
       /^(add|log|record)\s+(an?\s+)?income\b/i,
       /^income\b/i,
+      /^i\s+got\s+paid\s+R/i,
+      /^i\s+received\s+R/i,
+      /^income:\s*/i,
     ],
   },
   {
@@ -65,6 +82,10 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
       /^(run|start|give\s+me|show)\s+(my\s+)?(daily\s+)?briefing/i,
       /^briefing$/i,
       /^morning\s+briefing/i,
+      /^give\s+me\s+my\s+briefing/i,
+      /^run\s+my\s+briefing/i,
+      /^what'?s\s+my\s+plan\s+today/i,
+      /^what\s+do\s+i\s+have\s+today/i,
     ],
   },
   {
@@ -74,6 +95,8 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
     ],
   },
 ];
+
+// ... date/time/amount parsing helpers
 
 function parseDate(text: string): Date | undefined {
   const now = new Date();
@@ -87,7 +110,7 @@ function parseDate(text: string): Date | undefined {
     d.setDate(d.getDate() + 1);
     return extractTime(d, lower);
   }
-  
+
   const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
   for (let i = 0; i < dayNames.length; i++) {
     if (lower.includes(dayNames[i])) {
@@ -132,13 +155,11 @@ function extractTime(date: Date | undefined, text: string): Date | undefined {
 }
 
 function parseAmount(text: string): { amount?: number; currency?: string } {
-  // R650, R 650, R1,500, 650 rand, ZAR 650
   const match = text.match(/(?:R\s?|ZAR\s?)(\d[\d,]*(?:\.\d{2})?)|(\d[\d,]*(?:\.\d{2})?)\s*(?:rand|zar)/i);
   if (match) {
     const numStr = (match[1] || match[2]).replace(/,/g, "");
     return { amount: parseFloat(numStr), currency: "ZAR" };
   }
-  // plain number fallback
   const plain = text.match(/(\d[\d,]*(?:\.\d{2})?)/);
   if (plain) {
     return { amount: parseFloat(plain[1].replace(/,/g, "")), currency: "ZAR" };
@@ -148,7 +169,6 @@ function parseAmount(text: string): { amount?: number; currency?: string } {
 
 function extractTitle(text: string, intent: VoiceIntent): string {
   let cleaned = text;
-  // Remove the intent trigger phrase
   for (const { intent: i, patterns } of INTENT_PATTERNS) {
     if (i === intent) {
       for (const p of patterns) {
@@ -156,7 +176,6 @@ function extractTitle(text: string, intent: VoiceIntent): string {
       }
     }
   }
-  // Remove date/time/amount fragments
   cleaned = cleaned
     .replace(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, "")
     .replace(/(?:at\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?/gi, "")
@@ -188,7 +207,6 @@ export function parseVoiceCommand(transcript: string): ParsedVoiceCommand {
   const raw = transcript.trim();
   const lower = raw.toLowerCase();
 
-  // Detect intent
   let intent: VoiceIntent = "unknown";
   for (const { intent: i, patterns } of INTENT_PATTERNS) {
     for (const p of patterns) {
@@ -200,14 +218,12 @@ export function parseVoiceCommand(transcript: string): ParsedVoiceCommand {
     if (intent !== "unknown") break;
   }
 
-  // Open page
   if (intent === "open_page") {
     const afterTrigger = lower.replace(/^(go\s+to|open|show|navigate\s+to)\s+/i, "").trim();
     const page = PAGE_MAP[afterTrigger] ?? PAGE_MAP[afterTrigger.replace(/\s/g, "")];
     return { intent, page: page ?? "/", raw };
   }
 
-  // Extract entities
   const date = parseDate(raw);
   const { amount, currency } = parseAmount(raw);
   const title = extractTitle(raw, intent);

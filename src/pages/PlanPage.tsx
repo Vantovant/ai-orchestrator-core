@@ -23,6 +23,7 @@ import ClientTagPicker from "@/components/clients/ClientTagPicker";
 import VoiceInput from "@/components/voice/VoiceInput";
 import VoiceConfirmation from "@/components/voice/VoiceConfirmation";
 import { parseVoiceCommand, type ParsedVoiceCommand } from "@/lib/voiceCommandParser";
+import { addVoiceHistoryEntry } from "@/lib/voiceHistory";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameDay, isSameMonth, isToday } from "date-fns";
 
 const priorityColor: Record<string, string> = {
@@ -351,6 +352,7 @@ export default function PlanPage() {
 
   const handleVoiceTranscript = useCallback((text: string) => {
     const cmd = parseVoiceCommand(text);
+    addVoiceHistoryEntry({ transcript: text, intent: cmd.intent });
     if (cmd.intent === "open_page" && cmd.page) {
       navigate(cmd.page);
       toast.success(`Opening ${cmd.page}`);
@@ -362,7 +364,7 @@ export default function PlanPage() {
       return;
     }
     if (cmd.intent === "unknown") {
-      toast.error("Didn't understand that. Try: 'Add task: review report tomorrow'");
+      toast.error("Didn't understand that. Try: 'I need to review the report tomorrow'");
       return;
     }
     setVoiceCommand(cmd);
