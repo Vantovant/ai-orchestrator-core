@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import BankImportTab from "@/components/finance/BankImportTab";
+import VoiceInput from "@/components/voice/VoiceInput";
+import { parseVoiceCommand } from "@/lib/voiceCommandParser";
 
 // ── Formatters ──
 const fmt = (n: number) => `R ${n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -44,13 +46,35 @@ function AddEntryDialog({ onCreated }: { onCreated: () => void }) {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const handleVoiceFinance = (text: string) => {
+    const cmd = parseVoiceCommand(text);
+    if (cmd.intent === "add_expense") {
+      setType("expense");
+      if (cmd.amount) setAmount(String(cmd.amount));
+      if (cmd.title) setCategory(cmd.title);
+      if (cmd.date) setDate(cmd.date.toISOString().split("T")[0]);
+    } else if (cmd.intent === "add_income") {
+      setType("income");
+      if (cmd.amount) setAmount(String(cmd.amount));
+      if (cmd.title) setCategory(cmd.title);
+      if (cmd.date) setDate(cmd.date.toISOString().split("T")[0]);
+    } else {
+      toast.info("Try saying: 'I spent R650 on fuel today'");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" className="gap-1"><Plus className="h-4 w-4" /> Add Entry</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Add Finance Entry</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <DialogTitle>Add Finance Entry</DialogTitle>
+            <VoiceInput onTranscript={handleVoiceFinance} compact />
+          </div>
+        </DialogHeader>
         <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); mut.mutate(); }}>
           <div className="grid grid-cols-2 gap-3">
             <Select value={type} onValueChange={setType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent></Select>

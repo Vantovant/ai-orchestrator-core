@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.ai-gateway]
 verify_jwt = false
+
+[functions.admin-health]
+verify_jwt = false

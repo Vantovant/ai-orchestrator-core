@@ -34,12 +34,15 @@ const priorityColor: Record<string, string> = {
 };
 
 // ── Quick Add FAB (mobile) ──
-function QuickAddFab({ onAdd }: { onAdd: (type: "task" | "reminder" | "meeting") => void }) {
+function QuickAddFab({ onAdd, onVoiceTranscript }: { onAdd: (type: "task" | "reminder" | "meeting") => void; onVoiceTranscript: (text: string) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="fixed bottom-20 right-4 z-40 md:hidden">
       {open && (
         <div className="mb-2 flex flex-col gap-2 animate-in slide-in-from-bottom-2">
+          <div className="flex justify-end">
+            <VoiceInput onTranscript={onVoiceTranscript} compact />
+          </div>
           <Button size="sm" className="gap-1 shadow-lg" onClick={() => { onAdd("task"); setOpen(false); }}>
             <CheckSquare className="h-4 w-4" /> Task
           </Button>
@@ -530,7 +533,7 @@ export default function PlanPage() {
       </Tabs>
 
       {/* Quick Add FAB - mobile */}
-      <QuickAddFab onAdd={openAdd} />
+      <QuickAddFab onAdd={openAdd} onVoiceTranscript={handleVoiceTranscript} />
 
       {/* Unified add dialog */}
       <Dialog open={addType !== null} onOpenChange={(o) => { if (!o) closeDialog(); }}>
