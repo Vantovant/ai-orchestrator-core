@@ -41,7 +41,7 @@ function AddEntryDialog({ onCreated }: { onCreated: () => void }) {
   const [notes, setNotes] = useState("");
 
   const mut = useMutation({
-    mutationFn: () => financeEntryService.create({ type, category, amount: parseFloat(amount), entry_date: date, source, notes: notes || undefined }),
+    mutationFn: () => financeEntryService.create({ type, category, amount: Math.abs(parseFloat(amount)), entry_date: date, source, notes: notes || undefined }),
     onSuccess: () => { onCreated(); setOpen(false); setAmount(""); setNotes(""); toast.success("Entry added"); },
     onError: (e: any) => toast.error(e.message),
   });
@@ -169,12 +169,18 @@ function AddStreamDialog({ onCreated }: { onCreated: () => void }) {
 // ── Main Finance Page ──
 export default function FinancePage() {
   const qc = useQueryClient();
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const entries = useQuery({ queryKey: ["finance_entries"], queryFn: financeEntryService.list });
   const debts = useQuery({ queryKey: ["debts"], queryFn: debtService.list });
   const streams = useQuery({ queryKey: ["income_streams"], queryFn: incomeStreamService.list });
   const opportunities = useQuery({ queryKey: ["opportunities"], queryFn: opportunityService.list });
   const profile = useQuery({ queryKey: ["finance_profile"], queryFn: financeProfileService.get });
-  const summary = useQuery({ queryKey: ["finance_summary"], queryFn: financeEntryService.monthlySummary });
+  const summary = useQuery({
+    queryKey: ["finance_summary", selectedYear, selectedMonth],
+    queryFn: () => financeEntryService.monthlySummary(selectedYear, selectedMonth),
+  });
 
   const [mentorResult, setMentorResult] = useState<any>(null);
   const [mentorLoading, setMentorLoading] = useState(false);
@@ -268,7 +274,19 @@ export default function FinancePage() {
         </div>
       </div>
 
-      {/* Money Snapshot Cards */}
+      {/* Month Selector + Money Snapshot Cards */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-medium text-muted-foreground">Showing:</span>
+        <Select value={`${selectedYear}-${selectedMonth}`} onValueChange={(v) => { const [y, m] = v.split("-").map(Number); setSelectedYear(y); setSelectedMonth(m); }}>
+          <SelectTrigger className="w-[160px] h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Array.from({ length: 6 }, (_, i) => {
+              const d = new Date(now.getFullYear(), now.getMonth() - i);
+              return <SelectItem key={i} value={`${d.getFullYear()}-${d.getMonth()}`}>{d.toLocaleDateString("en-ZA", { month: "long", year: "numeric" })}</SelectItem>;
+            })}
+          </SelectContent>
+        </Select>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardContent className="flex items-center gap-4 p-6">
@@ -276,7 +294,7 @@ export default function FinancePage() {
               <TrendingUp className="h-6 w-6 text-success" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Income (Month)</p>
+              <p className="text-sm text-muted-foreground">Income ({summary.data?.monthLabel ?? "..."})</p>
               {summary.isLoading ? <Skeleton className="h-7 w-24" /> : <p className="text-xl font-bold">{fmt(summary.data?.totalIncome ?? 0)}</p>}
             </div>
           </CardContent>
@@ -287,7 +305,7 @@ export default function FinancePage() {
               <TrendingDown className="h-6 w-6 text-destructive" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Expenses (Month)</p>
+              <p className="text-sm text-muted-foreground">Expenses ({summary.data?.monthLabel ?? "..."})</p>
               {summary.isLoading ? <Skeleton className="h-7 w-24" /> : <p className="text-xl font-bold">{fmt(summary.data?.totalExpense ?? 0)}</p>}
             </div>
           </CardContent>
@@ -298,7 +316,7 @@ export default function FinancePage() {
               <DollarSign className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Net (Month)</p>
+              <p className="text-sm text-muted-foreground">Net ({summary.data?.monthLabel ?? "..."})</p>
               {summary.isLoading ? <Skeleton className="h-7 w-24" /> : <p className={`text-xl font-bold ${(summary.data?.net ?? 0) < 0 ? "text-destructive" : ""}`}>{fmt(summary.data?.net ?? 0)}</p>}
             </div>
           </CardContent>
