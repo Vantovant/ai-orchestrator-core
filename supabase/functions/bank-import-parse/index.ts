@@ -210,8 +210,86 @@ serve(async (req) => {
           }
         }
       }
+    } else if (fileType === "pdf") {
+      // PDF: Use AI to extract transactions from text content
+      const textContent = content; // For uploaded PDFs, we get raw text/binary
+      
+      // Try to extract readable text from the PDF
+      // PDFs uploaded as binary won't have readable text directly - use the raw bytes
+      // We'll send the text representation to AI for parsing
+      const pdfText = textContent.length > 50000 ? textContent.slice(0, 50000) : textContent;
+      
+      const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+      if (!lovableApiKey) {
+        await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "AI service not configured for PDF parsing" }).eq("id", import_id);
+        return new Response(JSON.stringify({ error: "AI service not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const aiPrompt = `Extract bank transactions from this South African bank statement text. Return ONLY a JSON array of objects with these fields:
+- date: transaction date in YYYY-MM-DD format
+- description: transaction description
+- amount: numeric amount (positive for credits/deposits, negative for debits/payments)
+- balance: running balance if available, otherwise null
+- reference: reference number if available, otherwise null
+
+Rules:
+- Dates must be valid ISO dates
+- Amounts must be numbers (no currency symbols)
+- Credits/deposits are positive, debits/payments are negative
+- If you cannot parse any transactions, return an empty array []
+
+Bank statement text:
+${pdfText}`;
+
+      try {
+        const aiResponse = await fetch("https://api.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${lovableApiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash",
+            messages: [{ role: "user", content: aiPrompt }],
+            temperature: 0.1,
+          }),
+        });
+
+        if (!aiResponse.ok) {
+          throw new Error(`AI service returned ${aiResponse.status}`);
+        }
+
+        const aiData = await aiResponse.json();
+        const aiText = aiData.choices?.[0]?.message?.content || "[]";
+        
+        // Extract JSON from AI response (may be wrapped in markdown code blocks)
+        const jsonMatch = aiText.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) {
+          await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Could not extract transactions from PDF. Try CSV format instead." }).eq("id", import_id);
+          return new Response(JSON.stringify({ error: "PDF parsing failed - no transactions found" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+
+        const parsedTxns = JSON.parse(jsonMatch[0]);
+        for (const pt of parsedTxns) {
+          const date = parseDate(pt.date || "");
+          if (!date) continue;
+          const amount = typeof pt.amount === "number" ? pt.amount : parseFloat(String(pt.amount || "0").replace(/[^0-9.-]/g, "")) || 0;
+          const balance = pt.balance != null ? (typeof pt.balance === "number" ? pt.balance : parseFloat(String(pt.balance).replace(/[^0-9.-]/g, ""))) || null : null;
+          transactions.push({
+            txn_date: date,
+            description: String(pt.description || ""),
+            reference: pt.reference || null,
+            amount,
+            balance,
+          });
+        }
+      } catch (aiErr: any) {
+        console.error("PDF AI parsing error:", aiErr);
+        await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: `PDF parsing failed: ${aiErr.message}. Try CSV format instead.` }).eq("id", import_id);
+        return new Response(JSON.stringify({ error: "PDF parsing failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     } else {
-      await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Unsupported file type. Use CSV, OFX, or QIF." }).eq("id", import_id);
+      await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Unsupported file type. Use CSV, OFX, QIF, or PDF." }).eq("id", import_id);
       return new Response(JSON.stringify({ error: "Unsupported file type" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
