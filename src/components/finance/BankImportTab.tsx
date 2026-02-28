@@ -276,11 +276,11 @@ function ExportHelpDialog() {
             <li>Navigate to your account statement or transaction history</li>
             <li>Select the date range you want to export</li>
             <li>Look for "Download", "Export", or "Save as" option</li>
-            <li>Choose <strong>CSV</strong> format (preferred) or OFX/QIF</li>
+            <li>Choose <strong>CSV</strong> format (preferred), OFX/QIF, or PDF</li>
             <li>Save the file and upload it here</li>
           </ol>
           <p className="text-xs mt-3">💡 <strong>Tip:</strong> CSV is the most reliable format. Most SA banks (FNB, Standard Bank, Absa, Nedbank, Capitec) support CSV export from their internet banking portals.</p>
-          <p className="text-xs">⚠️ PDF statements are not supported for automatic parsing. Use CSV or OFX instead.</p>
+          <p className="text-xs">📄 <strong>PDF (Beta):</strong> PDF statements are parsed using AI text extraction. Results may vary — review transactions carefully before committing.</p>
         </div>
       </DialogContent>
     </Dialog>
@@ -311,7 +311,7 @@ export default function BankImportTab() {
       if (!user) throw new Error("Not authenticated");
 
       const ext = file.name.split(".").pop()?.toLowerCase() || "csv";
-      const fileType = ["ofx", "qif"].includes(ext) ? ext : "csv";
+      const fileType = ["ofx", "qif", "pdf"].includes(ext) ? ext : "csv";
 
       // Create import record first
       const importRec = await bankImportService.create(selectedAccountId, "", fileType);
@@ -327,7 +327,10 @@ export default function BankImportTab() {
       const account = (accounts.data ?? []).find(a => a.id === selectedAccountId);
       const presetKey = account ? Object.entries(SA_BANK_PRESETS).find(([, v]) => v.name.toLowerCase() === account.bank_name.toLowerCase())?.[0] : undefined;
 
-      if (presetKey) {
+      if (fileType === "pdf") {
+        // PDF: send directly to parse, no mapping needed
+        await parseImport(importRec.id, undefined as any, 0);
+      } else if (presetKey) {
         // Auto-parse with preset
         await parseImport(importRec.id, SA_BANK_PRESETS[presetKey].mapping, SA_BANK_PRESETS[presetKey].skipRows || 1);
       } else {
@@ -407,7 +410,7 @@ export default function BankImportTab() {
               <div className="mt-1">
                 <Input
                   type="file"
-                  accept=".csv,.ofx,.qif"
+                  accept=".csv,.ofx,.qif,.pdf"
                   disabled={!selectedAccountId || uploading || parsing}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -425,7 +428,7 @@ export default function BankImportTab() {
               {uploading ? "Uploading..." : "Parsing transactions..."}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">Supported formats: CSV (recommended), OFX, QIF. Max file size: 5 MB.</p>
+          <p className="text-xs text-muted-foreground">Supported formats: CSV (recommended), OFX, QIF, PDF (Beta). Max file size: 5 MB.</p>
         </CardContent>
       </Card>
 
