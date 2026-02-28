@@ -5,24 +5,46 @@
 | Route | Module | Status |
 |-------|--------|--------|
 | `/` | Dashboard | ✅ Done |
-| `/tasks` | Tasks | ✅ Done |
-| `/reminders` | Reminders | ✅ Done |
-| `/meetings` | Meetings | ✅ Done |
-| `/calendar` | Calendar | 🟡 Stub |
-| `/email` | Email | 🟡 Stub |
-| `/finance` | Finance | ✅ Implemented (Sprint 2) |
-| `/travel` | Travel | 🟡 Stub |
-| `/shopping` | Shopping | 🟡 Stub |
-| `/settings` | Settings | ✅ Done |
+| `/plan` | Plan Hub (Today/Tasks/Reminders/Meetings/Calendar) | ✅ Done (Sprint 5) |
+| `/tasks` | → Redirect to /plan?tab=tasks | ✅ Done (Sprint 5) |
+| `/reminders` | → Redirect to /plan?tab=reminders | ✅ Done (Sprint 5) |
+| `/meetings` | → Redirect to /plan?tab=meetings | ✅ Done (Sprint 5) |
+| `/calendar` | → Redirect to /plan?tab=calendar | ✅ Done (Sprint 5) |
+| `/email` | Email (Superhuman speed layer) | ✅ Done (Sprint 4) |
+| `/finance` | Finance | ✅ Done (Sprint 2) |
+| `/travel` | Travel (premium stub) | ✅ Done (Sprint 5) |
+| `/shopping` | Shopping (premium stub) | ✅ Done (Sprint 5) |
+| `/settings` | Settings (full) | ✅ Done (Sprint 5) |
+
+## Sprint 5 — Consolidation & Mobile Polish
+
+| Feature | Status |
+|---------|--------|
+| Plan Hub with 5 tabs | ✅ Done |
+| Today tab (meetings, reminders, priorities, quick-add) | ✅ Done |
+| Calendar tab (Day/Week/Month views) | ✅ Done |
+| Calendar shows meetings + reminders + task due dates | ✅ Done |
+| Legacy route redirects | ✅ Done |
+| Mobile bottom nav | ✅ Done |
+| Mobile FAB quick-add button | ✅ Done |
+| Scrollable tabs on mobile | ✅ Done |
+| Card-based layouts (no tables) | ✅ Done |
+| Travel page (trip list + add modal) | ✅ Done |
+| Shopping page (list + recurring + categories) | ✅ Done |
+| Settings: work hours | ✅ Done |
+| Settings: key coach toggle | ✅ Done |
+| Settings: data export links | ✅ Done |
+| Sidebar reduced to 7 items | ✅ Done |
+| ROUTES.md documentation | ✅ Done |
 
 ## Dashboard Sections
 
 | Section | Status |
 |---------|--------|
 | Greeting header ("Good morning, {name} ✨") | ✅ Done |
-| AI Status Banner (degraded/rate_limited/error) | ✅ Done (Sprint 2) |
+| AI Status Banner (degraded/rate_limited/error) | ✅ Done |
 | AI-Generated Daily Agenda card | ✅ Done |
-| Top 5 Priorities (AI + live re-hydration) | ✅ Done (data drift fixed Sprint 2) |
+| Top 5 Priorities (AI + live re-hydration) | ✅ Done |
 | Today's Meetings panel | ✅ Done |
 | Urgent Reminders panel | ✅ Done |
 | KPI stat cards | ✅ Done |
@@ -35,7 +57,7 @@
 | Save snapshot + result on briefing | ✅ Done |
 | Dashboard reads latest run on load | ✅ Done |
 | Agenda persists after refresh | ✅ Done |
-| Data drift fix (live re-hydration) | ✅ Done (Sprint 2) |
+| Data drift fix (live re-hydration) | ✅ Done |
 
 ## Settings / Executive Context
 
@@ -44,16 +66,11 @@
 | CRUD executive_context keys | ✅ Done |
 | Suggested keys (role, goal, focus…) | ✅ Done |
 | snapshot-build reads context | ✅ Done |
-| Character limit per field (500) | ✅ Done (Sprint 2) |
-| Backend context truncation (2000 total) | ✅ Done (Sprint 2) |
-
-## Expert Fixes (Sprint 2)
-
-| Fix | Status |
-|-----|--------|
-| A1: Data drift — live re-hydration of Top 5 | ✅ Done |
-| A2: Token-bloat firewall (UI + backend) | ✅ Done |
-| A3: ai_status in run-assistant + degraded UX | ✅ Done |
+| Character limit per field (500) | ✅ Done |
+| Backend context truncation (2000 total) | ✅ Done |
+| Work hours setting | ✅ Done (Sprint 5) |
+| Email key coach toggle | ✅ Done (Sprint 5) |
+| Data export (Finance CSV) | ✅ Done (Sprint 5) |
 
 ## Finance Module (Sprint 2)
 
@@ -91,6 +108,23 @@
 | Finance snapshot includes bank insights | ✅ Done |
 | Import tab in Finance page (6 tabs) | ✅ Done |
 | Export help modal | ✅ Done |
+
+## Email Module (Sprint 4)
+
+| Feature | Status |
+|---------|--------|
+| email_accounts table + RLS | ✅ Done |
+| email_oauth_tokens table (server-only RLS) | ✅ Done |
+| email_messages table + RLS | ✅ Done |
+| Mock data (skip OAuth for now) | ✅ Done |
+| Account switcher (Option A) | ✅ Done |
+| Keyboard shortcuts (J/K/E/S/Enter/Esc) | ✅ Done |
+| Command bar (Ctrl+K) | ✅ Done |
+| Cheat sheet (?) | ✅ Done |
+| Key Coach strip | ✅ Done |
+| Onboarding tutorial | ✅ Done |
+| Create Task/Meeting from email | ✅ Done |
+| Snooze + Waiting On views | ✅ Done |
 
 ## Architecture Invariants
 

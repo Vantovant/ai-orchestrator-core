@@ -2,15 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import AuthPage from "@/pages/AuthPage";
 import AppLayout from "@/components/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
-import TasksPage from "@/pages/TasksPage";
-import RemindersPage from "@/pages/RemindersPage";
-import MeetingsPage from "@/pages/MeetingsPage";
-import CalendarPage from "@/pages/CalendarPage";
+import PlanPage from "@/pages/PlanPage";
 import EmailPage from "@/pages/EmailPage";
 import FinancePage from "@/pages/FinancePage";
 import TravelPage from "@/pages/TravelPage";
@@ -37,10 +34,12 @@ function AppRoutes() {
     <AppLayout>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/tasks" element={<TasksPage />} />
-        <Route path="/reminders" element={<RemindersPage />} />
-        <Route path="/meetings" element={<MeetingsPage />} />
-        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/plan" element={<PlanPage />} />
+        {/* Legacy redirects */}
+        <Route path="/tasks" element={<Navigate to="/plan?tab=tasks" replace />} />
+        <Route path="/reminders" element={<Navigate to="/plan?tab=reminders" replace />} />
+        <Route path="/meetings" element={<Navigate to="/plan?tab=meetings" replace />} />
+        <Route path="/calendar" element={<Navigate to="/plan?tab=calendar" replace />} />
         <Route path="/email" element={<EmailPage />} />
         <Route path="/finance" element={<FinancePage />} />
         <Route path="/travel" element={<TravelPage />} />
