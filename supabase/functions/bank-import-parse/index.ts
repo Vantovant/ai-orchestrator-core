@@ -211,21 +211,24 @@ serve(async (req) => {
         }
       }
     } else if (fileType === "pdf") {
-      // PDF: Use AI to extract transactions from text content
-      const textContent = content; // For uploaded PDFs, we get raw text/binary
-      
-      // Try to extract readable text from the PDF
-      // PDFs uploaded as binary won't have readable text directly - use the raw bytes
-      // We'll send the text representation to AI for parsing
-      const pdfText = textContent.length > 50000 ? textContent.slice(0, 50000) : textContent;
-      
+      // PDF: Send as base64 to Gemini multimodal endpoint
       const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
       if (!lovableApiKey) {
         await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "AI service not configured for PDF parsing" }).eq("id", import_id);
         return new Response(JSON.stringify({ error: "AI service not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      const aiPrompt = `Extract bank transactions from this South African bank statement text. Return ONLY a JSON array of objects with these fields:
+      // Re-download as arrayBuffer for base64 encoding
+      const { data: pdfData, error: pdfErr } = await adminClient.storage.from("statements").download(importRec.file_path);
+      if (pdfErr || !pdfData) {
+        await adminClient.from("bank_statement_imports").update({ status: "failed", error_message: "Failed to download PDF" }).eq("id", import_id);
+        return new Response(JSON.stringify({ error: "PDF download failed" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const pdfBytes = new Uint8Array(await pdfData.arrayBuffer());
+      const base64Pdf = btoa(String.fromCharCode(...pdfBytes));
+
+      const aiPrompt = `Extract bank transactions from this South African bank statement PDF. Return ONLY a JSON array of objects with these fields:
 - date: transaction date in YYYY-MM-DD format
 - description: transaction description
 - amount: numeric amount (positive for credits/deposits, negative for debits/payments)
@@ -236,10 +239,7 @@ Rules:
 - Dates must be valid ISO dates
 - Amounts must be numbers (no currency symbols)
 - Credits/deposits are positive, debits/payments are negative
-- If you cannot parse any transactions, return an empty array []
-
-Bank statement text:
-${pdfText}`;
+- If you cannot parse any transactions, return an empty array []`;
 
       try {
         const aiResponse = await fetch("https://api.lovable.dev/v1/chat/completions", {
@@ -250,18 +250,26 @@ ${pdfText}`;
           },
           body: JSON.stringify({
             model: "google/gemini-2.5-flash",
-            messages: [{ role: "user", content: aiPrompt }],
+            messages: [{
+              role: "user",
+              content: [
+                { type: "text", text: aiPrompt },
+                { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64Pdf}` } },
+              ],
+            }],
             temperature: 0.1,
           }),
         });
 
         if (!aiResponse.ok) {
+          const errText = await aiResponse.text();
+          console.error("AI service error:", aiResponse.status, errText);
           throw new Error(`AI service returned ${aiResponse.status}`);
         }
 
         const aiData = await aiResponse.json();
         const aiText = aiData.choices?.[0]?.message?.content || "[]";
-        
+
         // Extract JSON from AI response (may be wrapped in markdown code blocks)
         const jsonMatch = aiText.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
