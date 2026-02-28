@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserCog, Briefcase, Scale, Calculator, Users, Rocket, Building2, Stethoscope, GraduationCap, Landmark, ShoppingBag, Truck, Hammer, Leaf } from "lucide-react";
+import { UserCog, Briefcase, Scale, Calculator, Users, Rocket, Building2, Stethoscope, GraduationCap, Landmark, ShoppingBag, Truck, Hammer, Leaf, Code, Smartphone, BrainCircuit, Share2, Star, Mic } from "lucide-react";
 import { toast } from "sonner";
 
 const ROLES = [
@@ -25,6 +25,12 @@ const ROLES = [
   { id: "logistics", label: "Logistics & Transport", icon: Truck, desc: "Supply chain & fleet" },
   { id: "construction", label: "Construction & Engineering", icon: Hammer, desc: "Building & infrastructure" },
   { id: "agriculture", label: "Agriculture", icon: Leaf, desc: "Farming & agribusiness" },
+  { id: "web_developer", label: "Web Developer", icon: Code, desc: "Websites & web apps" },
+  { id: "app_developer", label: "App Developer", icon: Smartphone, desc: "Mobile & desktop apps" },
+  { id: "ai_expert", label: "AI & Data Expert", icon: BrainCircuit, desc: "AI, ML & data science" },
+  { id: "social_media", label: "Social Media & Consulting", icon: Share2, desc: "Digital strategy & management" },
+  { id: "influencer", label: "Influencer & Creator", icon: Star, desc: "Content creation & brand deals" },
+  { id: "podcaster", label: "Podcaster & Media", icon: Mic, desc: "Audio, video & broadcasting" },
 ];
 
 export default function ProfileWizard({ onComplete }: { onComplete?: () => void }) {
