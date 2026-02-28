@@ -16,6 +16,24 @@
 | `/shopping` | Shopping (premium stub) | ✅ Done (Sprint 5) |
 | `/settings` | Settings (full) | ✅ Done (Sprint 5) |
 
+## Sprint 6 — SA Executive Pro Layer
+
+| Feature | Status |
+|---------|--------|
+| Executive Profile Wizard (multi-role selection) | ✅ Done |
+| Profile stored in user_preferences | ✅ Done |
+| Role-aware AI tips in profile | ✅ Done |
+| Compliance Center widget | ✅ Done |
+| SA compliance presets (SARS/VAT/UIF/PAYE) | ✅ Done |
+| Compliance widget on Dashboard + Plan Today | ✅ Done |
+| clients table + entity_client_links table | ✅ Done |
+| Client/Matter CRUD in Settings | ✅ Done |
+| ClientTagPicker component | ✅ Done |
+| Client tags on Tasks in Plan hub | ✅ Done |
+| Finance Mentor role-aware upgrade | ✅ Done |
+| Role-specific AI instructions (5 profiles) | ✅ Done |
+| SA_EXECUTIVE_SPEC.md documentation | ✅ Done |
+
 ## Sprint 5 — Consolidation & Mobile Polish
 
 | Feature | Status |
@@ -48,6 +66,7 @@
 | Today's Meetings panel | ✅ Done |
 | Urgent Reminders panel | ✅ Done |
 | KPI stat cards | ✅ Done |
+| Compliance widget (compact) | ✅ Done (Sprint 6) |
 
 ## AI Persistence
 
@@ -71,6 +90,8 @@
 | Work hours setting | ✅ Done (Sprint 5) |
 | Email key coach toggle | ✅ Done (Sprint 5) |
 | Data export (Finance CSV) | ✅ Done (Sprint 5) |
+| Executive Profile Wizard | ✅ Done (Sprint 6) |
+| Client/Matter management | ✅ Done (Sprint 6) |
 
 ## Finance Module (Sprint 2)
 
@@ -84,7 +105,8 @@
 | financeService (CRUD + summary + export) | ✅ Done |
 | finance-snapshot-build edge function | ✅ Done |
 | finance-mentor edge function (SA lens) | ✅ Done |
-| Finance page UI (5 tabs) | ✅ Done |
+| Finance Mentor role-aware (5 profiles) | ✅ Done (Sprint 6) |
+| Finance page UI (6 tabs) | ✅ Done |
 | Bankability profile support | ✅ Done |
 | CSV export (entries + debts) | ✅ Done |
 
@@ -126,6 +148,28 @@
 | Create Task/Meeting from email | ✅ Done |
 | Snooze + Waiting On views | ✅ Done |
 
+## Compliance (Sprint 6)
+
+| Feature | Status |
+|---------|--------|
+| compliance_reminders table + RLS | ✅ Done |
+| SA compliance presets | ✅ Done |
+| Compliance CRUD service | ✅ Done |
+| ComplianceWidget (full + compact) | ✅ Done |
+| Dashboard integration | ✅ Done |
+| Plan Today tab integration | ✅ Done |
+
+## Client/Matter Tagging (Sprint 6)
+
+| Feature | Status |
+|---------|--------|
+| clients table + RLS | ✅ Done |
+| entity_client_links table + RLS | ✅ Done |
+| clientService (CRUD + link/unlink) | ✅ Done |
+| ClientTagPicker component | ✅ Done |
+| Task tagging in Plan hub | ✅ Done |
+| Client management in Settings | ✅ Done |
+
 ## Architecture Invariants
 
 - [x] Database → Services → Snapshot → Edge Functions → UI
@@ -134,3 +178,4 @@
 - [x] run-assistant always returns 200 structured JSON
 - [x] ai_status field in all AI responses
 - [x] Soft delete everywhere (deleted_at)
+- [x] Role-aware AI: Finance Mentor adapts by executive profile

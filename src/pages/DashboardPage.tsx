@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
+import ComplianceWidget from "@/components/compliance/ComplianceWidget";
 
 function StatCard({ title, value, icon: Icon, loading }: { title: string; value: number; icon: any; loading: boolean }) {
   return (
@@ -303,6 +304,9 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Compliance Widget */}
+      <ComplianceWidget compact />
 
       {/* Urgent Reminders */}
       {urgentReminders.length > 0 && (

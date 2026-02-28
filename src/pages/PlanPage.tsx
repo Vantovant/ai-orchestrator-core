@@ -17,6 +17,8 @@ import {
   Plus, Trash2, Pencil, Target, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
+import ComplianceWidget from "@/components/compliance/ComplianceWidget";
+import ClientTagPicker from "@/components/clients/ClientTagPicker";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameDay, isSameMonth, isToday } from "date-fns";
 
 const priorityColor: Record<string, string> = {
@@ -145,6 +147,9 @@ function TodayTab({ tasks, reminders, meetings, isLoading, onAdd }: any) {
           </CardContent>
         </Card>
       )}
+
+      {/* Compliance Widget */}
+      <ComplianceWidget compact />
     </div>
   );
 }
@@ -379,9 +384,11 @@ export default function PlanPage() {
                       <div className="min-w-0">
                         <span className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
                         {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                        <ClientTagPicker entityType="task" entityId={t.id} compact />
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <ClientTagPicker entityType="task" entityId={t.id} />
                       <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteTaskMut.mutate(t.id)}><Trash2 className="h-4 w-4" /></Button>
                     </div>
