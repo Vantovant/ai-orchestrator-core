@@ -71,6 +71,27 @@
 | Bankability profile support | ✅ Done |
 | CSV export (entries + debts) | ✅ Done |
 
+## Bank Statement Import (Sprint 3)
+
+| Feature | Status |
+|---------|--------|
+| bank_accounts table | ✅ Done |
+| bank_statement_imports table | ✅ Done |
+| bank_transactions table (fingerprint dedup) | ✅ Done |
+| merchant_rules table (user-learned) | ✅ Done |
+| statements storage bucket (private) | ✅ Done |
+| bankImportService (upload + parse + commit) | ✅ Done |
+| bank-import-parse edge function | ✅ Done |
+| SA merchant categorization rules | ✅ Done |
+| CSV column mapping UI (SA bank presets) | ✅ Done |
+| OFX/QIF parser support | ✅ Done |
+| Review screen (totals, categories, insights) | ✅ Done |
+| Commit to ledger flow | ✅ Done |
+| SA insights (bank fees, subscriptions, recurring) | ✅ Done |
+| Finance snapshot includes bank insights | ✅ Done |
+| Import tab in Finance page (6 tabs) | ✅ Done |
+| Export help modal | ✅ Done |
+
 ## Architecture Invariants
 
 - [x] Database → Services → Snapshot → Edge Functions → UI

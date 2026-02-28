@@ -5,6 +5,7 @@ import {
   incomeStreamService, opportunityService,
   type FinanceEntry, type Debt, type IncomeStream, type Opportunity,
 } from "@/services/financeService";
+import { bankTransactionService } from "@/services/bankImportService";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DollarSign, Plus, TrendingUp, TrendingDown, AlertTriangle, Zap,
   Trash2, Download, RefreshCw, Target, Lightbulb, Shield, CreditCard,
+  FileSpreadsheet, Banknote, BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
+import BankImportTab from "@/components/finance/BankImportTab";
 
 // ── Formatters ──
 const fmt = (n: number) => `R ${n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -290,11 +293,12 @@ export default function FinancePage() {
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="debts">Debt Radar</TabsTrigger>
           <TabsTrigger value="income">Income Engine</TabsTrigger>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+          <TabsTrigger value="import">Import</TabsTrigger>
           <TabsTrigger value="mentor">AI Mentor</TabsTrigger>
         </TabsList>
 
@@ -469,6 +473,10 @@ export default function FinancePage() {
               ))}
             </div>
           )}
+        </TabsContent>
+        {/* ── IMPORT TAB ── */}
+        <TabsContent value="import" className="space-y-4">
+          <BankImportTab />
         </TabsContent>
 
         {/* ── AI MENTOR TAB ── */}
