@@ -1,1 +1,7 @@
 project_id = "zsvaqtlomgofwqkpwxeh"
+
+[functions.snapshot-build]
+verify_jwt = false
+
+[functions.run-assistant]
+verify_jwt = false
