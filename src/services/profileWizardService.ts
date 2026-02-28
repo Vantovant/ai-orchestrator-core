@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export interface ExecutiveProfile {
-  role_profiles: string[]; // gov_executive | attorney | accountant | network_marketer | entrepreneur
+  role_profiles: string[];
   default_work_start: string;
   default_work_end: string;
   preferred_templates: string[];
@@ -64,6 +64,14 @@ export const profileWizardService = {
       accountant: "Accountant",
       network_marketer: "Network Marketer",
       entrepreneur: "Entrepreneur",
+      real_estate: "Real Estate",
+      healthcare: "Healthcare",
+      education: "Education",
+      banking_finance: "Banking & Finance",
+      retail_ecommerce: "Retail & E-Commerce",
+      logistics: "Logistics & Transport",
+      construction: "Construction & Engineering",
+      agriculture: "Agriculture",
     };
     return labels[role] ?? role;
   },
@@ -75,6 +83,14 @@ export const profileWizardService = {
     if (roles.includes("accountant")) tips.push("Focus: reporting deadlines, client deliverables, CPD tracking");
     if (roles.includes("network_marketer")) tips.push("Focus: weekly targets, team building, expense discipline");
     if (roles.includes("entrepreneur")) tips.push("Focus: revenue growth, cashflow forecasting, investment timing");
+    if (roles.includes("real_estate")) tips.push("Focus: deal pipeline, property cashflow, tenant management");
+    if (roles.includes("healthcare")) tips.push("Focus: patient scheduling, billing compliance, practice growth");
+    if (roles.includes("education")) tips.push("Focus: curriculum planning, student outcomes, institutional budgets");
+    if (roles.includes("banking_finance")) tips.push("Focus: portfolio management, regulatory compliance, client advisory");
+    if (roles.includes("retail_ecommerce")) tips.push("Focus: inventory turnover, sales targets, customer retention");
+    if (roles.includes("logistics")) tips.push("Focus: fleet optimization, delivery SLAs, cost management");
+    if (roles.includes("construction")) tips.push("Focus: project timelines, contractor management, material costs");
+    if (roles.includes("agriculture")) tips.push("Focus: seasonal planning, yield optimization, supply chain");
     return tips;
   },
 };

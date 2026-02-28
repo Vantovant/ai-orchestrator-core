@@ -8,15 +8,23 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserCog, Briefcase, Scale, Calculator, Users, Rocket } from "lucide-react";
+import { UserCog, Briefcase, Scale, Calculator, Users, Rocket, Building2, Stethoscope, GraduationCap, Landmark, ShoppingBag, Truck, Hammer, Leaf } from "lucide-react";
 import { toast } from "sonner";
 
 const ROLES = [
   { id: "gov_executive", label: "Government Executive", icon: Briefcase, desc: "Public sector leadership" },
   { id: "attorney", label: "Attorney", icon: Scale, desc: "Legal practice" },
-  { id: "accountant", label: "Accountant", icon: Calculator, desc: "Financial services" },
+  { id: "accountant", label: "Accountant", icon: Calculator, desc: "Financial & tax services" },
   { id: "network_marketer", label: "Network Marketer", icon: Users, desc: "Direct sales & teams" },
-  { id: "entrepreneur", label: "Entrepreneur", icon: Rocket, desc: "Business ownership" },
+  { id: "entrepreneur", label: "Entrepreneur", icon: Rocket, desc: "Business ownership & startups" },
+  { id: "real_estate", label: "Real Estate", icon: Building2, desc: "Property & development" },
+  { id: "healthcare", label: "Healthcare", icon: Stethoscope, desc: "Medical & wellness" },
+  { id: "education", label: "Education", icon: GraduationCap, desc: "Teaching & training" },
+  { id: "banking_finance", label: "Banking & Finance", icon: Landmark, desc: "Investment & advisory" },
+  { id: "retail_ecommerce", label: "Retail & E-Commerce", icon: ShoppingBag, desc: "Consumer sales" },
+  { id: "logistics", label: "Logistics & Transport", icon: Truck, desc: "Supply chain & fleet" },
+  { id: "construction", label: "Construction & Engineering", icon: Hammer, desc: "Building & infrastructure" },
+  { id: "agriculture", label: "Agriculture", icon: Leaf, desc: "Farming & agribusiness" },
 ];
 
 export default function ProfileWizard({ onComplete }: { onComplete?: () => void }) {
@@ -77,25 +85,29 @@ export default function ProfileWizard({ onComplete }: { onComplete?: () => void 
       <CardContent className="space-y-5">
         {/* Role selection */}
         <div className="space-y-3">
-          <Label className="text-sm font-medium">Your Roles (multi-select)</Label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Label className="text-sm font-medium">Your Industries <span className="text-xs font-normal text-muted-foreground">(select all that apply)</span></Label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {ROLES.map((role) => {
               const checked = selectedRoles.includes(role.id);
               return (
-                <div
+                <button
+                  type="button"
                   key={role.id}
-                  className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                    checked ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+                  className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-primary/40 ${
+                    checked
+                      ? "border-primary bg-primary/10 shadow-sm ring-1 ring-primary/30"
+                      : "border-border hover:border-primary/50 hover:bg-muted/50 active:scale-[0.98]"
                   }`}
                   onClick={() => toggleRole(role.id)}
+                  aria-pressed={checked}
                 >
-                  <Checkbox checked={checked} onCheckedChange={() => toggleRole(role.id)} />
-                  <role.icon className="h-4 w-4 text-muted-foreground" />
-                  <div>
+                  <Checkbox checked={checked} onCheckedChange={() => toggleRole(role.id)} tabIndex={-1} />
+                  <role.icon className={`h-4 w-4 shrink-0 ${checked ? "text-primary" : "text-muted-foreground"}`} />
+                  <div className="min-w-0">
                     <p className="text-sm font-medium">{role.label}</p>
-                    <p className="text-xs text-muted-foreground">{role.desc}</p>
+                    <p className="text-xs text-muted-foreground truncate">{role.desc}</p>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
