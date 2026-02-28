@@ -68,53 +68,101 @@ async function getUserId() {
 // ── SA Merchant Categorization Rules ──
 
 const SA_CATEGORY_RULES: { pattern: RegExp; category: string }[] = [
-  // Groceries
   { pattern: /checkers|shoprite|woolworths|pick.?n.?pay|spar|food.?lover/i, category: "groceries" },
-  // Fuel
   { pattern: /engen|shell|caltex|sasol|bp|total.?energ/i, category: "fuel" },
-  // Telco
   { pattern: /vodacom|mtn|cell.?c|telkom|rain|afrihost|fibre/i, category: "telco" },
-  // Bank fees
   { pattern: /bank.?fee|monthly.?fee|service.?fee|admin.?fee|card.?fee|transaction.?fee/i, category: "bank_fees" },
-  // Transport
   { pattern: /uber|bolt|taxi|e-?toll|sanral|gautrain/i, category: "transport" },
-  // Insurance
   { pattern: /old.?mutual|sanlam|discovery|outsurance|momentum|hollard|miway/i, category: "insurance" },
-  // Medical
   { pattern: /medic|pharm|dis-?chem|clicks|doctor|hospital|bonitas|gems/i, category: "medical" },
-  // Municipal / Rates
   { pattern: /municipal|rates|water|electric|eskom|city.?of|prepaid.?elec/i, category: "municipal" },
-  // SARS
   { pattern: /sars|tax.?payment|provisional|paye/i, category: "tax" },
-  // Subscriptions
   { pattern: /netflix|spotify|showmax|dstv|multichoice|youtube|apple|google.?play/i, category: "subscriptions" },
-  // Rent / Property
   { pattern: /rent|lease|bond|mortgage|home.?loan/i, category: "rent" },
-  // Education
   { pattern: /school|university|college|tuition|unisa/i, category: "education" },
-  // Fast food
   { pattern: /kfc|mcdonald|nando|steers|burger|pizza|debonairs|wimpy/i, category: "dining" },
-  // ATM
   { pattern: /atm|cash.?withdrawal/i, category: "cash_withdrawal" },
-  // Salary
   { pattern: /salary|wages|payroll|remuneration/i, category: "salary" },
 ];
 
+// ── Transfer/Internal Movement Detector ──
+
+const TRANSFER_PATTERNS: RegExp[] = [
+  /transfer\s*(to|from|between)/i,
+  /inter.?account/i,
+  /own.?account/i,
+  /intra.?bank/i,
+  /tfr\s*(to|from|fr)/i,
+  /payment\s*to\s*self/i,
+  /savings.?transfer/i,
+  /immediate.?transfer/i,
+  /ibt\b/i,
+];
+
+export function isLikelyTransfer(description: string): boolean {
+  return TRANSFER_PATTERNS.some(p => p.test(description));
+}
+
+// ── SA Compliance Pattern Detectors ──
+
+const SA_COMPLIANCE_PATTERNS = {
+  sars: /sars|south.?african.?revenue/i,
+  paye: /paye|pay.?as.?you.?earn/i,
+  uif: /uif|unemployment.?insurance/i,
+  vat: /vat|value.?added.?tax/i,
+  provisional_tax: /provisional.?tax/i,
+};
+
+export interface ComplianceFlags {
+  sarsTxns: number;
+  payeTxns: number;
+  uifTxns: number;
+  vatTxns: number;
+  provisionalTaxTxns: number;
+  sarsTotalAmount: number;
+  payeTotalAmount: number;
+  uifTotalAmount: number;
+  missingVatIndicator: boolean; // true if business income but no VAT detected
+  missingUifIndicator: boolean; // true if salary detected but no UIF
+}
+
+export function detectComplianceFlags(txns: BankTransaction[], hasBusinessIncome: boolean): ComplianceFlags {
+  let sarsTxns = 0, payeTxns = 0, uifTxns = 0, vatTxns = 0, provisionalTaxTxns = 0;
+  let sarsTotalAmount = 0, payeTotalAmount = 0, uifTotalAmount = 0;
+  let hasSalary = false;
+
+  for (const t of txns) {
+    const d = t.description;
+    if (SA_COMPLIANCE_PATTERNS.sars.test(d)) { sarsTxns++; sarsTotalAmount += Math.abs(t.amount); }
+    if (SA_COMPLIANCE_PATTERNS.paye.test(d)) { payeTxns++; payeTotalAmount += Math.abs(t.amount); }
+    if (SA_COMPLIANCE_PATTERNS.uif.test(d)) { uifTxns++; uifTotalAmount += Math.abs(t.amount); }
+    if (SA_COMPLIANCE_PATTERNS.vat.test(d)) { vatTxns++; }
+    if (SA_COMPLIANCE_PATTERNS.provisional_tax.test(d)) { provisionalTaxTxns++; }
+    if (t.category === "salary" || /salary|wages/i.test(d)) hasSalary = true;
+  }
+
+  return {
+    sarsTxns, payeTxns, uifTxns, vatTxns, provisionalTaxTxns,
+    sarsTotalAmount, payeTotalAmount, uifTotalAmount,
+    missingVatIndicator: hasBusinessIncome && vatTxns === 0,
+    missingUifIndicator: hasSalary && uifTxns === 0,
+  };
+}
+
 export function categorizeTransaction(description: string, userRules: MerchantRule[] = []): string | null {
   const desc = description.toLowerCase();
-  // User rules first (highest priority)
   for (const rule of userRules.sort((a, b) => b.priority - a.priority)) {
     if (desc.includes(rule.pattern.toLowerCase())) return rule.category;
   }
-  // Built-in SA rules
   for (const rule of SA_CATEGORY_RULES) {
     if (rule.pattern.test(desc)) return rule.category;
   }
+  // Auto-detect transfers
+  if (isLikelyTransfer(description)) return "transfer";
   return null;
 }
 
 export function extractMerchant(description: string): string {
-  // Simple: take first meaningful token(s), strip numbers/dates
   const cleaned = description
     .replace(/\d{4}[-/]\d{2}[-/]\d{2}/g, "")
     .replace(/\d{10,}/g, "")
@@ -252,6 +300,25 @@ export const bankTransactionService = {
     return data as BankTransaction;
   },
 
+  async markAsTransfer(id: string) {
+    const { data, error } = await supabase
+      .from("bank_transactions")
+      .update({ category: "transfer" })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as BankTransaction;
+  },
+
+  async bulkMarkAsTransfer(ids: string[]) {
+    const { error } = await supabase
+      .from("bank_transactions")
+      .update({ category: "transfer" })
+      .in("id", ids);
+    if (error) throw error;
+  },
+
   async bulkUpdateCategory(ids: string[], category: string) {
     const { error } = await supabase
       .from("bank_transactions")
@@ -279,6 +346,9 @@ export const bankTransactionService = {
     if (error) throw error;
 
     for (const txn of (txns ?? []) as BankTransaction[]) {
+      // Skip transfers — they don't affect spending/income
+      if (txn.category === "transfer") continue;
+
       const type = txn.amount >= 0 ? "income" : "expense";
       const { data: entry, error: entryErr } = await supabase
         .from("finance_entries")
@@ -301,6 +371,15 @@ export const bankTransactionService = {
         .eq("id", txn.id);
     }
 
+    // Mark transfer txns as committed too (without finance entry)
+    await supabase
+      .from("bank_transactions")
+      .update({ finance_entry_id: "00000000-0000-0000-0000-000000000000" })
+      .eq("import_id", importId)
+      .eq("category", "transfer")
+      .is("finance_entry_id", null)
+      .is("deleted_at", null);
+
     await supabase
       .from("bank_statement_imports")
       .update({ status: "committed" })
@@ -316,45 +395,92 @@ export const bankTransactionService = {
     if (error) throw error;
     const txns = (data ?? []) as BankTransaction[];
 
-    const totalCredit = txns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
-    const totalDebit = txns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    // Exclude transfers from spending analysis
+    const nonTransferTxns = txns.filter(t => t.category !== "transfer");
+
+    const totalCredit = nonTransferTxns.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const totalDebit = nonTransferTxns.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
 
     const byCategory: Record<string, number> = {};
-    txns.filter(t => t.amount < 0).forEach(t => {
+    nonTransferTxns.filter(t => t.amount < 0).forEach(t => {
       const cat = t.category || "uncategorized";
       byCategory[cat] = (byCategory[cat] || 0) + Math.abs(t.amount);
     });
 
     const topMerchants: Record<string, number> = {};
-    txns.filter(t => t.amount < 0).forEach(t => {
+    nonTransferTxns.filter(t => t.amount < 0).forEach(t => {
       const m = t.merchant || t.description.slice(0, 20);
       topMerchants[m] = (topMerchants[m] || 0) + Math.abs(t.amount);
     });
 
-    // SA-specific insights
     const bankFees = txns.filter(t => t.category === "bank_fees").reduce((s, t) => s + Math.abs(t.amount), 0);
     const subscriptions = txns.filter(t => t.category === "subscriptions").reduce((s, t) => s + Math.abs(t.amount), 0);
 
-    // Detect recurring debits (same amount, same merchant)
     const debitsByKey: Record<string, number> = {};
-    txns.filter(t => t.amount < 0).forEach(t => {
+    nonTransferTxns.filter(t => t.amount < 0).forEach(t => {
       const key = `${t.merchant || t.description.slice(0, 15)}_${Math.abs(t.amount).toFixed(2)}`;
       debitsByKey[key] = (debitsByKey[key] || 0) + 1;
     });
     const recurringDebits = Object.entries(debitsByKey).filter(([, count]) => count >= 2);
+
+    // Transfer stats
+    const transferTxns = txns.filter(t => t.category === "transfer");
+    const detectedTransfers = txns.filter(t => isLikelyTransfer(t.description) && t.category !== "transfer");
+
+    // Compliance flags
+    const hasBusinessIncome = nonTransferTxns.some(t => t.amount > 0 && t.category === "business");
+    const compliance = detectComplianceFlags(txns, hasBusinessIncome);
 
     return {
       totalCredit,
       totalDebit,
       net: totalCredit - totalDebit,
       rowCount: txns.length,
-      duplicatesSkipped: 0, // tracked during import
+      duplicatesSkipped: 0,
       byCategory: Object.entries(byCategory).sort((a, b) => b[1] - a[1]),
       topMerchants: Object.entries(topMerchants).sort((a, b) => b[1] - a[1]).slice(0, 10),
       bankFees,
       subscriptions,
       recurringDebits: recurringDebits.length,
+      transferCount: transferTxns.length,
+      detectedTransferCount: detectedTransfers.length,
+      compliance,
     };
+  },
+
+  /** AI-assisted categorization (privacy-safe: only merchant + amount bucket + candidates) */
+  async aiCategorizeBatch(importId: string) {
+    const { data: txns, error } = await supabase
+      .from("bank_transactions")
+      .select("id, merchant, amount, category")
+      .eq("import_id", importId)
+      .is("deleted_at", null)
+      .is("category", null);
+    if (error) throw error;
+    if (!txns || txns.length === 0) return { categorized: 0 };
+
+    // Build privacy-safe payload: merchant + amount bucket only
+    const items = (txns as any[]).map(t => ({
+      id: t.id,
+      merchant: t.merchant || "unknown",
+      amount_bucket: Math.abs(t.amount) < 50 ? "small" : Math.abs(t.amount) < 500 ? "medium" : Math.abs(t.amount) < 5000 ? "large" : "very_large",
+      direction: t.amount >= 0 ? "credit" : "debit",
+    }));
+
+    const { data, error: fnErr } = await supabase.functions.invoke("bank-categorize-ai", {
+      body: { items },
+    });
+    if (fnErr) throw fnErr;
+
+    const results = data?.results || [];
+    let categorized = 0;
+    for (const r of results) {
+      if (r.id && r.category) {
+        await supabase.from("bank_transactions").update({ category: r.category }).eq("id", r.id);
+        categorized++;
+      }
+    }
+    return { categorized };
   },
 };
 
@@ -373,6 +499,24 @@ export const merchantRuleService = {
 
   async create(pattern: string, category: string) {
     const userId = await getUserId();
+    // Check if rule already exists
+    const { data: existing } = await supabase
+      .from("merchant_rules")
+      .select("id")
+      .eq("pattern", pattern)
+      .is("deleted_at", null)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      // Update existing
+      const { data, error } = await supabase
+        .from("merchant_rules")
+        .update({ category, priority: 10 })
+        .eq("id", existing[0].id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as MerchantRule;
+    }
     const { data, error } = await supabase
       .from("merchant_rules")
       .insert({ user_id: userId, pattern, category, priority: 10 })
