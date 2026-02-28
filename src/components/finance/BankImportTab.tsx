@@ -426,8 +426,6 @@ export default function BankImportTab() {
   const [parsing, setParsing] = useState(false);
   const [activeImport, setActiveImport] = useState<BankStatementImport | null>(null);
   const [mappingData, setMappingData] = useState<{ headers: string[]; sample_rows: string[][] } | null>(null);
-  const [parsingPdf, setParsingPdf] = useState(false);
-  const [parsingImportId, setParsingImportId] = useState<string | null>(null);
 
   const imports = useQuery({
     queryKey: ["bank_imports", selectedAccountId],
@@ -443,7 +441,7 @@ export default function BankImportTab() {
       if (!user) throw new Error("Not authenticated");
 
       const ext = file.name.split(".").pop()?.toLowerCase() || "csv";
-      const fileType = ["ofx", "qif", "pdf"].includes(ext) ? ext : "csv";
+      const fileType = ["ofx", "qif"].includes(ext) ? ext : "csv";
 
       const importRec = await bankImportService.create(selectedAccountId, "", fileType);
       const filePath = await bankImportService.uploadFile(user.id, importRec.id, file);
@@ -454,13 +452,7 @@ export default function BankImportTab() {
       const account = (accounts.data ?? []).find(a => a.id === selectedAccountId);
       const presetKey = account ? Object.entries(SA_BANK_PRESETS).find(([, v]) => v.name.toLowerCase() === account.bank_name.toLowerCase())?.[0] : undefined;
 
-      if (fileType === "pdf") {
-        setParsingPdf(true);
-        setParsingImportId(importRec.id);
-        await parseImport(importRec.id, undefined as any, 0);
-        setParsingPdf(false);
-        setParsingImportId(null);
-      } else if (presetKey) {
+      if (presetKey) {
         await parseImport(importRec.id, SA_BANK_PRESETS[presetKey].mapping, SA_BANK_PRESETS[presetKey].skipRows || 1);
       } else {
         setParsing(true);
@@ -535,7 +527,7 @@ export default function BankImportTab() {
               <div className="mt-1">
                 <Input
                   type="file"
-                  accept=".csv,.ofx,.qif,.pdf"
+                  accept=".csv,.ofx,.qif"
                   disabled={!selectedAccountId || uploading || parsing}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -550,35 +542,10 @@ export default function BankImportTab() {
           {(uploading || parsing) && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <RefreshCw className="h-4 w-4 animate-spin" />
-              {uploading ? "Uploading..." : parsingPdf ? (
-                <span className="flex items-center gap-2">
-                  Parsing PDF… <span className="text-xs text-warning">(Beta — prefer CSV for accuracy)</span>
-                </span>
-              ) : "Parsing transactions..."}
-              {parsingPdf && parsingImportId && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs text-destructive hover:text-destructive"
-                  onClick={async () => {
-                    try {
-                      await supabase.functions.invoke("bank-import-parse", {
-                        body: { import_id: parsingImportId, action: "cancel" },
-                      });
-                      setParsing(false);
-                      setParsingPdf(false);
-                      setParsingImportId(null);
-                      qc.invalidateQueries({ queryKey: ["bank_imports"] });
-                      toast.info("PDF parsing cancelled");
-                    } catch { /* ignore */ }
-                  }}
-                >
-                  Cancel
-                </Button>
-              )}
+              {uploading ? "Uploading..." : "Parsing transactions..."}
             </div>
           )}
-          <p className="text-xs text-muted-foreground">Supported formats: CSV (recommended), OFX, QIF, PDF (Beta). Max file size: 5 MB.</p>
+          <p className="text-xs text-muted-foreground">Supported formats: CSV (recommended), OFX, QIF. Max file size: 5 MB.</p>
         </CardContent>
       </Card>
 
