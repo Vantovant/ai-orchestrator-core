@@ -286,6 +286,175 @@ export type Database = {
         }
         Relationships: []
       }
+      email_accounts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          display_name: string | null
+          email_address: string
+          id: string
+          label: string | null
+          provider: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          display_name?: string | null
+          email_address: string
+          id?: string
+          label?: string | null
+          provider?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          display_name?: string | null
+          email_address?: string
+          id?: string
+          label?: string | null
+          provider?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      email_messages: {
+        Row: {
+          account_id: string
+          category: string | null
+          created_at: string
+          date: string
+          deleted_at: string | null
+          followup_due_date: string | null
+          id: string
+          intent: string | null
+          is_archived: boolean
+          is_read: boolean
+          is_starred: boolean
+          labels: string[] | null
+          message_id: string
+          recipients: string[] | null
+          sender: string
+          snippet: string | null
+          snoozed_until: string | null
+          subject: string
+          thread_id: string | null
+          updated_at: string
+          urgency: string | null
+          user_id: string
+          waiting_on: boolean
+        }
+        Insert: {
+          account_id: string
+          category?: string | null
+          created_at?: string
+          date?: string
+          deleted_at?: string | null
+          followup_due_date?: string | null
+          id?: string
+          intent?: string | null
+          is_archived?: boolean
+          is_read?: boolean
+          is_starred?: boolean
+          labels?: string[] | null
+          message_id: string
+          recipients?: string[] | null
+          sender?: string
+          snippet?: string | null
+          snoozed_until?: string | null
+          subject?: string
+          thread_id?: string | null
+          updated_at?: string
+          urgency?: string | null
+          user_id: string
+          waiting_on?: boolean
+        }
+        Update: {
+          account_id?: string
+          category?: string | null
+          created_at?: string
+          date?: string
+          deleted_at?: string | null
+          followup_due_date?: string | null
+          id?: string
+          intent?: string | null
+          is_archived?: boolean
+          is_read?: boolean
+          is_starred?: boolean
+          labels?: string[] | null
+          message_id?: string
+          recipients?: string[] | null
+          sender?: string
+          snippet?: string | null
+          snoozed_until?: string | null
+          subject?: string
+          thread_id?: string | null
+          updated_at?: string
+          urgency?: string | null
+          user_id?: string
+          waiting_on?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_oauth_tokens: {
+        Row: {
+          access_token: string
+          account_id: string
+          created_at: string
+          id: string
+          refresh_token: string
+          scopes: string[] | null
+          token_expiry: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string
+          account_id: string
+          created_at?: string
+          id?: string
+          refresh_token?: string
+          scopes?: string[] | null
+          token_expiry?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          account_id?: string
+          created_at?: string
+          id?: string
+          refresh_token?: string
+          scopes?: string[] | null
+          token_expiry?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_oauth_tokens_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entity_tags: {
         Row: {
           created_at: string
