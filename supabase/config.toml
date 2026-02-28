@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.bank-import-parse]
 verify_jwt = false
+
+[functions.bank-categorize-ai]
+verify_jwt = false
+
+[functions.ai-gateway]
+verify_jwt = false
