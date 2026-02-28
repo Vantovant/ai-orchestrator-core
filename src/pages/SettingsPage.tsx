@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
+const CONTEXT_CHAR_LIMIT = 500;
+
 const SUGGESTED_KEYS = [
   { key: "role", label: "Your Role", placeholder: "e.g. CEO, VP Engineering" },
   { key: "goal", label: "Current Goal", placeholder: "e.g. Launch product by Q2" },
@@ -75,6 +77,8 @@ export default function SettingsPage() {
   const existingKeys = new Set((contexts.data ?? []).map((c) => c.context_key));
   const missingSuggestions = SUGGESTED_KEYS.filter((s) => !existingKeys.has(s.key));
 
+  const charsRemaining = CONTEXT_CHAR_LIMIT - editValue.length;
+
   return (
     <div className="space-y-6">
       <div>
@@ -84,7 +88,6 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* User Info */}
       <Card>
         <CardHeader><CardTitle className="text-base">Account</CardTitle></CardHeader>
         <CardContent>
@@ -92,7 +95,6 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Executive Context */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
@@ -112,6 +114,10 @@ export default function SettingsPage() {
                 className="space-y-3"
                 onSubmit={(e) => {
                   e.preventDefault();
+                  if (editValue.length > CONTEXT_CHAR_LIMIT) {
+                    toast.error(`Value must be ${CONTEXT_CHAR_LIMIT} characters or less`);
+                    return;
+                  }
                   upsertMut.mutate({ key: editKey, value: editValue });
                 }}
               >
@@ -122,13 +128,19 @@ export default function SettingsPage() {
                   required
                   disabled={isEditing}
                 />
-                <Textarea
-                  placeholder="Value"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  required
-                  rows={4}
-                />
+                <div>
+                  <Textarea
+                    placeholder="Value"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value.slice(0, CONTEXT_CHAR_LIMIT))}
+                    required
+                    rows={4}
+                    maxLength={CONTEXT_CHAR_LIMIT}
+                  />
+                  <p className={`text-xs mt-1 text-right ${charsRemaining < 50 ? "text-destructive" : "text-muted-foreground"}`}>
+                    {charsRemaining} characters remaining
+                  </p>
+                </div>
                 <Button type="submit" className="w-full" disabled={upsertMut.isPending}>
                   {upsertMut.isPending ? "Saving..." : "Save"}
                 </Button>
@@ -162,7 +174,6 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Suggested keys */}
           {missingSuggestions.length > 0 && (
             <div className="mt-4">
               <p className="mb-2 text-xs font-medium text-muted-foreground">Suggested context to add:</p>

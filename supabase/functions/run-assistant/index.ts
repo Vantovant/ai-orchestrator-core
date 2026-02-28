@@ -28,13 +28,13 @@ serve(async (req) => {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: "Unauthorized", snapshot: {} }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Step 1: Build snapshot via internal call
+    // Step 1: Build snapshot
     const snapshotRes = await fetch(`${supabaseUrl}/functions/v1/snapshot-build`, {
       headers: {
         Authorization: authHeader ?? "",
@@ -45,17 +45,16 @@ serve(async (req) => {
 
     const snapshot = await snapshotRes.json();
     if (!snapshotRes.ok) {
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot: {}, error: "Snapshot build failed" }), {
+      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: "Snapshot build failed", snapshot: {} }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Step 2: Call AI with snapshot ONLY (token discipline)
+    // Step 2: Call AI
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      // AI not configured — return snapshot with empty AI results (still 200)
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot }), {
+      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "degraded", message: "AI not configured — showing standard mode", snapshot }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -66,6 +65,7 @@ serve(async (req) => {
 RULES:
 - Only use data from the snapshot provided. Do not hallucinate additional data.
 - Return valid JSON matching the tool schema exactly.
+- For each prioritized task, include the original task id from the snapshot so the frontend can re-hydrate from live data.
 
 SNAPSHOT:
 ${JSON.stringify(snapshot, null, 2)}`;
@@ -156,20 +156,12 @@ ${JSON.stringify(snapshot, null, 2)}`;
 
     if (!aiRes.ok) {
       const status = aiRes.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot, error: "AI rate limited, try again later" }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot, error: "AI credits exhausted" }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      console.error("AI gateway error:", status, await aiRes.text());
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot, error: "AI unavailable" }), {
+      let aiStatus = "error";
+      let message = "AI unavailable";
+      if (status === 429) { aiStatus = "rate_limited"; message = "AI rate limited, try again later"; }
+      if (status === 402) { aiStatus = "degraded"; message = "AI credits exhausted"; }
+      console.error("AI gateway error:", status);
+      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: aiStatus, message, snapshot }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -179,7 +171,7 @@ ${JSON.stringify(snapshot, null, 2)}`;
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
 
     if (!toolCall) {
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot, error: "AI returned no structured data" }), {
+      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: "AI returned no structured data", snapshot }), {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -192,6 +184,8 @@ ${JSON.stringify(snapshot, null, 2)}`;
       triagedEmails: [],
       meetingBriefs: briefing.meetingBriefs ?? [],
       dailyPlan: briefing.dailyPlan ?? {},
+      ai_status: "ok",
+      message: "Briefing generated successfully",
       snapshot,
     }), {
       status: 200,
@@ -199,7 +193,7 @@ ${JSON.stringify(snapshot, null, 2)}`;
     });
   } catch (e) {
     console.error("run-assistant error:", e);
-    return new Response(JSON.stringify({ ...EMPTY_RESULT, snapshot: {}, error: String(e) }), {
+    return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: String(e), snapshot: {} }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

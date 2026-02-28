@@ -9,9 +9,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target } from "lucide-react";
+import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target, RefreshCw, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 function StatCard({ title, value, icon: Icon, loading }: { title: string; value: number; icon: any; loading: boolean }) {
   return (
@@ -50,6 +50,28 @@ function getUserName(user: any): string {
   return "there";
 }
 
+// ── AI Status Banner ──
+function AiStatusBanner({ aiStatus, message, onRetry, retrying }: { aiStatus: string; message: string; onRetry: () => void; retrying: boolean }) {
+  if (aiStatus === "ok") return null;
+  const isError = aiStatus === "error" || aiStatus === "rate_limited";
+  return (
+    <Card className={isError ? "border-destructive/50 bg-destructive/5" : "border-warning/50 bg-warning/5"}>
+      <CardContent className="flex items-center justify-between gap-3 p-4">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className={`h-5 w-5 ${isError ? "text-destructive" : "text-warning"}`} />
+          <div>
+            <p className="text-sm font-medium">{aiStatus === "rate_limited" ? "AI Rate Limited" : aiStatus === "degraded" ? "Standard Mode" : "AI Unavailable"}</p>
+            <p className="text-xs text-muted-foreground">{message}</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying} className="gap-1">
+          <RefreshCw className={`h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} /> Retry
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -61,13 +83,13 @@ export default function DashboardPage() {
   const [aiLoading, setAiLoading] = useState(false);
 
   const aiResult = latestRun.data?.result_json ?? null;
+  const aiStatus = aiResult?.ai_status ?? (aiResult?.dailyPlan?.greeting ? "ok" : null);
 
   const runAssistant = async () => {
     setAiLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("run-assistant");
       if (error) throw error;
-      // Persist the run
       await assistantRunService.save(data.snapshot ?? {}, data);
       qc.invalidateQueries({ queryKey: ["assistant_run_latest"] });
       toast.success("AI briefing generated");
@@ -90,23 +112,50 @@ export default function DashboardPage() {
 
   const isLoading = tasks.isLoading || reminders.isLoading || meetings.isLoading;
 
-  // Top 5 priorities: from AI if available, else from tasks sorted by priority
+  // ── DATA DRIFT FIX: Re-hydrate Top 5 from LIVE task data ──
   const priorityOrder = ["critical", "high", "medium", "low"];
-  const aiPriorities = aiResult?.prioritizedTasks?.slice(0, 5) ?? [];
-  const fallbackPriorities = (tasks.data ?? [])
-    .filter((t) => t.status !== "done")
-    .sort((a, b) => {
-      const pa = priorityOrder.indexOf(a.priority);
-      const pb = priorityOrder.indexOf(b.priority);
-      if (pa !== pb) return pa - pb;
-      if (a.due_date && b.due_date) return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-      if (a.due_date) return -1;
-      if (b.due_date) return 1;
-      return 0;
-    })
-    .slice(0, 5);
+  const liveTasks = tasks.data ?? [];
+  const liveTaskMap = useMemo(() => {
+    const map = new Map<string, (typeof liveTasks)[0]>();
+    liveTasks.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [liveTasks]);
 
-  const topPriorities = aiPriorities.length > 0 ? aiPriorities : fallbackPriorities;
+  const topPriorities = useMemo(() => {
+    const aiPriorities = aiResult?.prioritizedTasks ?? [];
+
+    if (aiPriorities.length > 0) {
+      // Re-hydrate: keep AI ordering but filter out completed/deleted tasks using LIVE data
+      const rehydrated = aiPriorities
+        .map((aiTask: any) => {
+          const live = liveTaskMap.get(aiTask.id);
+          if (!live) return null; // deleted
+          if (live.status === "done") return null; // completed after briefing
+          if (live.deleted_at) return null; // soft-deleted
+          return { ...aiTask, title: live.title, priority: aiTask.priority };
+        })
+        .filter(Boolean)
+        .slice(0, 5);
+
+      if (rehydrated.length > 0) return rehydrated;
+    }
+
+    // Fallback: standard priority sort
+    return liveTasks
+      .filter((t) => t.status !== "done")
+      .sort((a, b) => {
+        const pa = priorityOrder.indexOf(a.priority);
+        const pb = priorityOrder.indexOf(b.priority);
+        if (pa !== pb) return pa - pb;
+        if (a.due_date && b.due_date) return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        if (a.due_date) return -1;
+        if (b.due_date) return 1;
+        return 0;
+      })
+      .slice(0, 5);
+  }, [aiResult, liveTasks, liveTaskMap]);
+
+  const isStandardMode = aiStatus && aiStatus !== "ok";
 
   return (
     <div className="space-y-6">
@@ -124,12 +173,22 @@ export default function DashboardPage() {
         </Button>
       </div>
 
+      {/* AI Status Banner */}
+      {aiStatus && aiStatus !== "ok" && (
+        <AiStatusBanner
+          aiStatus={aiStatus}
+          message={aiResult?.message ?? "AI is unavailable. Showing standard mode."}
+          onRetry={runAssistant}
+          retrying={aiLoading}
+        />
+      )}
+
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Active Tasks" value={tasks.data?.filter((t) => t.status !== "done").length ?? 0} icon={CheckSquare} loading={isLoading} />
+        <StatCard title="Active Tasks" value={liveTasks.filter((t) => t.status !== "done").length} icon={CheckSquare} loading={isLoading} />
         <StatCard title="Today's Meetings" value={todayMeetings.length} icon={Calendar} loading={isLoading} />
         <StatCard title="Urgent Reminders" value={urgentReminders.length} icon={Bell} loading={isLoading} />
-        <StatCard title="Total Tasks" value={tasks.data?.length ?? 0} icon={CheckSquare} loading={isLoading} />
+        <StatCard title="Total Tasks" value={liveTasks.length} icon={CheckSquare} loading={isLoading} />
       </div>
 
       {/* AI-Generated Daily Agenda */}
@@ -177,11 +236,6 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )}
-              {aiResult.error && (
-                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" /> {aiResult.error}
-                </div>
-              )}
               <p className="text-xs text-muted-foreground">
                 Generated {latestRun.data?.created_at ? new Date(latestRun.data.created_at).toLocaleString() : ""}
               </p>
@@ -196,6 +250,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Target className="h-4 w-4 text-primary" /> Top 5 Priorities
+              {isStandardMode && <Badge variant="outline" className="text-xs ml-1">Standard mode</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent>

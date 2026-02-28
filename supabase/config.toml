@@ -5,3 +5,9 @@ verify_jwt = false
 
 [functions.run-assistant]
 verify_jwt = false
+
+[functions.finance-snapshot-build]
+verify_jwt = false
+
+[functions.finance-mentor]
+verify_jwt = false
