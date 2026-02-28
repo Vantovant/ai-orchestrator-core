@@ -10,6 +10,12 @@ import DashboardPage from "@/pages/DashboardPage";
 import TasksPage from "@/pages/TasksPage";
 import RemindersPage from "@/pages/RemindersPage";
 import MeetingsPage from "@/pages/MeetingsPage";
+import CalendarPage from "@/pages/CalendarPage";
+import EmailPage from "@/pages/EmailPage";
+import FinancePage from "@/pages/FinancePage";
+import TravelPage from "@/pages/TravelPage";
+import ShoppingPage from "@/pages/ShoppingPage";
+import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +40,12 @@ function AppRoutes() {
         <Route path="/tasks" element={<TasksPage />} />
         <Route path="/reminders" element={<RemindersPage />} />
         <Route path="/meetings" element={<MeetingsPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        <Route path="/email" element={<EmailPage />} />
+        <Route path="/finance" element={<FinancePage />} />
+        <Route path="/travel" element={<TravelPage />} />
+        <Route path="/shopping" element={<ShoppingPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
