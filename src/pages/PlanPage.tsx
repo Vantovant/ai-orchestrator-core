@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState, useMemo, useCallback } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { taskService, type TaskInsert } from "@/services/taskService";
 import { reminderService, type ReminderInsert } from "@/services/reminderService";
 import { meetingService, type MeetingInsert } from "@/services/meetingService";
+import { financeEntryService } from "@/services/financeService";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,9 @@ import {
 import { toast } from "sonner";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
 import ClientTagPicker from "@/components/clients/ClientTagPicker";
+import VoiceInput from "@/components/voice/VoiceInput";
+import VoiceConfirmation from "@/components/voice/VoiceConfirmation";
+import { parseVoiceCommand, type ParsedVoiceCommand } from "@/lib/voiceCommandParser";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameDay, isSameMonth, isToday } from "date-fns";
 
 const priorityColor: Record<string, string> = {
@@ -83,7 +87,7 @@ function TodayTab({ tasks, reminders, meetings, isLoading, onAdd }: any) {
       </div>
 
       {/* Quick add row — desktop */}
-      <div className="hidden md:flex gap-2">
+      <div className="hidden md:flex gap-2 items-center">
         <Button variant="outline" size="sm" className="gap-1" onClick={() => onAdd("task")}><Plus className="h-3 w-3" /> Task</Button>
         <Button variant="outline" size="sm" className="gap-1" onClick={() => onAdd("reminder")}><Plus className="h-3 w-3" /> Reminder</Button>
         <Button variant="outline" size="sm" className="gap-1" onClick={() => onAdd("meeting")}><Plus className="h-3 w-3" /> Meeting</Button>
@@ -276,8 +280,10 @@ function CalendarTab({ tasks, reminders, meetings, onAdd }: any) {
 // ── Main Plan Page ──
 export default function PlanPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const defaultTab = searchParams.get("tab") || "today";
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const [voiceCommand, setVoiceCommand] = useState<ParsedVoiceCommand | null>(null);
 
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
@@ -343,12 +349,72 @@ export default function PlanPage() {
 
   const isLoading = tasks.isLoading || reminders.isLoading || meetings.isLoading;
 
+  const handleVoiceTranscript = useCallback((text: string) => {
+    const cmd = parseVoiceCommand(text);
+    if (cmd.intent === "open_page" && cmd.page) {
+      navigate(cmd.page);
+      toast.success(`Opening ${cmd.page}`);
+      return;
+    }
+    if (cmd.intent === "run_briefing") {
+      navigate("/");
+      toast.success("Opening daily briefing");
+      return;
+    }
+    if (cmd.intent === "unknown") {
+      toast.error("Didn't understand that. Try: 'Add task: review report tomorrow'");
+      return;
+    }
+    setVoiceCommand(cmd);
+  }, [navigate]);
+
+  const handleVoiceConfirm = useCallback(async (cmd: ParsedVoiceCommand) => {
+    try {
+      if (cmd.intent === "create_task") {
+        await taskService.create({ title: cmd.title ?? "Untitled", priority: "medium", due_date: cmd.date?.toISOString() });
+        toast.success("Task created via voice");
+      } else if (cmd.intent === "create_reminder") {
+        await reminderService.create({ title: cmd.title ?? "Untitled", reminder_time: (cmd.date ?? new Date()).toISOString() });
+        toast.success("Reminder created via voice");
+      } else if (cmd.intent === "create_meeting") {
+        const start = cmd.date ?? new Date();
+        const end = new Date(start.getTime() + 60 * 60 * 1000);
+        await meetingService.create({ title: cmd.title ?? "Untitled", start_time: start.toISOString(), end_time: end.toISOString() });
+        toast.success("Meeting created via voice");
+      } else if (cmd.intent === "add_expense") {
+        await financeEntryService.create({ type: "expense", amount: cmd.amount ?? 0, category: cmd.title ?? "general", entry_date: (cmd.date ?? new Date()).toISOString().split("T")[0] });
+        toast.success("Expense added via voice");
+      } else if (cmd.intent === "add_income") {
+        await financeEntryService.create({ type: "income", amount: cmd.amount ?? 0, category: cmd.title ?? "general", entry_date: (cmd.date ?? new Date()).toISOString().split("T")[0] });
+        toast.success("Income added via voice");
+      }
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["reminders"] });
+      qc.invalidateQueries({ queryKey: ["meetings"] });
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to save");
+    }
+    setVoiceCommand(null);
+  }, [qc]);
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Plan</h1>
-        <p className="text-sm text-muted-foreground">Your unified planning command center</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Plan</h1>
+          <p className="text-sm text-muted-foreground">Your unified planning command center</p>
+        </div>
+        <VoiceInput onTranscript={handleVoiceTranscript} />
       </div>
+
+      {/* Voice confirmation card */}
+      {voiceCommand && (
+        <VoiceConfirmation
+          command={voiceCommand}
+          onConfirm={handleVoiceConfirm}
+          onCancel={() => setVoiceCommand(null)}
+        />
+      )}
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">

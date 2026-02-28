@@ -16,6 +16,24 @@
 | `/shopping` | Shopping (premium stub) | ✅ Done (Sprint 5) |
 | `/settings` | Settings (full) | ✅ Done (Sprint 5) |
 
+## Sprint 7 — Voice Command + Multi-AI Fallback
+
+| Feature | Status |
+|---------|--------|
+| Voice input (Web Speech API) | ✅ Done |
+| Voice command parser (7 intents) | ✅ Done |
+| Voice confirmation card (Confirm/Edit/Cancel) | ✅ Done |
+| Voice integrated in Plan Hub | ✅ Done |
+| Voice examples tooltip | ✅ Done |
+| AI Gateway edge function (multi-provider) | ✅ Done |
+| Lovable AI → Gemini → OpenAI fallback | ✅ Done |
+| run-assistant uses ai-gateway | ✅ Done |
+| finance-mentor uses ai-gateway | ✅ Done |
+| AI preference toggle (fastest/quality) | ✅ Done |
+| provider_used in all AI responses | ✅ Done |
+| AI_PROVIDERS.md documentation | ✅ Done |
+| No API keys in frontend/database | ✅ Done |
+
 ## Sprint 6 — SA Executive Pro Layer
 
 | Feature | Status |

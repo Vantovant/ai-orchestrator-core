@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag, Bot } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -43,6 +44,27 @@ export default function SettingsPage() {
   const [clientType, setClientType] = useState("client");
 
   const [showKeyCoach, setShowKeyCoach] = useState(() => localStorage.getItem("vanto_key_coach") !== "false");
+
+  // AI Preference
+  const aiPrefQuery = useQuery({
+    queryKey: ["ai_preference"],
+    queryFn: async () => {
+      const { data } = await supabase.from("user_preferences").select("preference_value").eq("preference_key", "ai_preference").eq("user_id", user?.id ?? "").maybeSingle();
+      return (data?.preference_value as any)?.order ?? "fastest";
+    },
+    enabled: !!user,
+  });
+  const aiPrefMut = useMutation({
+    mutationFn: async (order: string) => {
+      const { data: existing } = await supabase.from("user_preferences").select("id").eq("preference_key", "ai_preference").eq("user_id", user!.id).maybeSingle();
+      if (existing) {
+        await supabase.from("user_preferences").update({ preference_value: { order } }).eq("id", existing.id);
+      } else {
+        await supabase.from("user_preferences").insert({ user_id: user!.id, preference_key: "ai_preference", preference_value: { order } });
+      }
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["ai_preference"] }); toast.success("AI preference saved"); },
+  });
 
   const upsertMut = useMutation({
     mutationFn: ({ key, value }: { key: string; value: string }) => contextService.upsert(key, value),
@@ -193,7 +215,29 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Executive Context */}
+      {/* AI Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2"><Bot className="h-4 w-4" /> AI Preferences</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Provider Fallback Order</p>
+              <p className="text-xs text-muted-foreground">Choose how AI providers are prioritized when the primary is unavailable</p>
+            </div>
+            <Select value={aiPrefQuery.data ?? "fastest"} onValueChange={(v) => aiPrefMut.mutate(v)}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fastest">Prefer fastest</SelectItem>
+                <SelectItem value="quality">Prefer quality</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2"><Settings className="h-4 w-4" /> Executive Context</CardTitle>

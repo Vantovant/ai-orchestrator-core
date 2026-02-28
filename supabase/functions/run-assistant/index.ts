@@ -36,30 +36,25 @@ serve(async (req) => {
 
     // Step 1: Build snapshot
     const snapshotRes = await fetch(`${supabaseUrl}/functions/v1/snapshot-build`, {
-      headers: {
-        Authorization: authHeader ?? "",
-        "Content-Type": "application/json",
-        apikey: anonKey,
-      },
+      headers: { Authorization: authHeader ?? "", "Content-Type": "application/json", apikey: anonKey },
     });
-
     const snapshot = await snapshotRes.json();
     if (!snapshotRes.ok) {
       return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: "Snapshot build failed", snapshot: {} }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Step 2: Call AI
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "degraded", message: "AI not configured — showing standard mode", snapshot }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // Get user AI preference
+    const { data: prefData } = await supabase
+      .from("user_preferences")
+      .select("preference_value")
+      .eq("preference_key", "ai_preference")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const preference = (prefData?.preference_value as any)?.order ?? "fastest";
 
+    // Step 2: Call AI via gateway
     const systemPrompt = `You are an executive AI assistant. Analyze the following snapshot and return structured intelligence.
 
 RULES:
@@ -70,114 +65,102 @@ RULES:
 SNAPSHOT:
 ${JSON.stringify(snapshot, null, 2)}`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "executive_briefing",
+          description: "Return the executive daily briefing with prioritized tasks, meeting briefs, and daily plan.",
+          parameters: {
+            type: "object",
+            properties: {
+              prioritizedTasks: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    title: { type: "string" },
+                    priority: { type: "string", enum: ["critical", "high", "medium", "low"] },
+                    reasoning: { type: "string" },
+                    suggestedTimeSlot: { type: "string" },
+                  },
+                  required: ["id", "title", "priority", "reasoning"],
+                  additionalProperties: false,
+                },
+              },
+              meetingBriefs: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    meetingId: { type: "string" },
+                    title: { type: "string" },
+                    talkingPoints: { type: "array", items: { type: "string" } },
+                    preparationActions: { type: "array", items: { type: "string" } },
+                  },
+                  required: ["meetingId", "title", "talkingPoints"],
+                  additionalProperties: false,
+                },
+              },
+              dailyPlan: {
+                type: "object",
+                properties: {
+                  greeting: { type: "string" },
+                  dayOverview: { type: "string" },
+                  topPriorities: { type: "array", items: { type: "string" } },
+                  timeBlocks: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        time: { type: "string" },
+                        activity: { type: "string" },
+                        type: { type: "string", enum: ["meeting", "deep_work", "admin", "break"] },
+                      },
+                      required: ["time", "activity", "type"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["greeting", "dayOverview", "topPriorities"],
+                additionalProperties: false,
+              },
+            },
+            required: ["prioritizedTasks", "meetingBriefs", "dailyPlan"],
+            additionalProperties: false,
+          },
+        },
       },
+    ];
+
+    const gatewayRes = await fetch(`${supabaseUrl}/functions/v1/ai-gateway`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: `Bearer ${serviceKey}` },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: "Analyze my day. Prioritize tasks, prepare meeting briefs, and create a daily plan." },
         ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "executive_briefing",
-              description: "Return the executive daily briefing with prioritized tasks, meeting briefs, and daily plan.",
-              parameters: {
-                type: "object",
-                properties: {
-                  prioritizedTasks: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        id: { type: "string" },
-                        title: { type: "string" },
-                        priority: { type: "string", enum: ["critical", "high", "medium", "low"] },
-                        reasoning: { type: "string" },
-                        suggestedTimeSlot: { type: "string" },
-                      },
-                      required: ["id", "title", "priority", "reasoning"],
-                      additionalProperties: false,
-                    },
-                  },
-                  meetingBriefs: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        meetingId: { type: "string" },
-                        title: { type: "string" },
-                        talkingPoints: { type: "array", items: { type: "string" } },
-                        preparationActions: { type: "array", items: { type: "string" } },
-                      },
-                      required: ["meetingId", "title", "talkingPoints"],
-                      additionalProperties: false,
-                    },
-                  },
-                  dailyPlan: {
-                    type: "object",
-                    properties: {
-                      greeting: { type: "string" },
-                      dayOverview: { type: "string" },
-                      topPriorities: { type: "array", items: { type: "string" } },
-                      timeBlocks: {
-                        type: "array",
-                        items: {
-                          type: "object",
-                          properties: {
-                            time: { type: "string" },
-                            activity: { type: "string" },
-                            type: { type: "string", enum: ["meeting", "deep_work", "admin", "break"] },
-                          },
-                          required: ["time", "activity", "type"],
-                          additionalProperties: false,
-                        },
-                      },
-                    },
-                    required: ["greeting", "dayOverview", "topPriorities"],
-                    additionalProperties: false,
-                  },
-                },
-                required: ["prioritizedTasks", "meetingBriefs", "dailyPlan"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
+        tools,
         tool_choice: { type: "function", function: { name: "executive_briefing" } },
+        preference,
       }),
     });
 
-    if (!aiRes.ok) {
-      const status = aiRes.status;
-      let aiStatus = "error";
-      let message = "AI unavailable";
-      if (status === 429) { aiStatus = "rate_limited"; message = "AI rate limited, try again later"; }
-      if (status === 402) { aiStatus = "degraded"; message = "AI credits exhausted"; }
-      console.error("AI gateway error:", status);
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: aiStatus, message, snapshot }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const gatewayData = await gatewayRes.json();
+
+    if (gatewayData.ai_status !== "ok" || !gatewayData.result) {
+      return new Response(JSON.stringify({
+        ...EMPTY_RESULT,
+        ai_status: gatewayData.ai_status ?? "error",
+        provider_used: gatewayData.provider_used ?? "none",
+        message: gatewayData.message ?? "AI unavailable",
+        snapshot,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const aiData = await aiRes.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-
-    if (!toolCall) {
-      return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: "AI returned no structured data", snapshot }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const briefing = JSON.parse(toolCall.function.arguments);
+    const briefing = gatewayData.result;
 
     return new Response(JSON.stringify({
       prioritizedTasks: briefing.prioritizedTasks ?? [],
@@ -185,17 +168,14 @@ ${JSON.stringify(snapshot, null, 2)}`;
       meetingBriefs: briefing.meetingBriefs ?? [],
       dailyPlan: briefing.dailyPlan ?? {},
       ai_status: "ok",
-      message: "Briefing generated successfully",
+      provider_used: gatewayData.provider_used,
+      message: gatewayData.message,
       snapshot,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("run-assistant error:", e);
     return new Response(JSON.stringify({ ...EMPTY_RESULT, ai_status: "error", message: String(e), snapshot: {} }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
