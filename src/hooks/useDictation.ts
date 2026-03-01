@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export type DictationState = "idle" | "listening" | "transcribing";
+export type DictationState = "idle" | "listening";
 
 interface UseDictationOptions {
   onTranscript: (text: string) => void;
@@ -17,14 +17,24 @@ interface UseDictationReturn {
   undoLast: () => void;
 }
 
+function normalize(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 export function useDictation({ onTranscript, continuous = true }: UseDictationOptions): UseDictationReturn {
   const [state, setState] = useState<DictationState>("idle");
   const [supported, setSupported] = useState(true);
   const [interimText, setInterimText] = useState("");
   const [lastAppended, setLastAppended] = useState<string | null>(null);
+
   const recognitionRef = useRef<any>(null);
   const onTranscriptRef = useRef(onTranscript);
   onTranscriptRef.current = onTranscript;
+
+  // Track committed text to prevent duplicates
+  const lastCommittedRef = useRef<string>("");
+  // Flag: should we keep listening (auto-restart on browser end)?
+  const shouldContinueRef = useRef(false);
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -39,38 +49,50 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
     recognition.lang = "en-ZA";
 
     recognition.onresult = (event: any) => {
-      let finalTranscript = "";
-      let interim = "";
+      let newFinal = "";
+      let newInterim = "";
+
+      // Only process from resultIndex to avoid re-processing old results
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript;
+        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += t;
+          newFinal += transcript;
         } else {
-          interim += t;
+          newInterim += transcript;
         }
       }
-      setInterimText(interim);
 
-      if (finalTranscript) {
-        const trimmed = finalTranscript.trim();
-        if (trimmed) {
-          setLastAppended(trimmed);
-          onTranscriptRef.current(trimmed);
+      // Show interim text live (never saved to note)
+      setInterimText(normalize(newInterim));
+
+      if (newFinal) {
+        const normalized = normalize(newFinal);
+        if (normalized && normalized !== lastCommittedRef.current) {
+          lastCommittedRef.current = normalized;
+          setLastAppended(normalized);
+          onTranscriptRef.current(normalized);
         }
         setInterimText("");
       }
     };
 
     recognition.onerror = (e: any) => {
-      // Ignore no-speech / aborted errors in continuous mode
+      // Ignore transient errors in continuous mode
       if (e.error === "no-speech" || e.error === "aborted") return;
+      shouldContinueRef.current = false;
       setState("idle");
     };
 
     recognition.onend = () => {
-      // In continuous mode, auto-restart if still in listening state
-      if (recognitionRef.current?._shouldContinue) {
-        try { recognition.start(); } catch {}
+      // Auto-restart if user hasn't pressed stop
+      if (shouldContinueRef.current) {
+        try {
+          setTimeout(() => {
+            if (shouldContinueRef.current) {
+              try { recognition.start(); } catch {}
+            }
+          }, 250);
+        } catch {}
         return;
       }
       setState("idle");
@@ -78,29 +100,32 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
     };
 
     recognitionRef.current = recognition;
-    recognitionRef.current._shouldContinue = false;
 
     return () => {
-      recognitionRef.current._shouldContinue = false;
+      shouldContinueRef.current = false;
       try { recognition.stop(); } catch {}
     };
   }, [continuous]);
 
-  // Stop on visibility change
+  // Stop on tab hidden
   useEffect(() => {
     const handleHidden = () => {
-      if (document.hidden && state === "listening") {
-        stop();
+      if (document.hidden && shouldContinueRef.current) {
+        shouldContinueRef.current = false;
+        try { recognitionRef.current?.stop(); } catch {}
+        setState("idle");
+        setInterimText("");
       }
     };
     document.addEventListener("visibilitychange", handleHidden);
     return () => document.removeEventListener("visibilitychange", handleHidden);
-  }, [state]);
+  }, []);
 
   const start = useCallback(() => {
     if (!recognitionRef.current) return;
+    lastCommittedRef.current = "";
     setInterimText("");
-    recognitionRef.current._shouldContinue = true;
+    shouldContinueRef.current = true;
     try {
       recognitionRef.current.start();
       setState("listening");
@@ -108,19 +133,15 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
   }, []);
 
   const stop = useCallback(() => {
-    if (!recognitionRef.current) return;
-    recognitionRef.current._shouldContinue = false;
-    try { recognitionRef.current.stop(); } catch {}
+    shouldContinueRef.current = false;
+    try { recognitionRef.current?.stop(); } catch {}
     setState("idle");
     setInterimText("");
   }, []);
 
   const undoLast = useCallback(() => {
-    // Caller handles actual undo; we just clear the reference
-    const text = lastAppended;
     setLastAppended(null);
-    return text;
-  }, [lastAppended]);
+  }, []);
 
   return { state, supported, interimText, start, stop, lastAppended, undoLast };
 }
