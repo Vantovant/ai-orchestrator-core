@@ -35,6 +35,8 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
   const lastCommittedRef = useRef<string>("");
   // Flag: should we keep listening (auto-restart on browser end)?
   const shouldContinueRef = useRef(false);
+  // Track which result indices have been committed within a session
+  const committedIndicesRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -52,11 +54,14 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
       let newFinal = "";
       let newInterim = "";
 
-      // Only process from resultIndex to avoid re-processing old results
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Scan ALL results but only commit each final index once
+      for (let i = 0; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          newFinal += transcript;
+          if (!committedIndicesRef.current.has(i)) {
+            committedIndicesRef.current.add(i);
+            newFinal += transcript;
+          }
         } else {
           newInterim += transcript;
         }
@@ -68,9 +73,16 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
       if (newFinal) {
         const normalized = normalize(newFinal);
         if (normalized && normalized !== lastCommittedRef.current) {
-          lastCommittedRef.current = normalized;
-          setLastAppended(normalized);
-          onTranscriptRef.current(normalized);
+          // Substring dedup: if new text starts with last committed, only take delta
+          let toAppend = normalized;
+          if (lastCommittedRef.current && normalized.startsWith(lastCommittedRef.current)) {
+            toAppend = normalize(normalized.slice(lastCommittedRef.current.length));
+          }
+          if (toAppend) {
+            lastCommittedRef.current = normalized;
+            setLastAppended(toAppend);
+            onTranscriptRef.current(toAppend);
+          }
         }
         setInterimText("");
       }
@@ -86,13 +98,13 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
     recognition.onend = () => {
       // Auto-restart if user hasn't pressed stop
       if (shouldContinueRef.current) {
-        try {
-          setTimeout(() => {
-            if (shouldContinueRef.current) {
-              try { recognition.start(); } catch {}
-            }
-          }, 250);
-        } catch {}
+        setTimeout(() => {
+          if (shouldContinueRef.current) {
+            // Clear committed indices for the fresh recognition session
+            committedIndicesRef.current.clear();
+            try { recognition.start(); } catch {}
+          }
+        }, 250);
         return;
       }
       setState("idle");
@@ -124,6 +136,7 @@ export function useDictation({ onTranscript, continuous = true }: UseDictationOp
   const start = useCallback(() => {
     if (!recognitionRef.current) return;
     lastCommittedRef.current = "";
+    committedIndicesRef.current.clear();
     setInterimText("");
     shouldContinueRef.current = true;
     try {
