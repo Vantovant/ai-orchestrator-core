@@ -843,6 +843,45 @@ export type Database = {
         }
         Relationships: []
       }
+      notes_daily: {
+        Row: {
+          content: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          links_json: Json
+          note_date: string
+          structure_json: Json
+          structured_mode: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          links_json?: Json
+          note_date?: string
+          structure_json?: Json
+          structured_mode?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          links_json?: Json
+          note_date?: string
+          structure_json?: Json
+          structured_mode?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
