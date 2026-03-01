@@ -335,13 +335,13 @@ export default function FinancePage() {
       </div>
 
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="debts">Debt Radar</TabsTrigger>
-          <TabsTrigger value="income">Income Engine</TabsTrigger>
-          <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-          <TabsTrigger value="import">Import</TabsTrigger>
-          <TabsTrigger value="mentor">AI Mentor</TabsTrigger>
+        <TabsList className="flex w-full overflow-x-auto no-scrollbar">
+          <TabsTrigger value="overview" className="shrink-0 px-3 text-xs sm:text-sm">Overview</TabsTrigger>
+          <TabsTrigger value="debts" className="shrink-0 px-3 text-xs sm:text-sm">Debt Radar</TabsTrigger>
+          <TabsTrigger value="income" className="shrink-0 px-3 text-xs sm:text-sm">Income Engine</TabsTrigger>
+          <TabsTrigger value="opportunities" className="shrink-0 px-3 text-xs sm:text-sm">Opportunities</TabsTrigger>
+          <TabsTrigger value="import" className="shrink-0 px-3 text-xs sm:text-sm">Import</TabsTrigger>
+          <TabsTrigger value="mentor" className="shrink-0 px-3 text-xs sm:text-sm">AI Mentor</TabsTrigger>
         </TabsList>
 
         {/* ── OVERVIEW TAB ── */}
