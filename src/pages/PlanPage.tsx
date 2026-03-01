@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckSquare, Bell, Calendar as CalendarIcon, Clock, MapPin,
-  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles
+  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search
 } from "lucide-react";
 import { toast } from "sonner";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
@@ -31,6 +31,7 @@ import ReminderDetailDrawer from "@/components/plan/ReminderDetailDrawer";
 import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
 import NotesTab from "@/components/plan/NotesTab";
 import SecretaryBriefing from "@/components/plan/SecretaryBriefing";
+import PlanCommandBar from "@/components/plan/PlanCommandBar";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameDay, isSameMonth, isToday as isDateToday } from "date-fns";
 
 const priorityColor: Record<string, string> = {
@@ -329,6 +330,27 @@ export default function PlanPage() {
   const [secretaryMode, setSecretaryMode] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
+  // Command bar
+  const [commandBarOpen, setCommandBarOpen] = useState(false);
+
+  // ⌘K shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandBarOpen(prev => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // Search/filter state for lists
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilter, setTaskFilter] = useState<string>("all");
+  const [reminderFilter, setReminderFilter] = useState<string>("all");
+  const [meetingSearch, setMeetingSearch] = useState("");
+
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
@@ -458,6 +480,12 @@ export default function PlanPage() {
           <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d yyyy")}</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Command Bar Trigger */}
+          <Button variant="outline" size="sm" className="gap-1.5 hidden md:flex" onClick={() => setCommandBarOpen(true)}>
+            <Search className="h-3.5 w-3.5" />
+            <span className="text-xs text-muted-foreground">Search</span>
+            <kbd className="pointer-events-none ml-1 inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
+          </Button>
           {/* Secretary Mode Toggle */}
           <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 bg-card">
             <Sparkles className={`h-4 w-4 ${secretaryMode ? "text-primary" : "text-muted-foreground"}`} />
@@ -500,97 +528,136 @@ export default function PlanPage() {
         {/* TASKS */}
         <TabsContent value="tasks">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold">All Tasks</h2>
               <Button size="sm" className="gap-1" onClick={() => openAdd("task")}><Plus className="h-4 w-4" /> Add Task</Button>
             </div>
+            <div className="flex gap-2 flex-wrap">
+              <Input placeholder="Search tasks..." value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="max-w-[200px] h-8 text-xs" />
+              <Select value={taskFilter} onValueChange={setTaskFilter}>
+                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {tasks.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
-            (tasks.data ?? []).length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No tasks yet</CardContent></Card> :
-            <div className="space-y-2">
-              {(tasks.data ?? []).map((t) => (
-                <Card key={t.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedTask(t)}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={t.status === "done"}
-                        onChange={(e) => { e.stopPropagation(); updateTaskMut.mutate({ id: t.id, updates: { status: t.status === "done" ? "pending" : "done" } }); }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4 shrink-0 rounded border-border"
-                      />
-                      <div className="min-w-0">
-                        <span className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
-                        {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+            (() => {
+              const filtered = (tasks.data ?? []).filter(t => {
+                if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
+                if (taskFilter === "pending") return t.status !== "done";
+                if (taskFilter === "done") return t.status === "done";
+                if (taskFilter === "critical") return t.priority === "critical";
+                if (taskFilter === "high") return t.priority === "high";
+                return true;
+              });
+              return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No tasks match</CardContent></Card> :
+              <div className="space-y-2">
+                {filtered.map((t) => (
+                  <Card key={t.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedTask(t)}>
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input type="checkbox" checked={t.status === "done"}
+                          onChange={(e) => { e.stopPropagation(); updateTaskMut.mutate({ id: t.id, updates: { status: t.status === "done" ? "pending" : "done" } }); }}
+                          onClick={(e) => e.stopPropagation()} className="h-4 w-4 shrink-0 rounded border-border" />
+                        <div className="min-w-0">
+                          <span className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
+                          {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
-                      {t.due_date && <span className="text-xs text-muted-foreground hidden md:inline">{format(new Date(t.due_date), "MMM d")}</span>}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
+                        {t.due_date && <span className="text-xs text-muted-foreground hidden md:inline">{format(new Date(t.due_date), "MMM d")}</span>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>;
+            })()}
           </div>
         </TabsContent>
 
         {/* REMINDERS */}
         <TabsContent value="reminders">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold">All Reminders</h2>
               <Button size="sm" className="gap-1" onClick={() => openAdd("reminder")}><Plus className="h-4 w-4" /> Add Reminder</Button>
             </div>
+            <Select value={reminderFilter} onValueChange={setReminderFilter}>
+              <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="upcoming">Upcoming</SelectItem>
+                <SelectItem value="done">Done</SelectItem>
+                <SelectItem value="overdue">Overdue</SelectItem>
+              </SelectContent>
+            </Select>
             {reminders.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14" />)}</div> :
-            (reminders.data ?? []).length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No reminders</CardContent></Card> :
-            <div className="space-y-2">
-              {(reminders.data ?? []).map((r) => (
-                <Card key={r.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedReminder(r)}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={r.is_done}
-                        onChange={(e) => { e.stopPropagation(); toggleReminderMut.mutate({ id: r.id, is_done: !r.is_done }); }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="h-4 w-4 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <span className={`text-sm font-medium ${r.is_done ? "line-through text-muted-foreground" : ""}`}>{r.title}</span>
-                        <p className="text-xs text-muted-foreground"><Bell className="mr-1 inline h-3 w-3" />{format(new Date(r.reminder_time), "MMM d, h:mm a")}</p>
+            (() => {
+              const now = new Date();
+              const filtered = (reminders.data ?? []).filter(r => {
+                if (reminderFilter === "upcoming") return !r.is_done && new Date(r.reminder_time) >= now;
+                if (reminderFilter === "done") return r.is_done;
+                if (reminderFilter === "overdue") return !r.is_done && new Date(r.reminder_time) < now;
+                return true;
+              });
+              return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No reminders match</CardContent></Card> :
+              <div className="space-y-2">
+                {filtered.map((r) => (
+                  <Card key={r.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedReminder(r)}>
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input type="checkbox" checked={r.is_done}
+                          onChange={(e) => { e.stopPropagation(); toggleReminderMut.mutate({ id: r.id, is_done: !r.is_done }); }}
+                          onClick={(e) => e.stopPropagation()} className="h-4 w-4 shrink-0" />
+                        <div className="min-w-0">
+                          <span className={`text-sm font-medium ${r.is_done ? "line-through text-muted-foreground" : ""}`}>{r.title}</span>
+                          <p className="text-xs text-muted-foreground"><Bell className="mr-1 inline h-3 w-3" />{format(new Date(r.reminder_time), "MMM d, h:mm a")}</p>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>;
+            })()}
           </div>
         </TabsContent>
 
         {/* MEETINGS */}
         <TabsContent value="meetings">
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold">All Meetings</h2>
               <Button size="sm" className="gap-1" onClick={() => openAdd("meeting")}><Plus className="h-4 w-4" /> Add Meeting</Button>
             </div>
+            <Input placeholder="Search meetings..." value={meetingSearch} onChange={e => setMeetingSearch(e.target.value)} className="max-w-[200px] h-8 text-xs" />
             {meetings.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
-            (meetings.data ?? []).length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No meetings</CardContent></Card> :
-            <div className="space-y-2">
-              {(meetings.data ?? []).map((m) => (
-                <Card key={m.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedMeeting(m)}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="min-w-0">
-                      <span className="text-sm font-medium">{m.title}</span>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(new Date(m.start_time), "MMM d, h:mm a")}</span>
-                        {m.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{m.location}</span>}
+            (() => {
+              const filtered = (meetings.data ?? []).filter(m =>
+                !meetingSearch || m.title.toLowerCase().includes(meetingSearch.toLowerCase())
+              );
+              return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No meetings match</CardContent></Card> :
+              <div className="space-y-2">
+                {filtered.map((m) => (
+                  <Card key={m.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedMeeting(m)}>
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium">{m.title}</span>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(new Date(m.start_time), "MMM d, h:mm a")}</span>
+                          {m.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{m.location}</span>}
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>;
+            })()}
           </div>
         </TabsContent>
 
@@ -607,6 +674,18 @@ export default function PlanPage() {
           <NotesTab secretaryMode={secretaryMode} />
         </TabsContent>
       </Tabs>
+
+      {/* Command Bar */}
+      <PlanCommandBar
+        open={commandBarOpen} onClose={() => setCommandBarOpen(false)}
+        tasks={tasks.data ?? []} reminders={reminders.data ?? []} meetings={meetings.data ?? []}
+        onClickTask={(t) => { setSelectedTask(t); setCommandBarOpen(false); }}
+        onClickReminder={(r) => { setSelectedReminder(r); setCommandBarOpen(false); }}
+        onClickMeeting={(m) => { setSelectedMeeting(m); setCommandBarOpen(false); }}
+        onAdd={(type) => { openAdd(type); setCommandBarOpen(false); }}
+        onTabChange={(tab) => { handleTabChange(tab); setCommandBarOpen(false); }}
+        onVoiceTranscript={handleVoiceTranscript}
+      />
 
       {/* Quick Add FAB - mobile */}
       <QuickAddFab onAdd={openAdd} onVoiceTranscript={handleVoiceTranscript} />
