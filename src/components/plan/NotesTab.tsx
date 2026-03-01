@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { BookOpen, Save, ChevronLeft, ChevronRight, Copy, Sparkles, Loader2, ChevronDown } from "lucide-react";
+import { BookOpen, Save, ChevronLeft, ChevronRight, Copy, Sparkles, Loader2, ChevronDown, Mic } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { notesService, STRUCTURE_FIELDS, STRUCTURE_LABELS, type StructureField } from "@/services/notesService";
 import { secretaryService } from "@/services/secretaryService";
+import VoiceInput from "@/components/voice/VoiceInput";
 
 interface Props {
   secretaryMode: boolean;
@@ -65,6 +65,12 @@ export default function NotesTab({ secretaryMode }: Props) {
     setDirty(true);
   };
 
+  const handleVoiceDictation = useCallback((text: string) => {
+    setContent(prev => prev ? `${prev}\n${text}` : text);
+    setDirty(true);
+    toast.success("Voice note added");
+  }, []);
+
   const handleCopy = () => {
     let text = `📓 Notes — ${format(new Date(selectedDate), "EEEE, MMM d yyyy")}\n\n`;
     if (structuredMode) {
@@ -89,13 +95,6 @@ export default function NotesTab({ secretaryMode }: Props) {
     }
   };
 
-  // Auto-trigger EOD review when secretary mode is on and opening today's notes
-  useEffect(() => {
-    if (secretaryMode && isToday && !eodData && !eodLoading) {
-      // Don't auto-trigger, just show the button prominently
-    }
-  }, [secretaryMode, isToday]);
-
   return (
     <div className="space-y-4">
       {/* Date Navigation */}
@@ -113,6 +112,7 @@ export default function NotesTab({ secretaryMode }: Props) {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <VoiceInput onTranscript={handleVoiceDictation} compact />
           <Button variant="outline" size="sm" className="gap-1" onClick={handleCopy}>
             <Copy className="h-3.5 w-3.5" /> Copy
           </Button>
@@ -139,6 +139,7 @@ export default function NotesTab({ secretaryMode }: Props) {
                   {eodData.completed && <div><span className="font-medium text-xs text-muted-foreground">✅ Completed</span><p className="whitespace-pre-wrap">{eodData.completed}</p></div>}
                   {eodData.slipped && <div><span className="font-medium text-xs text-muted-foreground">⚠️ Slipped</span><p className="whitespace-pre-wrap">{eodData.slipped}</p></div>}
                   {eodData.tomorrow_top3 && <div><span className="font-medium text-xs text-muted-foreground">🎯 Tomorrow's Top 3</span><p className="whitespace-pre-wrap">{eodData.tomorrow_top3}</p></div>}
+                  {eodData.action_items && <div><span className="font-medium text-xs text-muted-foreground">📋 Action Items</span><p className="whitespace-pre-wrap">{eodData.action_items}</p></div>}
                   <Button variant="outline" size="sm" className="gap-1" onClick={() => {
                     navigator.clipboard.writeText(`📋 End-of-Day Review\n\n${eodData.completed ? `✅ Completed:\n${eodData.completed}\n\n` : ""}${eodData.slipped ? `⚠️ Slipped:\n${eodData.slipped}\n\n` : ""}${eodData.tomorrow_top3 ? `🎯 Tomorrow:\n${eodData.tomorrow_top3}` : ""}`);
                     toast.success("Review copied");
@@ -187,7 +188,7 @@ export default function NotesTab({ secretaryMode }: Props) {
               value={content}
               onChange={(e) => handleContentChange(e.target.value)}
               rows={structuredMode ? 4 : 12}
-              placeholder="Write your notes for today..."
+              placeholder="Write your notes for today... or use the mic button above to dictate."
               className="mt-1 font-mono text-sm"
             />
           </div>

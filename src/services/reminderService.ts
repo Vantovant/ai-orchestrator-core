@@ -49,6 +49,17 @@ export const reminderService = {
     return data as Reminder;
   },
 
+  async update(id: string, updates: Partial<Pick<Reminder, "title" | "reminder_time" | "description">>) {
+    const { data, error } = await supabase
+      .from("reminders")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Reminder;
+  },
+
   async softDelete(id: string) {
     const { error } = await supabase
       .from("reminders")

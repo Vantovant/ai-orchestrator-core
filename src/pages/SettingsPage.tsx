@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contextService } from "@/services/contextService";
 import { financeEntryService, debtService } from "@/services/financeService";
 import { clientService } from "@/services/clientService";
+import { secretaryService, type SecretarySettings } from "@/services/secretaryService";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag, Bot } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag, Bot, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +27,69 @@ const SUGGESTED_KEYS = [
   { key: "priorities", label: "Business Priorities", placeholder: "e.g. Revenue growth, team expansion" },
   { key: "preferences", label: "AI Preferences", placeholder: "e.g. Be concise, focus on actionable items" },
 ];
+
+function SecretarySettingsCard() {
+  const [settings, setSettings] = useState<SecretarySettings | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    secretaryService.getSettings().then(s => { setSettings(s); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const toggle = async (key: keyof SecretarySettings, val: boolean) => {
+    if (!settings) return;
+    const updated = { ...settings, [key]: val };
+    setSettings(updated);
+    try {
+      await secretaryService.saveSettings(updated);
+      toast.success("Secretary setting saved");
+    } catch {
+      toast.error("Failed to save");
+    }
+  };
+
+  if (loading) return <Card><CardContent className="p-4"><Skeleton className="h-20" /></CardContent></Card>;
+  if (!settings) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4" /> Secretary Mode</CardTitle>
+        <CardDescription>Configure your AI executive secretary preferences.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Secretary Mode</p>
+            <p className="text-xs text-muted-foreground">Enable AI-powered executive assistance</p>
+          </div>
+          <Switch checked={settings.secretary_mode} onCheckedChange={(v) => toggle("secretary_mode", v)} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Morning Briefing</p>
+            <p className="text-xs text-muted-foreground">Auto-generate daily briefing on first open</p>
+          </div>
+          <Switch checked={settings.morning_briefing} onCheckedChange={(v) => toggle("morning_briefing", v)} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Pre-Meeting Prompts</p>
+            <p className="text-xs text-muted-foreground">AI preparation packs before meetings</p>
+          </div>
+          <Switch checked={settings.pre_meeting_prompts} onCheckedChange={(v) => toggle("pre_meeting_prompts", v)} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">End-of-Day Review</p>
+            <p className="text-xs text-muted-foreground">AI summary when opening notes</p>
+          </div>
+          <Switch checked={settings.end_of_day_review} onCheckedChange={(v) => toggle("end_of_day_review", v)} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const { user } = useAuth();
@@ -238,6 +302,10 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Secretary Mode Settings */}
+      <SecretarySettingsCard />
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2"><Settings className="h-4 w-4" /> Executive Context</CardTitle>
