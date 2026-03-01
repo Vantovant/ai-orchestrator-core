@@ -166,12 +166,14 @@ export default function VoiceInput({ onTranscript, className = "", compact = fal
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs">
-            <p className="font-medium mb-1">Voice Examples:</p>
+            <p className="font-medium mb-1">Voice Commands</p>
+            <p className="text-xs text-muted-foreground mb-1">Speak a command to create tasks, reminders, or meetings.</p>
             <ul className="text-xs space-y-0.5">
               {VOICE_EXAMPLES.map((e, i) => (
                 <li key={i}>"{e}"</li>
               ))}
             </ul>
+            <p className="text-xs text-muted-foreground mt-2 italic">For dictation, use the mic inside Notes.</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
