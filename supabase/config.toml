@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.admin-health]
 verify_jwt = false
+
+[functions.plan-ai-secretary]
+verify_jwt = false

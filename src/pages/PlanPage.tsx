@@ -1,21 +1,23 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { taskService, type TaskInsert } from "@/services/taskService";
-import { reminderService, type ReminderInsert } from "@/services/reminderService";
-import { meetingService, type MeetingInsert } from "@/services/meetingService";
+import { taskService, type Task, type TaskInsert } from "@/services/taskService";
+import { reminderService, type Reminder, type ReminderInsert } from "@/services/reminderService";
+import { meetingService, type Meeting, type MeetingInsert } from "@/services/meetingService";
 import { financeEntryService } from "@/services/financeService";
+import { secretaryService, type SecretarySettings } from "@/services/secretaryService";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckSquare, Bell, Calendar as CalendarIcon, Clock, MapPin,
-  Plus, Trash2, Pencil, Target, ChevronLeft, ChevronRight
+  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
@@ -24,7 +26,12 @@ import VoiceInput from "@/components/voice/VoiceInput";
 import VoiceConfirmation from "@/components/voice/VoiceConfirmation";
 import { parseVoiceCommand, type ParsedVoiceCommand } from "@/lib/voiceCommandParser";
 import { addVoiceHistoryEntry } from "@/lib/voiceHistory";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameDay, isSameMonth, isToday } from "date-fns";
+import TaskDetailDrawer from "@/components/plan/TaskDetailDrawer";
+import ReminderDetailDrawer from "@/components/plan/ReminderDetailDrawer";
+import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
+import NotesTab from "@/components/plan/NotesTab";
+import SecretaryBriefing from "@/components/plan/SecretaryBriefing";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, isSameDay, isSameMonth, isToday as isDateToday } from "date-fns";
 
 const priorityColor: Record<string, string> = {
   critical: "bg-destructive text-destructive-foreground",
@@ -62,70 +69,86 @@ function QuickAddFab({ onAdd, onVoiceTranscript }: { onAdd: (type: "task" | "rem
 }
 
 // ── Today Tab ──
-function TodayTab({ tasks, reminders, meetings, isLoading, onAdd }: any) {
+function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, onClickReminder, onClickMeeting }: {
+  tasks: Task[]; reminders: Reminder[]; meetings: Meeting[]; isLoading: boolean;
+  onAdd: (t: "task" | "reminder" | "meeting") => void;
+  onClickTask: (t: Task) => void; onClickReminder: (r: Reminder) => void; onClickMeeting: (m: Meeting) => void;
+}) {
   const now = new Date();
-  const todayMeetings = (meetings ?? []).filter((m: any) => isSameDay(new Date(m.start_time), now));
-  const urgentReminders = (reminders ?? []).filter((r: any) => !r.is_done && new Date(r.reminder_time).getTime() - now.getTime() < 48 * 60 * 60 * 1000);
+  const todayMeetings = (meetings ?? []).filter((m) => isSameDay(new Date(m.start_time), now));
+  const urgentReminders = (reminders ?? []).filter((r) => !r.is_done && new Date(r.reminder_time).getTime() - now.getTime() < 48 * 60 * 60 * 1000);
   const priorityOrder = ["critical", "high", "medium", "low"];
   const topTasks = (tasks ?? [])
-    .filter((t: any) => t.status !== "done")
-    .sort((a: any, b: any) => priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority))
+    .filter((t) => t.status !== "done")
+    .sort((a, b) => priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority))
     .slice(0, 5);
 
   return (
     <div className="space-y-4">
-      {/* Quick stats */}
       <div className="grid grid-cols-3 gap-3">
-        <Card><CardContent className="p-4 text-center">
-          <p className="text-2xl font-bold">{todayMeetings.length}</p>
-          <p className="text-xs text-muted-foreground">Meetings</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4 text-center">
-          <p className="text-2xl font-bold">{urgentReminders.length}</p>
-          <p className="text-xs text-muted-foreground">Urgent</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4 text-center">
-          <p className="text-2xl font-bold">{topTasks.length}</p>
-          <p className="text-xs text-muted-foreground">Priorities</p>
-        </CardContent></Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onAdd("meeting")}>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold">{todayMeetings.length}</p>
+            <p className="text-xs text-muted-foreground">Meetings</p>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onAdd("reminder")}>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold">{urgentReminders.length}</p>
+            <p className="text-xs text-muted-foreground">Urgent</p>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onAdd("task")}>
+          <CardContent className="p-4 text-center">
+            <p className="text-2xl font-bold">{topTasks.length}</p>
+            <p className="text-xs text-muted-foreground">Priorities</p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Quick add row — desktop */}
       <div className="hidden md:flex gap-2 items-center">
         <Button variant="outline" size="sm" className="gap-1" onClick={() => onAdd("task")}><Plus className="h-3 w-3" /> Task</Button>
         <Button variant="outline" size="sm" className="gap-1" onClick={() => onAdd("reminder")}><Plus className="h-3 w-3" /> Reminder</Button>
         <Button variant="outline" size="sm" className="gap-1" onClick={() => onAdd("meeting")}><Plus className="h-3 w-3" /> Meeting</Button>
       </div>
 
-      {/* Top Priorities */}
+      {/* Top Priorities - CLICKABLE */}
       <Card>
         <CardHeader><CardTitle className="text-base flex items-center gap-2"><Target className="h-4 w-4 text-primary" /> Top Priorities</CardTitle></CardHeader>
         <CardContent>
           {isLoading ? <Skeleton className="h-20" /> : topTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tasks yet</p>
+            <p className="text-sm text-muted-foreground">No tasks yet. <Button variant="link" className="p-0 h-auto text-sm" onClick={() => onAdd("task")}>Add one</Button></p>
           ) : (
             <div className="space-y-2">
-              {topTasks.map((t: any, i: number) => (
-                <div key={t.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+              {topTasks.map((t, i) => (
+                <button
+                  key={t.id}
+                  className="flex items-center justify-between rounded-lg border border-border p-3 w-full text-left hover:bg-muted/50 active:scale-[0.99] transition-all cursor-pointer"
+                  onClick={() => onClickTask(t)}
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{i + 1}</span>
                     <span className="text-sm font-medium truncate">{t.title}</span>
                   </div>
                   <Badge variant="secondary" className={`shrink-0 ${priorityColor[t.priority] ?? ""}`}>{t.priority}</Badge>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Today's Meetings */}
+      {/* Today's Meetings - CLICKABLE */}
       {todayMeetings.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base">Today's Meetings</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {todayMeetings.map((m: any) => (
-              <div key={m.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+            {todayMeetings.map((m) => (
+              <button
+                key={m.id}
+                className="flex items-center justify-between rounded-lg border border-border p-3 w-full text-left hover:bg-muted/50 active:scale-[0.99] transition-all cursor-pointer"
+                onClick={() => onClickMeeting(m)}
+              >
                 <div className="min-w-0">
                   <span className="text-sm font-medium">{m.title}</span>
                   <p className="text-xs text-muted-foreground">
@@ -133,30 +156,33 @@ function TodayTab({ tasks, reminders, meetings, isLoading, onAdd }: any) {
                     {m.location ? ` · ${m.location}` : ""}
                   </p>
                 </div>
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Urgent Reminders */}
+      {/* Urgent Reminders - CLICKABLE */}
       {urgentReminders.length > 0 && (
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4 text-warning" /> Urgent Reminders</CardTitle></CardHeader>
           <CardContent className="space-y-2">
-            {urgentReminders.map((r: any) => (
-              <div key={r.id} className="flex items-center justify-between rounded-lg border border-border p-3">
+            {urgentReminders.map((r) => (
+              <button
+                key={r.id}
+                className="flex items-center justify-between rounded-lg border border-border p-3 w-full text-left hover:bg-muted/50 active:scale-[0.99] transition-all cursor-pointer"
+                onClick={() => onClickReminder(r)}
+              >
                 <div className="min-w-0">
                   <span className="text-sm font-medium">{r.title}</span>
                   <p className="text-xs text-muted-foreground">{format(new Date(r.reminder_time), "MMM d, h:mm a")}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Compliance Widget */}
       <ComplianceWidget compact />
     </div>
   );
@@ -164,7 +190,10 @@ function TodayTab({ tasks, reminders, meetings, isLoading, onAdd }: any) {
 
 // ── Calendar Tab ──
 type CalView = "day" | "week" | "month";
-function CalendarTab({ tasks, reminders, meetings, onAdd }: any) {
+function CalendarTab({ tasks, reminders, meetings, onClickTask, onClickReminder, onClickMeeting }: {
+  tasks: Task[]; reminders: Reminder[]; meetings: Meeting[];
+  onClickTask: (t: Task) => void; onClickReminder: (r: Reminder) => void; onClickMeeting: (m: Meeting) => void;
+}) {
   const [view, setView] = useState<CalView>("month");
   const [current, setCurrent] = useState(new Date());
 
@@ -188,22 +217,27 @@ function CalendarTab({ tasks, reminders, meetings, onAdd }: any) {
   }, [view, current]);
 
   const getEventsForDay = (day: Date) => {
-    const items: { type: string; title: string; time?: string; color: string }[] = [];
-    (meetings ?? []).forEach((m: any) => {
-      if (isSameDay(new Date(m.start_time), day)) items.push({ type: "meeting", title: m.title, time: format(new Date(m.start_time), "h:mm a"), color: "bg-primary" });
+    const items: { type: string; title: string; time?: string; color: string; item: any }[] = [];
+    (meetings ?? []).forEach((m) => {
+      if (isSameDay(new Date(m.start_time), day)) items.push({ type: "meeting", title: m.title, time: format(new Date(m.start_time), "h:mm a"), color: "bg-primary", item: m });
     });
-    (reminders ?? []).filter((r: any) => !r.is_done).forEach((r: any) => {
-      if (isSameDay(new Date(r.reminder_time), day)) items.push({ type: "reminder", title: r.title, time: format(new Date(r.reminder_time), "h:mm a"), color: "bg-warning" });
+    (reminders ?? []).filter((r) => !r.is_done).forEach((r) => {
+      if (isSameDay(new Date(r.reminder_time), day)) items.push({ type: "reminder", title: r.title, time: format(new Date(r.reminder_time), "h:mm a"), color: "bg-warning", item: r });
     });
-    (tasks ?? []).filter((t: any) => t.due_date && t.status !== "done").forEach((t: any) => {
-      if (isSameDay(new Date(t.due_date), day)) items.push({ type: "task", title: t.title, color: "bg-accent" });
+    (tasks ?? []).filter((t) => t.due_date && t.status !== "done").forEach((t) => {
+      if (isSameDay(new Date(t.due_date!), day)) items.push({ type: "task", title: t.title, color: "bg-accent", item: t });
     });
     return items;
   };
 
+  const handleEventClick = (event: any) => {
+    if (event.type === "task") onClickTask(event.item);
+    else if (event.type === "reminder") onClickReminder(event.item);
+    else if (event.type === "meeting") onClickMeeting(event.item);
+  };
+
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)}><ChevronLeft className="h-4 w-4" /></Button>
@@ -219,55 +253,52 @@ function CalendarTab({ tasks, reminders, meetings, onAdd }: any) {
         </div>
       </div>
 
-      {/* Calendar grid */}
       {view === "month" ? (
-        <div>
-          <div className="grid grid-cols-7 gap-px">
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
-              <div key={d} className="p-2 text-center text-xs font-medium text-muted-foreground">{d}</div>
-            ))}
-            {days.map((day, i) => {
-              const events = getEventsForDay(day);
-              return (
-                <div
-                  key={i}
-                  className={`min-h-[80px] md:min-h-[100px] border border-border p-1 ${!isSameMonth(day, current) ? "opacity-40" : ""} ${isToday(day) ? "bg-primary/5 ring-1 ring-primary/20" : ""}`}
-                >
-                  <span className={`text-xs font-medium ${isToday(day) ? "text-primary font-bold" : ""}`}>{format(day, "d")}</span>
-                  <div className="mt-1 space-y-0.5">
-                    {events.slice(0, 3).map((e, j) => (
-                      <div key={j} className="flex items-center gap-1 truncate">
-                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${e.color}`} />
-                        <span className="text-[10px] truncate">{e.title}</span>
-                      </div>
-                    ))}
-                    {events.length > 3 && <span className="text-[10px] text-muted-foreground">+{events.length - 3} more</span>}
-                  </div>
+        <div className="grid grid-cols-7 gap-px">
+          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
+            <div key={d} className="p-2 text-center text-xs font-medium text-muted-foreground">{d}</div>
+          ))}
+          {days.map((day, i) => {
+            const events = getEventsForDay(day);
+            return (
+              <div
+                key={i}
+                className={`min-h-[80px] md:min-h-[100px] border border-border p-1 ${!isSameMonth(day, current) ? "opacity-40" : ""} ${isDateToday(day) ? "bg-primary/5 ring-1 ring-primary/20" : ""}`}
+              >
+                <span className={`text-xs font-medium ${isDateToday(day) ? "text-primary font-bold" : ""}`}>{format(day, "d")}</span>
+                <div className="mt-1 space-y-0.5">
+                  {events.slice(0, 3).map((e, j) => (
+                    <button key={j} className="flex items-center gap-1 truncate w-full text-left hover:bg-muted/50 rounded px-0.5" onClick={() => handleEventClick(e)}>
+                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${e.color}`} />
+                      <span className="text-[10px] truncate">{e.title}</span>
+                    </button>
+                  ))}
+                  {events.length > 3 && <span className="text-[10px] text-muted-foreground">+{events.length - 3} more</span>}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="space-y-2">
           {days.map((day, i) => {
             const events = getEventsForDay(day);
             return (
-              <Card key={i} className={isToday(day) ? "ring-1 ring-primary/30" : ""}>
+              <Card key={i} className={isDateToday(day) ? "ring-1 ring-primary/30" : ""}>
                 <CardContent className="p-4">
-                  <p className={`text-sm font-semibold mb-2 ${isToday(day) ? "text-primary" : ""}`}>
-                    {format(day, "EEEE, MMM d")} {isToday(day) && <Badge variant="secondary" className="ml-1 text-xs">Today</Badge>}
+                  <p className={`text-sm font-semibold mb-2 ${isDateToday(day) ? "text-primary" : ""}`}>
+                    {format(day, "EEEE, MMM d")} {isDateToday(day) && <Badge variant="secondary" className="ml-1 text-xs">Today</Badge>}
                   </p>
                   {events.length === 0 ? (
                     <p className="text-xs text-muted-foreground">No events</p>
                   ) : (
                     <div className="space-y-1.5">
                       {events.map((e, j) => (
-                        <div key={j} className="flex items-center gap-2">
+                        <button key={j} className="flex items-center gap-2 w-full text-left hover:bg-muted/50 rounded p-1 transition-colors" onClick={() => handleEventClick(e)}>
                           <span className={`h-2 w-2 shrink-0 rounded-full ${e.color}`} />
                           <span className="text-sm">{e.title}</span>
                           {e.time && <span className="text-xs text-muted-foreground ml-auto">{e.time}</span>}
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -289,10 +320,38 @@ export default function PlanPage() {
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [voiceCommand, setVoiceCommand] = useState<ParsedVoiceCommand | null>(null);
 
+  // Detail drawer state
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+
+  // Secretary mode
+  const [secretaryMode, setSecretaryMode] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
+
+  // Load secretary settings
+  useEffect(() => {
+    secretaryService.getSettings().then((s) => {
+      setSecretaryMode(s.secretary_mode);
+      setSettingsLoaded(true);
+    }).catch(() => setSettingsLoaded(true));
+  }, []);
+
+  const toggleSecretaryMode = async (val: boolean) => {
+    setSecretaryMode(val);
+    try {
+      const current = await secretaryService.getSettings();
+      await secretaryService.saveSettings({ ...current, secretary_mode: val });
+      toast.success(val ? "Secretary Mode ON" : "Secretary Mode OFF");
+    } catch {
+      toast.error("Failed to save setting");
+    }
+  };
 
   // ── Add dialogs state ──
   const [addType, setAddType] = useState<"task" | "reminder" | "meeting" | null>(null);
@@ -333,43 +392,31 @@ export default function PlanPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["meetings"] }); toast.success("Deleted"); },
   });
 
-  const updateTaskStatusMut = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => taskService.update(id, { status }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+  const updateTaskMut = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) => taskService.update(id, updates),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["tasks"] }); toast.success("Updated"); },
+  });
+  const updateMeetingMut = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) => meetingService.update(id, updates),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["meetings"] }); toast.success("Updated"); },
   });
   const toggleReminderMut = useMutation({
     mutationFn: ({ id, is_done }: { id: string; is_done: boolean }) => reminderService.toggleDone(id, is_done),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reminders"] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["reminders"] }); toast.success("Updated"); },
   });
 
   const closeDialog = () => { setAddType(null); setTitle(""); setPriority("medium"); setDescription(""); setStartTime(""); setEndTime(""); setLocation(""); setReminderTime(""); };
 
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    setSearchParams({ tab });
-  };
-
+  const handleTabChange = (tab: string) => { setActiveTab(tab); setSearchParams({ tab }); };
   const openAdd = (type: "task" | "reminder" | "meeting") => setAddType(type);
-
   const isLoading = tasks.isLoading || reminders.isLoading || meetings.isLoading;
 
   const handleVoiceTranscript = useCallback((text: string) => {
     const cmd = parseVoiceCommand(text);
     addVoiceHistoryEntry({ transcript: text, intent: cmd.intent });
-    if (cmd.intent === "open_page" && cmd.page) {
-      navigate(cmd.page);
-      toast.success(`Opening ${cmd.page}`);
-      return;
-    }
-    if (cmd.intent === "run_briefing") {
-      navigate("/");
-      toast.success("Opening daily briefing");
-      return;
-    }
-    if (cmd.intent === "unknown") {
-      toast.error("Didn't understand that. Try: 'I need to review the report tomorrow'");
-      return;
-    }
+    if (cmd.intent === "open_page" && cmd.page) { navigate(cmd.page); toast.success(`Opening ${cmd.page}`); return; }
+    if (cmd.intent === "run_briefing") { navigate("/"); toast.success("Opening daily briefing"); return; }
+    if (cmd.intent === "unknown") { toast.error("Didn't understand that. Try: 'I need to review the report tomorrow'"); return; }
     setVoiceCommand(cmd);
   }, [navigate]);
 
@@ -404,21 +451,29 @@ export default function PlanPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">Plan</h1>
-          <p className="text-sm text-muted-foreground">Your unified planning command center</p>
+          <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d yyyy")}</p>
         </div>
-        <VoiceInput onTranscript={handleVoiceTranscript} />
+        <div className="flex items-center gap-3">
+          {/* Secretary Mode Toggle */}
+          <div className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 bg-card">
+            <Sparkles className={`h-4 w-4 ${secretaryMode ? "text-primary" : "text-muted-foreground"}`} />
+            <span className="text-xs font-medium hidden sm:inline">Secretary</span>
+            <Switch checked={secretaryMode} onCheckedChange={toggleSecretaryMode} />
+          </div>
+          <VoiceInput onTranscript={handleVoiceTranscript} />
+        </div>
       </div>
+
+      {/* Secretary Morning Briefing */}
+      <SecretaryBriefing enabled={secretaryMode} />
 
       {/* Voice confirmation card */}
       {voiceCommand && (
-        <VoiceConfirmation
-          command={voiceCommand}
-          onConfirm={handleVoiceConfirm}
-          onCancel={() => setVoiceCommand(null)}
-        />
+        <VoiceConfirmation command={voiceCommand} onConfirm={handleVoiceConfirm} onCancel={() => setVoiceCommand(null)} />
       )}
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -429,12 +484,17 @@ export default function PlanPage() {
             <TabsTrigger value="reminders" className="gap-1"><Bell className="h-3.5 w-3.5 hidden sm:inline" /> Reminders</TabsTrigger>
             <TabsTrigger value="meetings" className="gap-1"><Clock className="h-3.5 w-3.5 hidden sm:inline" /> Meetings</TabsTrigger>
             <TabsTrigger value="calendar" className="gap-1"><CalendarIcon className="h-3.5 w-3.5 hidden sm:inline" /> Calendar</TabsTrigger>
+            <TabsTrigger value="notes" className="gap-1"><BookOpen className="h-3.5 w-3.5 hidden sm:inline" /> Notes</TabsTrigger>
           </TabsList>
         </div>
 
         {/* TODAY */}
         <TabsContent value="today">
-          <TodayTab tasks={tasks.data} reminders={reminders.data} meetings={meetings.data} isLoading={isLoading} onAdd={openAdd} />
+          <TodayTab
+            tasks={tasks.data ?? []} reminders={reminders.data ?? []} meetings={meetings.data ?? []}
+            isLoading={isLoading} onAdd={openAdd}
+            onClickTask={setSelectedTask} onClickReminder={setSelectedReminder} onClickMeeting={setSelectedMeeting}
+          />
         </TabsContent>
 
         {/* TASKS */}
@@ -447,21 +507,25 @@ export default function PlanPage() {
             {tasks.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
             (tasks.data ?? []).length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No tasks yet</CardContent></Card> :
             <div className="space-y-2">
-              {(tasks.data ?? []).map((t: any) => (
-                <Card key={t.id}>
+              {(tasks.data ?? []).map((t) => (
+                <Card key={t.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedTask(t)}>
                   <CardContent className="flex items-center justify-between p-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <input type="checkbox" checked={t.status === "done"} onChange={() => updateTaskStatusMut.mutate({ id: t.id, status: t.status === "done" ? "pending" : "done" })} className="h-4 w-4 shrink-0 rounded border-border" />
+                      <input
+                        type="checkbox"
+                        checked={t.status === "done"}
+                        onChange={(e) => { e.stopPropagation(); updateTaskMut.mutate({ id: t.id, updates: { status: t.status === "done" ? "pending" : "done" } }); }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 shrink-0 rounded border-border"
+                      />
                       <div className="min-w-0">
                         <span className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
                         {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
-                        <ClientTagPicker entityType="task" entityId={t.id} compact />
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <ClientTagPicker entityType="task" entityId={t.id} />
                       <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => deleteTaskMut.mutate(t.id)}><Trash2 className="h-4 w-4" /></Button>
+                      {t.due_date && <span className="text-xs text-muted-foreground hidden md:inline">{format(new Date(t.due_date), "MMM d")}</span>}
                     </div>
                   </CardContent>
                 </Card>
@@ -480,17 +544,22 @@ export default function PlanPage() {
             {reminders.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14" />)}</div> :
             (reminders.data ?? []).length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No reminders</CardContent></Card> :
             <div className="space-y-2">
-              {(reminders.data ?? []).map((r: any) => (
-                <Card key={r.id}>
+              {(reminders.data ?? []).map((r) => (
+                <Card key={r.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedReminder(r)}>
                   <CardContent className="flex items-center justify-between p-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      <input type="checkbox" checked={r.is_done} onChange={() => toggleReminderMut.mutate({ id: r.id, is_done: !r.is_done })} className="h-4 w-4 shrink-0" />
+                      <input
+                        type="checkbox"
+                        checked={r.is_done}
+                        onChange={(e) => { e.stopPropagation(); toggleReminderMut.mutate({ id: r.id, is_done: !r.is_done }); }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 shrink-0"
+                      />
                       <div className="min-w-0">
                         <span className={`text-sm font-medium ${r.is_done ? "line-through text-muted-foreground" : ""}`}>{r.title}</span>
                         <p className="text-xs text-muted-foreground"><Bell className="mr-1 inline h-3 w-3" />{format(new Date(r.reminder_time), "MMM d, h:mm a")}</p>
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => deleteReminderMut.mutate(r.id)}><Trash2 className="h-4 w-4" /></Button>
                   </CardContent>
                 </Card>
               ))}
@@ -508,8 +577,8 @@ export default function PlanPage() {
             {meetings.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
             (meetings.data ?? []).length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No meetings</CardContent></Card> :
             <div className="space-y-2">
-              {(meetings.data ?? []).map((m: any) => (
-                <Card key={m.id}>
+              {(meetings.data ?? []).map((m) => (
+                <Card key={m.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedMeeting(m)}>
                   <CardContent className="flex items-center justify-between p-4">
                     <div className="min-w-0">
                       <span className="text-sm font-medium">{m.title}</span>
@@ -518,7 +587,6 @@ export default function PlanPage() {
                         {m.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{m.location}</span>}
                       </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => deleteMeetingMut.mutate(m.id)}><Trash2 className="h-4 w-4" /></Button>
                   </CardContent>
                 </Card>
               ))}
@@ -528,12 +596,37 @@ export default function PlanPage() {
 
         {/* CALENDAR */}
         <TabsContent value="calendar">
-          <CalendarTab tasks={tasks.data} reminders={reminders.data} meetings={meetings.data} onAdd={openAdd} />
+          <CalendarTab
+            tasks={tasks.data ?? []} reminders={reminders.data ?? []} meetings={meetings.data ?? []}
+            onClickTask={setSelectedTask} onClickReminder={setSelectedReminder} onClickMeeting={setSelectedMeeting}
+          />
+        </TabsContent>
+
+        {/* NOTES */}
+        <TabsContent value="notes">
+          <NotesTab secretaryMode={secretaryMode} />
         </TabsContent>
       </Tabs>
 
       {/* Quick Add FAB - mobile */}
       <QuickAddFab onAdd={openAdd} onVoiceTranscript={handleVoiceTranscript} />
+
+      {/* Detail Drawers */}
+      <TaskDetailDrawer
+        task={selectedTask} open={!!selectedTask} onClose={() => setSelectedTask(null)}
+        onUpdate={(id, updates) => { updateTaskMut.mutate({ id, updates }); setSelectedTask(null); }}
+        onDelete={(id) => { deleteTaskMut.mutate(id); setSelectedTask(null); }}
+      />
+      <ReminderDetailDrawer
+        reminder={selectedReminder} open={!!selectedReminder} onClose={() => setSelectedReminder(null)}
+        onToggle={(id, isDone) => { toggleReminderMut.mutate({ id, is_done: isDone }); setSelectedReminder(null); }}
+        onDelete={(id) => { deleteReminderMut.mutate(id); setSelectedReminder(null); }}
+      />
+      <MeetingDetailDrawer
+        meeting={selectedMeeting} open={!!selectedMeeting} onClose={() => setSelectedMeeting(null)}
+        onUpdate={(id, updates) => { updateMeetingMut.mutate({ id, updates }); setSelectedMeeting(null); }}
+        onDelete={(id) => { deleteMeetingMut.mutate(id); setSelectedMeeting(null); }}
+      />
 
       {/* Unified add dialog */}
       <Dialog open={addType !== null} onOpenChange={(o) => { if (!o) closeDialog(); }}>
