@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,12 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { BookOpen, Save, ChevronLeft, ChevronRight, Copy, Sparkles, Loader2, ChevronDown, Mic } from "lucide-react";
+import { BookOpen, Save, ChevronLeft, ChevronRight, Copy, Sparkles, Loader2, ChevronDown } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { notesService, STRUCTURE_FIELDS, STRUCTURE_LABELS, type StructureField } from "@/services/notesService";
 import { secretaryService } from "@/services/secretaryService";
-import VoiceInput from "@/components/voice/VoiceInput";
+import DictationMic from "@/components/plan/DictationMic";
 
 interface Props {
   secretaryMode: boolean;
@@ -65,11 +65,45 @@ export default function NotesTab({ secretaryMode }: Props) {
     setDirty(true);
   };
 
-  const handleVoiceDictation = useCallback((text: string) => {
-    setContent(prev => prev ? `${prev}\n${text}` : text);
+  const lastDictationRef = useRef<string | null>(null);
+
+  const handleDictationAppend = useCallback((text: string) => {
+    lastDictationRef.current = text;
+    if (structuredMode) {
+      // Append to follow-ups section by default in structured mode
+      setStructureJson((prev) => ({
+        ...prev,
+        followups: prev.followups ? `${prev.followups}\n${text}` : text,
+      }));
+    } else {
+      setContent(prev => prev ? `${prev}\n${text}` : text);
+    }
     setDirty(true);
-    toast.success("Voice note added");
-  }, []);
+  }, [structuredMode]);
+
+  const handleDictationUndo = useCallback(() => {
+    const last = lastDictationRef.current;
+    if (!last) return;
+    if (structuredMode) {
+      setStructureJson((prev) => {
+        const updated = { ...prev };
+        if (updated.followups?.endsWith(last)) {
+          updated.followups = updated.followups.slice(0, -(last.length)).replace(/\n$/, "");
+        }
+        return updated;
+      });
+    } else {
+      setContent(prev => {
+        if (prev.endsWith(last)) {
+          return prev.slice(0, -(last.length)).replace(/\n$/, "");
+        }
+        return prev;
+      });
+    }
+    lastDictationRef.current = null;
+    setDirty(true);
+    toast.info("Dictation undone");
+  }, [structuredMode]);
 
   const handleCopy = () => {
     let text = `📓 Notes — ${format(new Date(selectedDate), "EEEE, MMM d yyyy")}\n\n`;
@@ -112,7 +146,7 @@ export default function NotesTab({ secretaryMode }: Props) {
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <VoiceInput onTranscript={handleVoiceDictation} compact />
+          <DictationMic onAppend={handleDictationAppend} onUndo={handleDictationUndo} compact />
           <Button variant="outline" size="sm" className="gap-1" onClick={handleCopy}>
             <Copy className="h-3.5 w-3.5" /> Copy
           </Button>
