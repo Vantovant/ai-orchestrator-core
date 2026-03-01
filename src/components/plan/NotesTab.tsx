@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,64 +6,46 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { BookOpen, Save, ChevronLeft, ChevronRight, Copy, Sparkles, Loader2, ChevronDown } from "lucide-react";
+import { BookOpen, Save, ChevronLeft, ChevronRight, Copy, Sparkles, Loader2, ChevronDown, Check, AlertCircle, WifiOff } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
-import { notesService, STRUCTURE_FIELDS, STRUCTURE_LABELS, type StructureField } from "@/services/notesService";
+import { STRUCTURE_FIELDS, STRUCTURE_LABELS, type StructureField } from "@/services/notesService";
 import { secretaryService } from "@/services/secretaryService";
 import DictationMic from "@/components/plan/DictationMic";
+import { useNotesSync, type SaveStatus } from "@/hooks/useNotesSync";
 
 interface Props {
   secretaryMode: boolean;
 }
 
+function SaveStatusBadge({ status, lastSavedAt, onRetry }: { status: SaveStatus; lastSavedAt: string | null; onRetry: () => void }) {
+  switch (status) {
+    case "saving":
+      return <Badge variant="secondary" className="gap-1 text-xs"><Loader2 className="h-3 w-3 animate-spin" />Saving…</Badge>;
+    case "saved":
+      return <Badge variant="secondary" className="gap-1 text-xs"><Check className="h-3 w-3 text-primary" />Saved {lastSavedAt && `at ${lastSavedAt}`}</Badge>;
+    case "error":
+      return <Badge variant="destructive" className="gap-1 text-xs cursor-pointer" onClick={onRetry}><AlertCircle className="h-3 w-3" />Retry</Badge>;
+    case "offline":
+      return <Badge variant="outline" className="gap-1 text-xs"><WifiOff className="h-3 w-3" />Offline — saved locally</Badge>;
+    default:
+      return null;
+  }
+}
+
 export default function NotesTab({ secretaryMode }: Props) {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [content, setContent] = useState("");
-  const [structuredMode, setStructuredMode] = useState(false);
-  const [structureJson, setStructureJson] = useState<Record<string, string>>({});
-  const [dirty, setDirty] = useState(false);
   const [eodLoading, setEodLoading] = useState(false);
   const [eodData, setEodData] = useState<any>(null);
-  const qc = useQueryClient();
+
+  const {
+    isLoading, content, setContent, structuredMode, setStructuredMode,
+    structureJson, setStructureJson, dirty, saveStatus, lastSavedAt, save,
+  } = useNotesSync(selectedDate);
 
   const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
 
-  const noteQuery = useQuery({
-    queryKey: ["daily-note", selectedDate],
-    queryFn: () => notesService.getByDate(selectedDate),
-  });
-
-  useEffect(() => {
-    if (noteQuery.data) {
-      setContent(noteQuery.data.content);
-      setStructuredMode(noteQuery.data.structured_mode);
-      setStructureJson(noteQuery.data.structure_json ?? {});
-    } else if (!noteQuery.isLoading) {
-      setContent("");
-      setStructuredMode(false);
-      setStructureJson({});
-    }
-    setDirty(false);
-    setEodData(null);
-  }, [noteQuery.data, noteQuery.isLoading]);
-
-  const saveMutation = useMutation({
-    mutationFn: () => notesService.upsert(selectedDate, content, structuredMode, structureJson),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["daily-note", selectedDate] });
-      setDirty(false);
-      toast.success("Note saved");
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
-
-  const handleContentChange = (val: string) => { setContent(val); setDirty(true); };
-  const handleStructureChange = (field: StructureField, val: string) => {
-    setStructureJson((prev) => ({ ...prev, [field]: val }));
-    setDirty(true);
-  };
-
+  // Dictation handlers
   const lastDictationRef = useRef<string | null>(null);
 
   const handleDictationAppend = useCallback((text: string) => {
@@ -77,12 +58,10 @@ export default function NotesTab({ secretaryMode }: Props) {
     } else {
       setContent(prev => {
         if (!prev) return text;
-        // Append with a space, not a newline
         return prev.endsWith(" ") ? `${prev}${text}` : `${prev} ${text}`;
       });
     }
-    setDirty(true);
-  }, [structuredMode]);
+  }, [structuredMode, setStructureJson, setContent]);
 
   const handleDictationUndo = useCallback(() => {
     const last = lastDictationRef.current;
@@ -104,9 +83,8 @@ export default function NotesTab({ secretaryMode }: Props) {
       });
     }
     lastDictationRef.current = null;
-    setDirty(true);
     toast.info("Dictation undone");
-  }, [structuredMode]);
+  }, [structuredMode, setStructureJson, setContent]);
 
   const handleCopy = () => {
     let text = `📓 Notes — ${format(new Date(selectedDate), "EEEE, MMM d yyyy")}\n\n`;
@@ -132,31 +110,41 @@ export default function NotesTab({ secretaryMode }: Props) {
     }
   };
 
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+    setEodData(null);
+  };
+
   return (
     <div className="space-y-4">
       {/* Date Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setSelectedDate(format(subDays(new Date(selectedDate), 1), "yyyy-MM-dd"))}>
+          <Button variant="ghost" size="icon" onClick={() => handleDateChange(format(subDays(new Date(selectedDate), 1), "yyyy-MM-dd"))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="text-center">
             <h2 className="text-lg font-semibold">{format(new Date(selectedDate), "EEEE, MMM d")}</h2>
             {isToday && <Badge variant="secondary" className="text-xs">Today</Badge>}
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setSelectedDate(format(addDays(new Date(selectedDate), 1), "yyyy-MM-dd"))}>
+          <Button variant="ghost" size="icon" onClick={() => handleDateChange(format(addDays(new Date(selectedDate), 1), "yyyy-MM-dd"))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <DictationMic onAppend={handleDictationAppend} onUndo={handleDictationUndo} compact />
           <Button variant="outline" size="sm" className="gap-1" onClick={handleCopy}>
             <Copy className="h-3.5 w-3.5" /> Copy
           </Button>
-          <Button size="sm" className="gap-1" onClick={() => saveMutation.mutate()} disabled={!dirty || saveMutation.isPending}>
-            <Save className="h-3.5 w-3.5" /> {saveMutation.isPending ? "Saving..." : "Save"}
+          <Button size="sm" className="gap-1" onClick={() => save()} disabled={!dirty || saveStatus === "saving"}>
+            <Save className="h-3.5 w-3.5" /> {saveStatus === "saving" ? "Saving…" : "Save"}
           </Button>
         </div>
+      </div>
+
+      {/* Save Status */}
+      <div className="flex items-center justify-end">
+        <SaveStatusBadge status={saveStatus} lastSavedAt={lastSavedAt} onRetry={() => save()} />
       </div>
 
       {/* EOD Review - Secretary Mode */}
@@ -192,11 +180,11 @@ export default function NotesTab({ secretaryMode }: Props) {
 
       {/* Mode Toggle */}
       <div className="flex items-center gap-3">
-        <Switch checked={structuredMode} onCheckedChange={(v) => { setStructuredMode(v); setDirty(true); }} />
+        <Switch checked={structuredMode} onCheckedChange={setStructuredMode} />
         <span className="text-sm text-muted-foreground">{structuredMode ? "Structured Journal" : "Freeform Notes"}</span>
       </div>
 
-      {noteQuery.isLoading ? <Skeleton className="h-48" /> : (
+      {isLoading ? <Skeleton className="h-48" /> : (
         <>
           {/* Structured fields */}
           {structuredMode && (
@@ -206,7 +194,7 @@ export default function NotesTab({ secretaryMode }: Props) {
                   <label className="text-xs font-medium text-muted-foreground">{STRUCTURE_LABELS[field]}</label>
                   <Textarea
                     value={structureJson[field] ?? ""}
-                    onChange={(e) => handleStructureChange(field, e.target.value)}
+                    onChange={(e) => setStructureJson(prev => ({ ...prev, [field]: e.target.value }))}
                     rows={2}
                     placeholder={`Add ${field}...`}
                     className="mt-1"
@@ -223,12 +211,17 @@ export default function NotesTab({ secretaryMode }: Props) {
             </label>
             <Textarea
               value={content}
-              onChange={(e) => handleContentChange(e.target.value)}
+              onChange={(e) => setContent(e.target.value)}
               rows={structuredMode ? 4 : 12}
-              placeholder="Write your notes for today... or use the mic button above to dictate."
+              placeholder="Write your notes for today… or use the mic button above to dictate."
               className="mt-1 font-mono text-sm"
             />
           </div>
+
+          {/* Last synced timestamp */}
+          {lastSavedAt && (
+            <p className="text-xs text-muted-foreground text-right">Last synced: {lastSavedAt}</p>
+          )}
         </>
       )}
     </div>
