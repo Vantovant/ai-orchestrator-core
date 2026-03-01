@@ -11,7 +11,11 @@ import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { STRUCTURE_FIELDS, STRUCTURE_LABELS, type StructureField } from "@/services/notesService";
 import { secretaryService } from "@/services/secretaryService";
+import { taskService } from "@/services/taskService";
+import { reminderService } from "@/services/reminderService";
 import DictationMic from "@/components/plan/DictationMic";
+import ActionExtractor from "@/components/plan/ActionExtractor";
+import NoteSelectionMenu from "@/components/plan/NoteSelectionMenu";
 import { useNotesSync, type SaveStatus } from "@/hooks/useNotesSync";
 
 interface Props {
@@ -37,6 +41,7 @@ export default function NotesTab({ secretaryMode }: Props) {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [eodLoading, setEodLoading] = useState(false);
   const [eodData, setEodData] = useState<any>(null);
+  const freeformRef = useRef<HTMLTextAreaElement>(null);
 
   const {
     isLoading, content, setContent, structuredMode, setStructuredMode,
@@ -113,6 +118,28 @@ export default function NotesTab({ secretaryMode }: Props) {
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
     setEodData(null);
+  };
+
+  // Highlight-to-convert handlers
+  const handleMakeTask = async (text: string) => {
+    try {
+      await taskService.create({ title: text, source: "notes" });
+      toast.success(`Task created: "${text.slice(0, 40)}…"`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create task");
+    }
+  };
+
+  const handleMakeReminder = async (text: string) => {
+    try {
+      await reminderService.create({
+        title: text,
+        reminder_time: new Date(Date.now() + 3600000).toISOString(),
+      });
+      toast.success(`Reminder created: "${text.slice(0, 40)}…"`);
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create reminder");
+    }
   };
 
   return (
@@ -205,18 +232,32 @@ export default function NotesTab({ secretaryMode }: Props) {
           )}
 
           {/* Freeform content */}
-          <div>
+          <div className="relative">
             <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               <BookOpen className="h-3 w-3" /> {structuredMode ? "Additional Notes" : "Daily Notes"}
             </label>
             <Textarea
+              ref={freeformRef}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={structuredMode ? 4 : 12}
               placeholder="Write your notes for today… or use the mic button above to dictate."
               className="mt-1 font-mono text-sm"
             />
+            <NoteSelectionMenu
+              textareaRef={freeformRef}
+              onMakeTask={handleMakeTask}
+              onMakeReminder={handleMakeReminder}
+            />
           </div>
+
+          {/* Action Extractor */}
+          <ActionExtractor
+            noteContent={content}
+            structureJson={structureJson}
+            structuredMode={structuredMode}
+            noteDate={selectedDate}
+          />
 
           {/* Last synced timestamp */}
           {lastSavedAt && (
