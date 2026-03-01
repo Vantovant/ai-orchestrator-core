@@ -70,13 +70,16 @@ export default function NotesTab({ secretaryMode }: Props) {
   const handleDictationAppend = useCallback((text: string) => {
     lastDictationRef.current = text;
     if (structuredMode) {
-      // Append to follow-ups section by default in structured mode
       setStructureJson((prev) => ({
         ...prev,
-        followups: prev.followups ? `${prev.followups}\n${text}` : text,
+        followups: prev.followups ? `${prev.followups} ${text}` : text,
       }));
     } else {
-      setContent(prev => prev ? `${prev}\n${text}` : text);
+      setContent(prev => {
+        if (!prev) return text;
+        // Append with a space, not a newline
+        return prev.endsWith(" ") ? `${prev}${text}` : `${prev} ${text}`;
+      });
     }
     setDirty(true);
   }, [structuredMode]);
@@ -88,14 +91,14 @@ export default function NotesTab({ secretaryMode }: Props) {
       setStructureJson((prev) => {
         const updated = { ...prev };
         if (updated.followups?.endsWith(last)) {
-          updated.followups = updated.followups.slice(0, -(last.length)).replace(/\n$/, "");
+          updated.followups = updated.followups.slice(0, -(last.length)).replace(/ $/, "");
         }
         return updated;
       });
     } else {
       setContent(prev => {
         if (prev.endsWith(last)) {
-          return prev.slice(0, -(last.length)).replace(/\n$/, "");
+          return prev.slice(0, -(last.length)).replace(/ $/, "");
         }
         return prev;
       });
