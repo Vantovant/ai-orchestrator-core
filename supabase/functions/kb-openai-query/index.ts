@@ -1,6 +1,20 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { redactText } from "../redact-sensitive/index.ts";
+
+const PII_PATTERNS: Record<string, RegExp> = {
+  phone_intl: /\+27\s?\d[\d\s-]{7,12}/g,
+  sa_id: /\b\d{13}\b/g,
+  email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  bank_account: /\b\d{9,12}\b/g,
+  phone_local: /\b0[1-9]\d[\d\s-]{7,10}\b/g,
+  confidential_tag: /\[?CONFIDENTIAL\]?|RESTRICTED|SENSITIVE|PRIVILEGED/gi,
+};
+const PII_REPLACE: Record<string, string> = { sa_id:"[REDACTED_ID]", bank_account:"[REDACTED_BANK]", email:"[REDACTED_EMAIL]", phone_intl:"[REDACTED_PHONE]", phone_local:"[REDACTED_PHONE]", confidential_tag:"[REDACTED_TAG]" };
+function redactText(text: string) {
+  let result = text; const counts: Record<string,number> = {}; let had_pii = false;
+  for (const [k, p] of Object.entries(PII_PATTERNS)) { const re = new RegExp(p.source, p.flags); const m = result.match(re); if (m?.length) { counts[k] = m.length; had_pii = true; result = result.replace(re, PII_REPLACE[k]); } }
+  return { redacted_text: result, had_pii, counts_by_type: counts };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
