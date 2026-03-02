@@ -1173,6 +1173,145 @@ export type Database = {
         }
         Relationships: []
       }
+      kb_files: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          file_size_bytes: number | null
+          filename: string | null
+          id: string
+          provider: string
+          provider_container_id: string
+          provider_file_id: string
+          status: string
+          tags: Json | null
+          updated_at: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          file_size_bytes?: number | null
+          filename?: string | null
+          id?: string
+          provider: string
+          provider_container_id: string
+          provider_file_id: string
+          status?: string
+          tags?: Json | null
+          updated_at?: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          file_size_bytes?: number | null
+          filename?: string | null
+          id?: string
+          provider?: string
+          provider_container_id?: string
+          provider_file_id?: string
+          status?: string
+          tags?: Json | null
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_files_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "kb_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kb_query_log: {
+        Row: {
+          created_at: string
+          had_pii: boolean | null
+          id: string
+          pii_counts: Json | null
+          provider: string
+          query_redacted: string
+          tokens_used: number | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          had_pii?: boolean | null
+          id?: string
+          pii_counts?: Json | null
+          provider: string
+          query_redacted: string
+          tokens_used?: number | null
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          had_pii?: boolean | null
+          id?: string
+          pii_counts?: Json | null
+          provider?: string
+          query_redacted?: string
+          tokens_used?: number | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kb_query_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "kb_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kb_workspaces: {
+        Row: {
+          created_at: string
+          default_provider: string
+          deleted_at: string | null
+          id: string
+          openai_vector_store_id: string | null
+          updated_at: string
+          user_id: string
+          vertex_corpus_resource: string | null
+          workspace_id: string
+          workspace_type: string
+        }
+        Insert: {
+          created_at?: string
+          default_provider?: string
+          deleted_at?: string | null
+          id?: string
+          openai_vector_store_id?: string | null
+          updated_at?: string
+          user_id: string
+          vertex_corpus_resource?: string | null
+          workspace_id: string
+          workspace_type?: string
+        }
+        Update: {
+          created_at?: string
+          default_provider?: string
+          deleted_at?: string | null
+          id?: string
+          openai_vector_store_id?: string | null
+          updated_at?: string
+          user_id?: string
+          vertex_corpus_resource?: string | null
+          workspace_id?: string
+          workspace_type?: string
+        }
+        Relationships: []
+      }
       market_news_cache: {
         Row: {
           created_at: string
@@ -1850,6 +1989,56 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      verified_sources: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          fetched_at: string | null
+          id: string
+          source_url: string | null
+          title: string | null
+          type: string | null
+          updated_at: string
+          user_id: string
+          verified: boolean | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          source_url?: string | null
+          title?: string | null
+          type?: string | null
+          updated_at?: string
+          user_id: string
+          verified?: boolean | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          fetched_at?: string | null
+          id?: string
+          source_url?: string | null
+          title?: string | null
+          type?: string | null
+          updated_at?: string
+          user_id?: string
+          verified?: boolean | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verified_sources_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "kb_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
