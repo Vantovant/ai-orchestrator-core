@@ -1,50 +1,39 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { redactText } from "../redact-sensitive/index.ts";
+
+const PII_PATTERNS: Record<string, RegExp> = {
+  phone_intl: /\+27\s?\d[\d\s-]{7,12}/g,
+  sa_id: /\b\d{13}\b/g,
+  email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  bank_account: /\b\d{9,12}\b/g,
+  phone_local: /\b0[1-9]\d[\d\s-]{7,10}\b/g,
+  confidential_tag: /\[?CONFIDENTIAL\]?|RESTRICTED|SENSITIVE|PRIVILEGED/gi,
+};
+const PII_REPLACE: Record<string, string> = { sa_id:"[REDACTED_ID]", bank_account:"[REDACTED_BANK]", email:"[REDACTED_EMAIL]", phone_intl:"[REDACTED_PHONE]", phone_local:"[REDACTED_PHONE]", confidential_tag:"[REDACTED_TAG]" };
+function redactText(text: string) {
+  let result = text; const counts: Record<string,number> = {}; let had_pii = false;
+  for (const [k, p] of Object.entries(PII_PATTERNS)) { const re = new RegExp(p.source, p.flags); const m = result.match(re); if (m?.length) { counts[k] = m.length; had_pii = true; result = result.replace(re, PII_REPLACE[k]); } }
+  return { redacted_text: result, had_pii, counts_by_type: counts };
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function getGoogleAccessToken(serviceAccountJson: string): Promise<string> {
-  const sa = JSON.parse(serviceAccountJson);
-  const now = Math.floor(Date.now() / 1000);
-  const header = btoa(JSON.stringify({ alg: "RS256", typ: "JWT" }));
-  const payload = btoa(JSON.stringify({
-    iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/cloud-platform",
-    aud: "https://oauth2.googleapis.com/token",
-    iat: now,
-    exp: now + 3600,
-  }));
-  const signInput = `${header}.${payload}`;
-  const pemContents = sa.private_key.replace(/-----BEGIN PRIVATE KEY-----/, "").replace(/-----END PRIVATE KEY-----/, "").replace(/\n/g, "");
-  const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey("pkcs8", binaryKey, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(signInput));
-  const sig = btoa(String.fromCharCode(...new Uint8Array(signature))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  const jwt = `${header}.${payload}.${sig}`;
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
-  });
-  if (!tokenRes.ok) throw new Error(`Google token exchange failed: ${await tokenRes.text()}`);
-  return (await tokenRes.json()).access_token;
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const GCP_SA_KEY = Deno.env.get("GCP_SERVICE_ACCOUNT_KEY");
-    const GCP_PROJECT = Deno.env.get("GCP_PROJECT_ID");
-    const GCP_LOCATION = Deno.env.get("GCP_LOCATION") || "us-central1";
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    const VERTEX_BRIDGE_URL = Deno.env.get("VERTEX_BRIDGE_URL");
+    const VERTEX_BRIDGE_TOKEN = Deno.env.get("VERTEX_BRIDGE_TOKEN");
 
-    if (!GCP_SA_KEY) throw new Error("GCP_SERVICE_ACCOUNT_KEY not configured");
-    if (!GCP_PROJECT) throw new Error("GCP_PROJECT_ID not configured");
+    if (!VERTEX_BRIDGE_URL) {
+      return new Response(JSON.stringify({
+        error: "Vertex Bridge not configured yet. GOV queries are pending bridge deployment.",
+        pending: true,
+      }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -70,72 +59,37 @@ serve(async (req) => {
 
     if (wsErr || !ws?.vertex_corpus_resource) throw new Error("Workspace not found or no Vertex corpus.");
 
-    const accessToken = await getGoogleAccessToken(GCP_SA_KEY);
+    // Call Vertex Bridge for RAG query + Gemini grounded answer
+    const bridgeHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (VERTEX_BRIDGE_TOKEN) bridgeHeaders["Authorization"] = `Bearer ${VERTEX_BRIDGE_TOKEN}`;
 
-    // Step 1: Retrieve contexts from Vertex RAG
-    const retrieveRes = await fetch(
-      `https://${GCP_LOCATION}-aiplatform.googleapis.com/v1beta1/projects/${GCP_PROJECT}/locations/${GCP_LOCATION}:retrieveContexts`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vertex_rag_store: {
-            rag_resources: [{ rag_corpus: ws.vertex_corpus_resource }],
-          },
-          query: { text: safeQuestion, similarity_top_k: 5 },
-        }),
-      }
-    );
-
-    if (!retrieveRes.ok) {
-      const errText = await retrieveRes.text();
-      throw new Error(`Vertex retrieveContexts failed [${retrieveRes.status}]: ${errText}`);
-    }
-
-    const retrieveData = await retrieveRes.json();
-    const contexts = (retrieveData.contexts?.contexts || []).map((c: any) => ({
-      text: c.text || "",
-      source: c.source_display_name || c.source_uri || "unknown",
-      score: c.score || 0,
-    }));
-
-    const contextBlock = contexts.map((c: any) => `[Source: ${c.source}]\n${c.text}`).join("\n\n---\n\n");
-
-    // Step 2: Pass contexts to Gemini for grounded answer
-    // Use Gemini via direct API (since this is GOV context, uses Vertex-adjacent Gemini)
-    const geminiUrl = GEMINI_API_KEY
-      ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
-      : `https://${GCP_LOCATION}-aiplatform.googleapis.com/v1beta1/projects/${GCP_PROJECT}/locations/${GCP_LOCATION}/publishers/google/models/gemini-2.5-flash:generateContent`;
-
-    const geminiHeaders: Record<string, string> = { "Content-Type": "application/json" };
-    if (!GEMINI_API_KEY) geminiHeaders["Authorization"] = `Bearer ${accessToken}`;
-
-    const geminiRes = await fetch(geminiUrl, {
+    const queryRes = await fetch(`${VERTEX_BRIDGE_URL}/query`, {
       method: "POST",
-      headers: geminiHeaders,
+      headers: bridgeHeaders,
       body: JSON.stringify({
-        contents: [{
-          role: "user",
-          parts: [{
-            text: `You are a knowledge assistant for a South African executive. Answer the question using ONLY the provided context. If the context doesn't contain relevant information, say so clearly. Cite sources.\n\n--- CONTEXT ---\n${contextBlock.slice(0, 3000)}\n--- END CONTEXT ---\n\nQuestion: ${safeQuestion}`,
-          }],
-        }],
-        generationConfig: { maxOutputTokens: 1024, temperature: 0.2 },
+        corpus_resource: ws.vertex_corpus_resource,
+        question: safeQuestion,
+        top_k: 5,
+        max_tokens: 1024,
+        temperature: 0.2,
       }),
     });
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
-      throw new Error(`Gemini generation failed [${geminiRes.status}]: ${errText}`);
+    if (!queryRes.ok) {
+      const errText = await queryRes.text();
+      throw new Error(`Vertex Bridge query failed [${queryRes.status}]: ${errText}`);
     }
 
-    const geminiData = await geminiRes.json();
-    const rawAnswer = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "No answer generated.";
+    const queryData = await queryRes.json();
+    const rawAnswer = queryData.answer || "No answer generated.";
 
-    // Redact the answer
+    // Redact the answer too
     const { redacted_text: safeAnswer } = redactText(rawAnswer);
 
-    const citations = contexts.map((c: any) => ({ source: c.source, score: c.score }));
+    const citations = (queryData.citations || []).map((c: any) => ({
+      source: c.source || c.source_display_name || "unknown",
+      score: c.score || 0,
+    }));
 
     // Log query
     await supabase.from("kb_query_log").insert({
