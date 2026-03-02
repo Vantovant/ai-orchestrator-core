@@ -21,12 +21,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import TaskDetailDrawer from "@/components/plan/TaskDetailDrawer";
 import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
 import DictationMic from "@/components/plan/DictationMic";
+import { useProjectNotesSync, type SaveStatus } from "@/hooks/useProjectNotesSync";
 import {
   ArrowLeft, CheckCircle2, CircleDot, PauseCircle, AlertTriangle,
   Plus, Link2, Trash2, ExternalLink, Target, Calendar, FileText,
-  Clock, Save, Sparkles, FolderKanban, Loader2,
+  Clock, Save, Sparkles, FolderKanban, Loader2, BookOpen, Copy,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -484,47 +486,48 @@ function ProjectMeetingsTab({ meetings, loading, projectId, onClickMeeting, onCr
   );
 }
 
-// ── Notes Tab ──
+// ── Notes Tab (unified with Plan Notes quality) ──
 function ProjectNotesTab({ projectId }: { projectId: string }) {
-  const [noteDate, setNoteDate] = useState(new Date().toISOString().slice(0, 10));
-  const [content, setContent] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [extracting, setExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const debounceRef = useRef<any>(null);
+  const freeformRef = useRef<HTMLTextAreaElement>(null);
+  const lastDictationRef = useRef<string | null>(null);
   const qc = useQueryClient();
 
-  const note = useQuery({
-    queryKey: ["project_note", projectId, noteDate],
-    queryFn: () => projectNotesService.getByDate(projectId, noteDate),
-  });
+  const {
+    isLoading: noteLoading, content, setContent, dirty, saveStatus, lastSavedAt, save,
+  } = useProjectNotesSync(projectId, selectedDate);
 
-  useEffect(() => {
-    if (note.data) setContent(note.data.content);
-    else setContent("");
-  }, [note.data, noteDate]);
+  const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
 
-  const autoSave = useCallback((text: string) => {
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSaving(true);
-      try {
-        await projectNotesService.upsert(projectId, noteDate, text);
-      } catch { /* silent */ }
-      setSaving(false);
-    }, 1500);
-  }, [projectId, noteDate]);
+  // Dictation handlers — horizontal append (same as Plan Notes)
+  const handleDictationAppend = useCallback((text: string) => {
+    lastDictationRef.current = text;
+    setContent(prev => {
+      if (!prev) return text;
+      return prev.endsWith(" ") ? `${prev}${text}` : `${prev} ${text}`;
+    });
+  }, [setContent]);
 
-  const handleChange = (text: string) => {
-    setContent(text);
-    autoSave(text);
-  };
+  const handleDictationUndo = useCallback(() => {
+    const last = lastDictationRef.current;
+    if (!last) return;
+    setContent(prev => {
+      if (prev.endsWith(last)) {
+        return prev.slice(0, -(last.length)).replace(/ $/, "");
+      }
+      return prev;
+    });
+    lastDictationRef.current = null;
+    toast.info("Dictation undone");
+  }, [setContent]);
 
-  const handleDictation = (text: string) => {
-    const updated = content ? content + "\n" + text : text;
-    setContent(updated);
-    autoSave(updated);
+  const handleCopy = () => {
+    const text = `📓 Project Notes — ${format(new Date(selectedDate), "EEEE, MMM d yyyy")}\n\n${content}`;
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
   };
 
   const handleExtract = async () => {
@@ -534,7 +537,7 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
     setSelected(new Set());
     try {
       const { data, error } = await supabase.functions.invoke("project-ai-extract-actions", {
-        body: { content: content.slice(0, 3000), note_date: noteDate, project_id: projectId },
+        body: { content: content.slice(0, 3000), note_date: selectedDate, project_id: projectId },
       });
       if (error) throw error;
       setSuggestions(data?.suggestions ?? []);
@@ -569,58 +572,111 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <Input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="w-[160px] h-9 text-sm" />
+    <div className="space-y-4">
+      {/* Date Navigation — same as Plan Notes */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <DictationMic onAppend={handleDictation} />
-          {saving && <span className="text-[10px] text-muted-foreground">Saving...</span>}
-          <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={handleExtract} disabled={extracting || !content.trim()}>
-            {extracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-            Extract Actions
+          <Button variant="ghost" size="icon" onClick={() => setSelectedDate(format(subDays(new Date(selectedDate), 1), "yyyy-MM-dd"))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="text-center">
+            <h2 className="text-lg font-semibold">{format(new Date(selectedDate), "EEEE, MMM d")}</h2>
+            {isToday && <Badge variant="secondary" className="text-xs">Today</Badge>}
+          </div>
+          <Button variant="ghost" size="icon" onClick={() => setSelectedDate(format(addDays(new Date(selectedDate), 1), "yyyy-MM-dd"))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <DictationMic onAppend={handleDictationAppend} onUndo={handleDictationUndo} compact />
+          <Button variant="outline" size="sm" className="gap-1" onClick={handleCopy}>
+            <Copy className="h-3.5 w-3.5" /> Copy
+          </Button>
+          <Button size="sm" className="gap-1" onClick={() => save()} disabled={!dirty || saveStatus === "saving"}>
+            <Save className="h-3.5 w-3.5" /> {saveStatus === "saving" ? "Saving…" : "Save"}
           </Button>
         </div>
       </div>
 
-      <Textarea
-        placeholder="Write project notes for this day..."
-        value={content}
-        onChange={(e) => handleChange(e.target.value)}
-        rows={10}
-        className="text-sm"
-      />
+      {/* Save Status — same as Plan Notes */}
+      <div className="flex items-center justify-end">
+        <ProjectSaveStatusBadge status={saveStatus} lastSavedAt={lastSavedAt} onRetry={() => save()} />
+      </div>
 
-      {suggestions.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Extracted Actions</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            {suggestions.map((s: any, i: number) => (
-              <label key={i} className="flex items-start gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selected.has(i)}
-                  onChange={() => {
-                    const next = new Set(selected);
-                    next.has(i) ? next.delete(i) : next.add(i);
-                    setSelected(next);
-                  }}
-                  className="mt-0.5 h-4 w-4"
-                />
-                <div>
-                  <Badge variant="outline" className="text-[10px] mr-1">{s.type}</Badge>
-                  <span className="text-sm">{s.title}</span>
-                  {s.due_at && <span className="text-[10px] text-muted-foreground ml-1">Due: {s.due_at}</span>}
-                </div>
-              </label>
-            ))}
-            <Button size="sm" onClick={handleApply} disabled={selected.size === 0}>
-              Apply {selected.size} Selected
-            </Button>
-          </CardContent>
-        </Card>
+      {noteLoading ? <Skeleton className="h-48" /> : (
+        <>
+          <div className="relative">
+            <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <BookOpen className="h-3 w-3" /> Project Notes
+            </label>
+            <Textarea
+              ref={freeformRef}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={12}
+              placeholder="Write your project notes… or use the mic button above to dictate."
+              className="mt-1 font-mono text-sm"
+            />
+          </div>
+
+          {/* Extract Actions */}
+          <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={handleExtract} disabled={extracting || !content.trim()}>
+            {extracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Extract Actions
+          </Button>
+
+          {suggestions.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Extracted Actions</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {suggestions.map((s: any, i: number) => (
+                  <label key={i} className="flex items-start gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(i)}
+                      onChange={() => {
+                        const next = new Set(selected);
+                        next.has(i) ? next.delete(i) : next.add(i);
+                        setSelected(next);
+                      }}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <div>
+                      <Badge variant="outline" className="text-[10px] mr-1">{s.type}</Badge>
+                      <span className="text-sm">{s.title}</span>
+                      {s.due_at && <span className="text-[10px] text-muted-foreground ml-1">Due: {s.due_at}</span>}
+                    </div>
+                  </label>
+                ))}
+                <Button size="sm" onClick={handleApply} disabled={selected.size === 0}>
+                  Apply {selected.size} Selected
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {lastSavedAt && (
+            <p className="text-xs text-muted-foreground text-right">Last synced: {lastSavedAt}</p>
+          )}
+        </>
       )}
     </div>
   );
+}
+
+function ProjectSaveStatusBadge({ status, lastSavedAt, onRetry }: { status: SaveStatus; lastSavedAt: string | null; onRetry: () => void }) {
+  switch (status) {
+    case "saving":
+      return <Badge variant="secondary" className="gap-1 text-xs"><Loader2 className="h-3 w-3 animate-spin" />Saving…</Badge>;
+    case "saved":
+      return <Badge variant="secondary" className="gap-1 text-xs"><CheckCircle2 className="h-3 w-3 text-primary" />Saved {lastSavedAt && `at ${lastSavedAt}`}</Badge>;
+    case "error":
+      return <Badge variant="destructive" className="gap-1 text-xs cursor-pointer" onClick={onRetry}><AlertTriangle className="h-3 w-3" />Retry</Badge>;
+    case "offline":
+      return <Badge variant="outline" className="gap-1 text-xs">Offline — saved locally</Badge>;
+    default:
+      return null;
+  }
 }
 
 // ── Links Tab ──

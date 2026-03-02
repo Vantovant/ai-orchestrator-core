@@ -1,14 +1,17 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Clock, MapPin, Trash2, Save, X, Sparkles, Loader2 } from "lucide-react";
+import { Calendar, Clock, MapPin, Trash2, Save, X, Sparkles, Loader2, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { Meeting } from "@/services/meetingService";
 import { secretaryService } from "@/services/secretaryService";
+import { projectService } from "@/services/projectService";
 
 interface Props {
   meeting: Meeting | null;
@@ -19,6 +22,7 @@ interface Props {
 }
 
 export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, onDelete }: Props) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -62,6 +66,12 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
       setPrepLoading(false);
     }
   };
+
+  const projectQuery = useQuery({
+    queryKey: ["project", meeting?.project_id],
+    queryFn: () => projectService.get(meeting!.project_id!),
+    enabled: !!meeting?.project_id,
+  });
 
   if (!meeting) return null;
 
@@ -116,6 +126,15 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
                 {isPast && <Badge variant="secondary">Past</Badge>}
               </div>
               {meeting.description && <p className="text-sm text-muted-foreground">{meeting.description}</p>}
+              {projectQuery.data && (
+                <button
+                  className="flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
+                  onClick={() => { onClose(); navigate(`/projects?open=${meeting.project_id}`); }}
+                >
+                  <FolderKanban className="h-3 w-3" />
+                  Project: {projectQuery.data.name}
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
