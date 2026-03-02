@@ -79,8 +79,12 @@ export default function InvestorReportPage() {
 
   return (
     <div className="max-w-4xl mx-auto print:max-w-none">
-      {/* Print button — hidden when printing */}
-      <div className="p-4 flex justify-end print:hidden sticky top-0 bg-background/80 backdrop-blur z-10">
+      {/* Navigation + Print — hidden when printing */}
+      <div className="p-4 flex items-center justify-between print:hidden sticky top-0 bg-background/80 backdrop-blur z-10">
+        <div className="flex gap-2">
+          <a href="/investor-report"><Button variant="default" size="sm">Investor Report</Button></a>
+          <a href="/weekly-report"><Button variant="outline" size="sm">Weekly Report</Button></a>
+        </div>
         <Button onClick={handlePrint} className="gap-2">
           <Printer className="h-4 w-4" /> Print / Export PDF
         </Button>
