@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import BankImportTab from "@/components/finance/BankImportTab";
+import BudgetTab from "@/components/finance/BudgetTab";
+import FinanceNotesPanel from "@/components/finance/FinanceNotesPanel";
 import VoiceInput from "@/components/voice/VoiceInput";
 import { parseVoiceCommand } from "@/lib/voiceCommandParser";
 
@@ -270,6 +272,7 @@ export default function FinancePage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <AddEntryDialog onCreated={invalidateAll} />
+          <FinanceNotesPanel />
           <Button variant="outline" size="sm" className="gap-1" onClick={exportEntries}><Download className="h-4 w-4" /> Export</Button>
         </div>
       </div>
@@ -342,6 +345,7 @@ export default function FinancePage() {
           <TabsTrigger value="opportunities" className="shrink-0 px-3 text-xs sm:text-sm">Opportunities</TabsTrigger>
           <TabsTrigger value="import" className="shrink-0 px-3 text-xs sm:text-sm">Import</TabsTrigger>
           <TabsTrigger value="mentor" className="shrink-0 px-3 text-xs sm:text-sm">AI Mentor</TabsTrigger>
+          <TabsTrigger value="budget" className="shrink-0 px-3 text-xs sm:text-sm">Budget</TabsTrigger>
         </TabsList>
 
         {/* ── OVERVIEW TAB ── */}
@@ -646,6 +650,10 @@ export default function FinancePage() {
               <p className="text-xs text-muted-foreground text-center italic">{mentorResult.disclaimer}</p>
             </div>
           ) : null}
+        </TabsContent>
+        {/* ── BUDGET TAB ── */}
+        <TabsContent value="budget" className="space-y-4">
+          <BudgetTab />
         </TabsContent>
       </Tabs>
     </div>

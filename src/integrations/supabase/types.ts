@@ -642,6 +642,128 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_budget_events: {
+        Row: {
+          amount: number
+          budget_item_id: string
+          created_at: string
+          deleted_at: string | null
+          due_at: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          budget_item_id: string
+          created_at?: string
+          deleted_at?: string | null
+          due_at: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          budget_item_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          due_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_budget_events_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "finance_budget_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_budget_items: {
+        Row: {
+          amount: number
+          autopay: boolean
+          cadence: string
+          category: string | null
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          description: string | null
+          due_date_custom: string | null
+          due_day_of_month: number | null
+          due_month_of_year: number | null
+          end_date: string | null
+          id: string
+          name: string
+          notify_days_before: number
+          start_date: string
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+          vendor: string | null
+        }
+        Insert: {
+          amount?: number
+          autopay?: boolean
+          cadence?: string
+          category?: string | null
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          description?: string | null
+          due_date_custom?: string | null
+          due_day_of_month?: number | null
+          due_month_of_year?: number | null
+          end_date?: string | null
+          id?: string
+          name: string
+          notify_days_before?: number
+          start_date?: string
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id: string
+          vendor?: string | null
+        }
+        Update: {
+          amount?: number
+          autopay?: boolean
+          cadence?: string
+          category?: string | null
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          description?: string | null
+          due_date_custom?: string | null
+          due_day_of_month?: number | null
+          due_month_of_year?: number | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          notify_days_before?: number
+          start_date?: string
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+          vendor?: string | null
+        }
+        Relationships: []
+      }
       finance_entries: {
         Row: {
           amount: number
@@ -679,6 +801,36 @@ export type Database = {
           notes?: string | null
           source?: string
           type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      finance_notes: {
+        Row: {
+          content: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          note_month: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          note_month?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          note_month?: string
           updated_at?: string
           user_id?: string
         }
