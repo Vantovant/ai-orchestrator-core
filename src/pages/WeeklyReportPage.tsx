@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Copy, FileText, CheckSquare, DollarSign, Shield, Users } from "lucide-react";
+import { Copy, FileText, CheckSquare, DollarSign, Shield, Users, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { startOfWeek, endOfWeek, isWithinInterval, format } from "date-fns";
 
@@ -80,7 +80,10 @@ export default function WeeklyReportPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="h-6 w-6" /> Weekly Report</h1>
           <p className="text-sm text-muted-foreground">{weekLabel}</p>
         </div>
-        <Button onClick={handleCopy} className="gap-2"><Copy className="h-4 w-4" /> Copy Report</Button>
+        <div className="flex gap-2">
+          <Button onClick={handleCopy} variant="outline" className="gap-2"><Copy className="h-4 w-4" /> Copy</Button>
+          <Button onClick={() => window.print()} className="gap-2"><Printer className="h-4 w-4" /> Print / PDF</Button>
+        </div>
       </div>
 
       {isLoading ? (
