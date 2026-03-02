@@ -47,3 +47,33 @@ verify_jwt = false
 
 [functions.portfolio-ai-partner]
 verify_jwt = false
+
+[functions.redact-sensitive]
+verify_jwt = false
+
+[functions.kb-openai-store]
+verify_jwt = false
+
+[functions.kb-openai-upload]
+verify_jwt = false
+
+[functions.kb-openai-query]
+verify_jwt = false
+
+[functions.kb-vertex-store]
+verify_jwt = false
+
+[functions.kb-vertex-upload]
+verify_jwt = false
+
+[functions.kb-vertex-query]
+verify_jwt = false
+
+[functions.kb-query]
+verify_jwt = false
+
+[functions.finance-ai-route]
+verify_jwt = false
+
+[functions.budget-generate-events]
+verify_jwt = false
