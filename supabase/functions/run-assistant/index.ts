@@ -169,6 +169,24 @@ ${JSON.stringify(snapshot, null, 2)}`;
 
     const briefing = gatewayData.result;
 
+    // Log to assistant_runs with token discipline metadata
+    const snapshotLen = snapshot.snapshot_len ?? JSON.stringify(snapshot).length;
+    const wasTruncated = snapshot.was_truncated ?? false;
+
+    const adminClient = createClient(supabaseUrl, serviceKey);
+    await adminClient.from("assistant_runs").insert({
+      user_id: user.id,
+      snapshot_json: { snapshot_len: snapshotLen, was_truncated: wasTruncated, generatedAt: snapshot.generatedAt },
+      result_json: {
+        ai_status: "ok",
+        provider_used: gatewayData.provider_used,
+        snapshot_len: snapshotLen,
+        was_truncated: wasTruncated,
+        task_count: (briefing.prioritizedTasks ?? []).length,
+        meeting_count: (briefing.meetingBriefs ?? []).length,
+      },
+    });
+
     return new Response(JSON.stringify({
       prioritizedTasks: briefing.prioritizedTasks ?? [],
       triagedEmails: [],
@@ -178,6 +196,8 @@ ${JSON.stringify(snapshot, null, 2)}`;
       ai_status: "ok",
       provider_used: gatewayData.provider_used,
       message: gatewayData.message,
+      snapshot_len: snapshotLen,
+      was_truncated: wasTruncated,
       snapshot,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

@@ -7,6 +7,7 @@ const corsHeaders = {
 };
 
 const CONTEXT_CHAR_LIMIT = 2000;
+const SNAPSHOT_HARD_CAP = 3000;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -85,7 +86,18 @@ serve(async (req) => {
       executiveContext: contextMap,
     };
 
-    return new Response(JSON.stringify(snapshot), {
+    // TOKEN DISCIPLINE: hard cap at 3000 chars
+    let snapshotStr = JSON.stringify(snapshot);
+    const was_truncated = snapshotStr.length > SNAPSHOT_HARD_CAP;
+    if (was_truncated) {
+      snapshotStr = snapshotStr.slice(0, SNAPSHOT_HARD_CAP);
+    }
+
+    return new Response(JSON.stringify({
+      ...JSON.parse(was_truncated ? snapshotStr + '"}' : snapshotStr),
+      snapshot_len: Math.min(snapshotStr.length, SNAPSHOT_HARD_CAP),
+      was_truncated,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
