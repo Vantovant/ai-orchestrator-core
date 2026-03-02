@@ -22,11 +22,12 @@ import TaskDetailDrawer from "@/components/plan/TaskDetailDrawer";
 import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
 import DictationMic from "@/components/plan/DictationMic";
 import { useProjectNotesSync, type SaveStatus } from "@/hooks/useProjectNotesSync";
+import AIPartnerTab from "@/components/projects/AIPartnerTab";
 import {
   ArrowLeft, CheckCircle2, CircleDot, PauseCircle, AlertTriangle,
   Plus, Link2, Trash2, ExternalLink, Target, Calendar, FileText,
   Clock, Save, Sparkles, FolderKanban, Loader2, BookOpen, Copy,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Brain,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
@@ -212,6 +213,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             <TabsTrigger value="meetings" className="gap-1 text-xs sm:text-sm"><Calendar className="h-3.5 w-3.5 hidden sm:inline" /> Meetings</TabsTrigger>
             <TabsTrigger value="notes" className="gap-1 text-xs sm:text-sm"><FileText className="h-3.5 w-3.5 hidden sm:inline" /> Notes</TabsTrigger>
             <TabsTrigger value="links" className="gap-1 text-xs sm:text-sm"><Link2 className="h-3.5 w-3.5 hidden sm:inline" /> Links</TabsTrigger>
+            <TabsTrigger value="ai_partner" className="gap-1 text-xs sm:text-sm"><Brain className="h-3.5 w-3.5 hidden sm:inline" /> AI Partner</TabsTrigger>
           </TabsList>
         </div>
 
@@ -268,6 +270,11 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             onAdd={(label, url) => addLinkMut.mutate({ label, url })}
             onRemove={(id) => removeLinkMut.mutate(id)}
           />
+        </TabsContent>
+
+        {/* AI PARTNER */}
+        <TabsContent value="ai_partner">
+          <AIPartnerTab projectId={projectId} projectName={p.name} />
         </TabsContent>
       </Tabs>
 

@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   FolderKanban, Plus, Search, Pin, MoreHorizontal,
-  CheckCircle2, PauseCircle, CircleDot, AlertTriangle, ArrowRight,
+  CheckCircle2, PauseCircle, CircleDot, AlertTriangle, ArrowRight, Brain,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -209,6 +209,11 @@ function ProjectCard({ project, onClick, onTogglePin }: { project: Project; onCl
             <AlertTriangle className="h-3 w-3" /> Blocked
           </Badge>
         )}
+
+        <div className="flex items-center gap-1.5">
+          <Brain className="h-3 w-3 text-primary/60" />
+          <span className="text-[10px] text-muted-foreground">AI Partner ready</span>
+        </div>
 
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-muted-foreground">
