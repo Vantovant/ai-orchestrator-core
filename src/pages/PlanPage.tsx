@@ -452,8 +452,9 @@ export default function PlanPage() {
         toast.success("Reminder created via voice");
       } else if (cmd.intent === "create_meeting") {
         const start = cmd.date ?? new Date();
-        const end = new Date(start.getTime() + 60 * 60 * 1000);
-        await meetingService.create({ title: cmd.title ?? "Untitled", start_time: start.toISOString(), end_time: end.toISOString() });
+        const durationMs = (cmd.duration ?? 30) * 60 * 1000;
+        const end = new Date(start.getTime() + durationMs);
+        await meetingService.create({ title: cmd.title ?? "Untitled", start_time: start.toISOString(), end_time: end.toISOString(), location: cmd.location ?? undefined });
         toast.success("Meeting created via voice");
       } else if (cmd.intent === "add_expense") {
         await financeEntryService.create({ type: "expense", amount: cmd.amount ?? 0, category: cmd.title ?? "general", entry_date: (cmd.date ?? new Date()).toISOString().split("T")[0] });
@@ -700,6 +701,7 @@ export default function PlanPage() {
         reminder={selectedReminder} open={!!selectedReminder} onClose={() => setSelectedReminder(null)}
         onToggle={(id, isDone) => { toggleReminderMut.mutate({ id, is_done: isDone }); setSelectedReminder(null); }}
         onDelete={(id) => { deleteReminderMut.mutate(id); setSelectedReminder(null); }}
+        onMeetingCreated={() => qc.invalidateQueries({ queryKey: ["meetings"] })}
       />
       <MeetingDetailDrawer
         meeting={selectedMeeting} open={!!selectedMeeting} onClose={() => setSelectedMeeting(null)}

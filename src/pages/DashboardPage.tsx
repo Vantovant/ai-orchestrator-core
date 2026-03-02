@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { taskService } from "@/services/taskService";
-import { reminderService } from "@/services/reminderService";
-import { meetingService } from "@/services/meetingService";
+import { taskService, type Task } from "@/services/taskService";
+import { reminderService, type Reminder } from "@/services/reminderService";
+import { meetingService, type Meeting } from "@/services/meetingService";
 import { assistantRunService } from "@/services/assistantRunService";
 import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,9 @@ import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target,
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
+import TaskDetailDrawer from "@/components/plan/TaskDetailDrawer";
+import ReminderDetailDrawer from "@/components/plan/ReminderDetailDrawer";
+import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
 
 function StatCard({ title, value, icon: Icon, loading }: { title: string; value: number; icon: any; loading: boolean }) {
   return (
@@ -75,11 +79,17 @@ function AiStatusBanner({ aiStatus, message, onRetry, retrying }: { aiStatus: st
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const latestRun = useQuery({ queryKey: ["assistant_run_latest"], queryFn: assistantRunService.getLatest });
+
+  // Detail drawer state
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
 
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -187,8 +197,18 @@ export default function DashboardPage() {
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Active Tasks" value={liveTasks.filter((t) => t.status !== "done").length} icon={CheckSquare} loading={isLoading} />
-        <StatCard title="Today's Meetings" value={todayMeetings.length} icon={Calendar} loading={isLoading} />
-        <StatCard title="Urgent Reminders" value={urgentReminders.length} icon={Bell} loading={isLoading} />
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/plan?tab=meetings")}>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10"><Calendar className="h-6 w-6 text-primary" /></div>
+            <div><p className="text-sm text-muted-foreground">Today's Meetings</p>{isLoading ? <Skeleton className="h-7 w-12" /> : <p className="text-2xl font-bold">{todayMeetings.length}</p>}</div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate("/plan?tab=reminders")}>
+          <CardContent className="flex items-center gap-4 p-6">
+            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10"><Bell className="h-6 w-6 text-primary" /></div>
+            <div><p className="text-sm text-muted-foreground">Urgent Reminders</p>{isLoading ? <Skeleton className="h-7 w-12" /> : <p className="text-2xl font-bold">{urgentReminders.length}</p>}</div>
+          </CardContent>
+        </Card>
         <StatCard title="Total Tasks" value={liveTasks.length} icon={CheckSquare} loading={isLoading} />
       </div>
 
@@ -292,18 +312,25 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground">No tasks yet. Create your first task!</p>
             ) : (
               <div className="space-y-2">
-                {topPriorities.map((t: any, idx: number) => (
-                  <div key={t.id ?? idx} className="flex items-center justify-between rounded-lg border border-border p-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{idx + 1}</span>
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium">{t.title}</span>
-                        {t.reasoning && <p className="text-xs text-muted-foreground truncate">{t.reasoning}</p>}
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
-                  </div>
-                ))}
+                 {topPriorities.map((t: any, idx: number) => {
+                    const liveTask = liveTaskMap.get(t.id);
+                    return (
+                      <button
+                        key={t.id ?? idx}
+                        className="flex items-center justify-between rounded-lg border border-border p-3 w-full text-left hover:bg-muted/50 active:scale-[0.99] transition-all cursor-pointer"
+                        onClick={() => liveTask && setSelectedTask(liveTask)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{idx + 1}</span>
+                          <div className="min-w-0">
+                            <span className="text-sm font-medium">{t.title}</span>
+                            {t.reasoning && <p className="text-xs text-muted-foreground truncate">{t.reasoning}</p>}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
+                      </button>
+                    );
+                  })}
               </div>
             )}
           </CardContent>
@@ -319,17 +346,17 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground">No meetings today</p>
             ) : (
               <div className="space-y-2">
-                {todayMeetings.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between rounded-lg border border-border p-3">
-                    <div>
-                      <span className="text-sm font-medium">{m.title}</span>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(m.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        {m.location ? ` · ${m.location}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                 {todayMeetings.map((m) => (
+                   <button key={m.id} className="flex items-center justify-between rounded-lg border border-border p-3 w-full text-left hover:bg-muted/50 active:scale-[0.99] transition-all cursor-pointer" onClick={() => setSelectedMeeting(m)}>
+                     <div>
+                       <span className="text-sm font-medium">{m.title}</span>
+                       <p className="text-xs text-muted-foreground">
+                         {new Date(m.start_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                         {m.location ? ` · ${m.location}` : ""}
+                       </p>
+                     </div>
+                   </button>
+                 ))}
               </div>
             )}
           </CardContent>
@@ -345,20 +372,38 @@ export default function DashboardPage() {
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4 text-warning" /> Urgent Reminders</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {urgentReminders.map((r) => (
-                <div key={r.id} className="flex items-center justify-between rounded-lg border border-border p-3">
-                  <div>
-                    <span className="text-sm font-medium">{r.title}</span>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(r.reminder_time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                </div>
-              ))}
+               {urgentReminders.map((r) => (
+                 <button key={r.id} className="flex items-center justify-between rounded-lg border border-border p-3 w-full text-left hover:bg-muted/50 active:scale-[0.99] transition-all cursor-pointer" onClick={() => setSelectedReminder(r)}>
+                   <div>
+                     <span className="text-sm font-medium">{r.title}</span>
+                     <p className="text-xs text-muted-foreground">
+                       {new Date(r.reminder_time).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                     </p>
+                   </div>
+                 </button>
+               ))}
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Detail Drawers */}
+      <TaskDetailDrawer
+        task={selectedTask} open={!!selectedTask} onClose={() => setSelectedTask(null)}
+        onUpdate={(_id, _updates) => { qc.invalidateQueries({ queryKey: ["tasks"] }); setSelectedTask(null); }}
+        onDelete={(_id) => { qc.invalidateQueries({ queryKey: ["tasks"] }); setSelectedTask(null); }}
+      />
+      <ReminderDetailDrawer
+        reminder={selectedReminder} open={!!selectedReminder} onClose={() => setSelectedReminder(null)}
+        onToggle={(_id, _isDone) => { qc.invalidateQueries({ queryKey: ["reminders"] }); setSelectedReminder(null); }}
+        onDelete={(_id) => { qc.invalidateQueries({ queryKey: ["reminders"] }); setSelectedReminder(null); }}
+        onMeetingCreated={() => qc.invalidateQueries({ queryKey: ["meetings"] })}
+      />
+      <MeetingDetailDrawer
+        meeting={selectedMeeting} open={!!selectedMeeting} onClose={() => setSelectedMeeting(null)}
+        onUpdate={(_id, _updates) => { qc.invalidateQueries({ queryKey: ["meetings"] }); setSelectedMeeting(null); }}
+        onDelete={(_id) => { qc.invalidateQueries({ queryKey: ["meetings"] }); setSelectedMeeting(null); }}
+      />
     </div>
   );
 }

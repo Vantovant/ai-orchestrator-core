@@ -19,6 +19,8 @@ export interface ParsedVoiceCommand {
   currency?: string;
   category?: string;
   page?: string;
+  location?: string;
+  duration?: number; // minutes
   raw: string;
 }
 
@@ -42,7 +44,6 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
     patterns: [
       /^(add|create|new|set)\s+(a\s+)?reminder\b/i,
       /^please\s+remind\s+me\s+to\b/i,
-      /^remind\s+(me\s+)?(to\s+)?/i,
       /^don'?t\s+let\s+me\s+forget\s+to\b/i,
       /^reminder\b/i,
     ],
@@ -53,6 +54,11 @@ const INTENT_PATTERNS: { intent: VoiceIntent; patterns: RegExp[] }[] = [
       /^(add|create|new|schedule|book|set)\s+(a\s+)?meeting\b/i,
       /^meeting\s+with\b/i,
       /^meeting\b/i,
+      /^(add|create|new|schedule|book|set)\s+(a\s+)?(zoom|teams|google\s*meet|call|sync|session)\b/i,
+      /\bzoom\s+(meeting|call)\b/i,
+      /\bteams\s+(meeting|call)\b/i,
+      /\bgoogle\s*meet\b/i,
+      /\b(zoom\.us|teams\.microsoft|meet\.google)\b/i,
     ],
   },
   {
@@ -203,6 +209,10 @@ const PAGE_MAP: Record<string, string> = {
   shopping: "/shopping",
 };
 
+// Meeting keywords for secondary detection
+const MEETING_KEYWORDS = /\b(meeting|zoom|teams|google\s*meet|call|sync|session|standup|stand-up|huddle|catch-?up)\b/i;
+const MEETING_LINK_PATTERN = /\b(zoom\.us|teams\.microsoft\.com|meet\.google\.com)\b/i;
+
 export function parseVoiceCommand(transcript: string): ParsedVoiceCommand {
   const raw = transcript.trim();
   const lower = raw.toLowerCase();
@@ -218,6 +228,11 @@ export function parseVoiceCommand(transcript: string): ParsedVoiceCommand {
     if (intent !== "unknown") break;
   }
 
+  // Secondary meeting detection: if classified as reminder but contains meeting keywords/links
+  if ((intent === "create_reminder" || intent === "unknown") && (MEETING_KEYWORDS.test(lower) || MEETING_LINK_PATTERN.test(lower))) {
+    intent = "create_meeting";
+  }
+
   if (intent === "open_page") {
     const afterTrigger = lower.replace(/^(go\s+to|open|show|navigate\s+to)\s+/i, "").trim();
     const page = PAGE_MAP[afterTrigger] ?? PAGE_MAP[afterTrigger.replace(/\s/g, "")];
@@ -228,5 +243,16 @@ export function parseVoiceCommand(transcript: string): ParsedVoiceCommand {
   const { amount, currency } = parseAmount(raw);
   const title = extractTitle(raw, intent);
 
-  return { intent, title, date: date ?? undefined, amount, currency, raw };
+  // Extract meeting link/location
+  let location: string | undefined;
+  let duration: number | undefined;
+  if (intent === "create_meeting") {
+    const linkMatch = raw.match(/https?:\/\/[^\s]+/i);
+    if (linkMatch) location = linkMatch[0];
+    const durMatch = lower.match(/(\d+)\s*(?:min|minute|mins|minutes)/);
+    if (durMatch) duration = parseInt(durMatch[1]);
+    if (!duration) duration = 30; // default 30 min
+  }
+
+  return { intent, title, date: date ?? undefined, amount, currency, location, duration, raw };
 }
