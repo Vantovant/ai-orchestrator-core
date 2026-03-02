@@ -53,6 +53,16 @@ export default function VoiceConfirmation({ command, onConfirm, onCancel }: Prop
               📅 {format(command.date, "EEE, MMM d 'at' h:mm a")}
             </p>
           )}
+          {command.location && (
+            <p className="text-xs text-muted-foreground">
+              📍 {command.location}
+            </p>
+          )}
+          {command.duration && command.intent === "create_meeting" && (
+            <p className="text-xs text-muted-foreground">
+              ⏱ {command.duration} min
+            </p>
+          )}
           {command.amount != null && (
             <p className="text-xs text-muted-foreground">
               💰 {command.currency ?? "ZAR"} {command.amount.toLocaleString()}
