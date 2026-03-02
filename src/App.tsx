@@ -18,6 +18,7 @@ import NotFound from "@/pages/NotFound";
 import WeeklyReportPage from "@/pages/WeeklyReportPage";
 import AdminHealthPage from "@/pages/AdminHealthPage";
 import PortfolioPartnerPage from "@/pages/PortfolioPartnerPage";
+import InvestorReportPage from "@/pages/InvestorReportPage";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ function AppRoutes() {
         <Route path="/weekly-report" element={<WeeklyReportPage />} />
         <Route path="/admin/health" element={<AdminHealthPage />} />
         <Route path="/dashboard/partner" element={<PortfolioPartnerPage />} />
+        <Route path="/investor-report" element={<InvestorReportPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
