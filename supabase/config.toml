@@ -41,3 +41,9 @@ verify_jwt = false
 
 [functions.project-ai-partner]
 verify_jwt = false
+
+[functions.project-ai-funding-search]
+verify_jwt = false
+
+[functions.portfolio-ai-partner]
+verify_jwt = false
