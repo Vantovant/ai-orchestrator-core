@@ -1184,6 +1184,7 @@ export type Database = {
           id: string
           location: string | null
           notes: string | null
+          project_id: string | null
           start_time: string
           title: string
           updated_at: string
@@ -1198,6 +1199,7 @@ export type Database = {
           id?: string
           location?: string | null
           notes?: string | null
+          project_id?: string | null
           start_time: string
           title: string
           updated_at?: string
@@ -1212,12 +1214,21 @@ export type Database = {
           id?: string
           location?: string | null
           notes?: string | null
+          project_id?: string | null
           start_time?: string
           title?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "meetings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       merchant_rules: {
         Row: {
@@ -1369,6 +1380,136 @@ export type Database = {
         }
         Relationships: []
       }
+      project_links: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          label: string
+          project_id: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          label?: string
+          project_id: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          label?: string
+          project_id?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_notes: {
+        Row: {
+          content: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          note_date: string
+          project_id: string
+          structured_json: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          note_date?: string
+          project_id: string
+          structured_json?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          note_date?: string
+          project_id?: string
+          structured_json?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_notes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          id: string
+          is_blocked: boolean
+          is_pinned: boolean
+          name: string
+          progress_manual: number
+          progress_mode: string
+          status: string
+          tags: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_blocked?: boolean
+          is_pinned?: boolean
+          name: string
+          progress_manual?: number
+          progress_mode?: string
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          is_blocked?: boolean
+          is_pinned?: boolean
+          name?: string
+          progress_manual?: number
+          progress_mode?: string
+          status?: string
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       reminders: {
         Row: {
           created_at: string
@@ -1376,6 +1517,7 @@ export type Database = {
           description: string | null
           id: string
           is_done: boolean
+          project_id: string | null
           reminder_time: string
           task_id: string | null
           title: string
@@ -1388,6 +1530,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_done?: boolean
+          project_id?: string | null
           reminder_time: string
           task_id?: string | null
           title: string
@@ -1400,6 +1543,7 @@ export type Database = {
           description?: string | null
           id?: string
           is_done?: boolean
+          project_id?: string | null
           reminder_time?: string
           task_id?: string | null
           title?: string
@@ -1407,6 +1551,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reminders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reminders_task_id_fkey"
             columns: ["task_id"]
@@ -1455,6 +1606,7 @@ export type Database = {
           estimated_minutes: number | null
           id: string
           priority: string
+          project_id: string | null
           source: string | null
           status: string
           title: string
@@ -1469,6 +1621,7 @@ export type Database = {
           estimated_minutes?: number | null
           id?: string
           priority?: string
+          project_id?: string | null
           source?: string | null
           status?: string
           title: string
@@ -1483,13 +1636,22 @@ export type Database = {
           estimated_minutes?: number | null
           id?: string
           priority?: string
+          project_id?: string | null
           source?: string | null
           status?: string
           title?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_preferences: {
         Row: {

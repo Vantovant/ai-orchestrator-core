@@ -10,6 +10,7 @@
 | `/plan?tab=calendar` | Plan → Calendar | Day/Week/Month calendar with meetings, reminders, task due dates |
 | `/email` | Email | Multi-account Gmail inbox with Superhuman speed layer |
 | `/finance` | Finance | Income, expenses, debts, bank imports, AI mentor |
+| `/projects` | Projects | Personal project command center with tasks, meetings, notes, links |
 | `/travel` | Travel | Trip management with itinerary cards |
 | `/shopping` | Shopping | Shopping lists with recurring items |
 | `/settings` | Settings | Executive context, work hours, email prefs, data exports |
@@ -25,5 +26,5 @@
 
 ## Navigation
 
-- **Desktop**: Sidebar with 7 items (Dashboard, Plan, Email, Finance, Travel, Shopping, Settings)
+- **Desktop**: Sidebar with 8 items (Dashboard, Plan, Email, Finance, Projects, Travel, Shopping, Settings)
 - **Mobile**: Bottom nav (Home, Plan, Email, Finance, More) + hamburger menu for full nav

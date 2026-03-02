@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban
 } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/plan", label: "Plan", icon: ClipboardList },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
+  { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/travel", label: "Travel", icon: Plane },
   { to: "/shopping", label: "Shopping", icon: ShoppingCart },
   { to: "/settings", label: "Settings", icon: Settings },
