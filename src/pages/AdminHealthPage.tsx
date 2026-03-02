@@ -5,8 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, RefreshCw, Shield, Mic, FileSpreadsheet, Cpu } from "lucide-react";
+import { Activity, RefreshCw, Shield, Mic, FileSpreadsheet, Cpu, BookOpen, ShieldCheck, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+
+interface PIIScan {
+  total_hits: number;
+  by_type: Record<string, number>;
+  records_scanned: number;
+  status: string;
+}
 
 interface HealthMetrics {
   ai_providers: Record<string, number>;
@@ -17,6 +24,10 @@ interface HealthMetrics {
   import_types: Record<string, number>;
   top_failures: string[];
   total_runs: number;
+  kb_uploads: number;
+  kb_queries: number;
+  kb_provider_usage: Record<string, number>;
+  pii_scan: PIIScan;
 }
 
 export default function AdminHealthPage() {
@@ -70,9 +81,63 @@ export default function AdminHealthPage() {
       </div>
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-40" />)}</div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-40" />)}</div>
       ) : metrics && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* PII Proof Scan — PROMINENT */}
+          <Card className={metrics.pii_scan.status === "CLEAN" ? "border-green-500/50 bg-green-500/5" : "border-destructive/50 bg-destructive/5"}>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                {metrics.pii_scan.status === "CLEAN"
+                  ? <ShieldCheck className="h-4 w-4 text-green-600" />
+                  : <ShieldAlert className="h-4 w-4 text-destructive" />
+                }
+                PII Proof Scan
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Status</span>
+                <Badge variant={metrics.pii_scan.status === "CLEAN" ? "default" : "destructive"}>
+                  {metrics.pii_scan.status}
+                </Badge>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Total PII hits</span>
+                <span className="font-bold text-lg">{metrics.pii_scan.total_hits}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Records scanned</span>
+                <span>{metrics.pii_scan.records_scanned}</span>
+              </div>
+              {Object.entries(metrics.pii_scan.by_type).length > 0 && (
+                <div className="space-y-1 pt-2 border-t">
+                  {Object.entries(metrics.pii_scan.by_type).map(([type, count]) => (
+                    <div key={type} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">{type}</span>
+                      <Badge variant="destructive" className="text-[10px]">{count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* KB Stats */}
+          <Card>
+            <CardHeader><CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" /> Knowledge Base</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Uploads</span><span className="font-medium">{metrics.kb_uploads}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Queries</span><span className="font-medium">{metrics.kb_queries}</span></div>
+              {Object.entries(metrics.kb_provider_usage).map(([provider, count]) => (
+                <div key={provider} className="flex justify-between text-sm">
+                  <Badge variant="secondary" className="text-[10px]">{provider}</Badge>
+                  <span className="font-medium">{count}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
           {/* AI Provider Usage */}
           <Card>
             <CardHeader><CardTitle className="text-base flex items-center gap-2"><Cpu className="h-4 w-4 text-primary" /> AI Provider Usage</CardTitle></CardHeader>

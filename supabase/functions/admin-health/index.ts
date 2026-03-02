@@ -6,6 +6,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// PII detection patterns (mirrors redact-sensitive)
+const PII_PATTERNS: Record<string, RegExp> = {
+  sa_id: /\b\d{13}\b/g,
+  email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+  phone_intl: /\+27\s?\d[\d\s-]{7,12}/g,
+  long_raw_prompt: /.{3001,}/g, // any string > 3000 chars = possible raw dump
+};
+
+function scanForPII(text: string): Record<string, number> {
+  const hits: Record<string, number> = {};
+  for (const [key, pattern] of Object.entries(PII_PATTERNS)) {
+    const re = new RegExp(pattern.source, pattern.flags);
+    const matches = text.match(re);
+    if (matches && matches.length > 0) hits[key] = matches.length;
+  }
+  return hits;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -63,6 +81,41 @@ serve(async (req) => {
       .slice(0, 5)
       .map(([r, c]) => `${r} (${c})`);
 
+    // KB stats
+    const { count: kbUploads } = await db.from("kb_files").select("id", { count: "exact", head: true });
+    const { count: kbQueries } = await db.from("kb_query_log").select("id", { count: "exact", head: true });
+
+    // KB provider usage
+    const { data: kbLogs } = await db.from("kb_query_log").select("provider").limit(500);
+    const kbProviderUsage: Record<string, number> = {};
+    for (const log of (kbLogs ?? [])) {
+      kbProviderUsage[log.provider] = (kbProviderUsage[log.provider] || 0) + 1;
+    }
+
+    // ====== PII PROOF SCAN ======
+    // Scan KB query logs for any leaked PII (should all be redacted)
+    const { data: queryLogs } = await db.from("kb_query_log").select("query_redacted").limit(200);
+    let piiTotalHits = 0;
+    const piiScanDetails: Record<string, number> = {};
+
+    for (const log of (queryLogs ?? [])) {
+      const hits = scanForPII(log.query_redacted || "");
+      for (const [type, count] of Object.entries(hits)) {
+        piiTotalHits += count;
+        piiScanDetails[type] = (piiScanDetails[type] || 0) + count;
+      }
+    }
+
+    // Also scan assistant_runs snapshots for PII leaks
+    for (const run of (runs ?? []).slice(0, 100)) {
+      const snapshot = typeof run.result_json === "string" ? run.result_json : JSON.stringify(run.result_json);
+      const hits = scanForPII(snapshot.slice(0, 5000)); // cap scan size
+      for (const [type, count] of Object.entries(hits)) {
+        piiTotalHits += count;
+        piiScanDetails[type] = (piiScanDetails[type] || 0) + count;
+      }
+    }
+
     const result = {
       ai_providers: aiProviders,
       ai_statuses: aiStatuses,
@@ -72,6 +125,15 @@ serve(async (req) => {
       import_types: importTypes,
       top_failures: topFailures,
       total_runs: (runs ?? []).length,
+      kb_uploads: kbUploads || 0,
+      kb_queries: kbQueries || 0,
+      kb_provider_usage: kbProviderUsage,
+      pii_scan: {
+        total_hits: piiTotalHits,
+        by_type: piiScanDetails,
+        records_scanned: (queryLogs ?? []).length + Math.min((runs ?? []).length, 100),
+        status: piiTotalHits === 0 ? "CLEAN" : "PII_DETECTED",
+      },
     };
 
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
