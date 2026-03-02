@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VantoOS — Full Product & Technical Report | March 2026</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; color: #1a1a2e; background: #fff; line-height: 1.6; }
+  .page { max-width: 800px; margin: 0 auto; padding: 48px 40px; }
+  @media print { .page { padding: 24px; } .no-print { display: none !important; } @page { margin: 0.6in; } }
+
+  /* Cover */
+  .cover { text-align: center; padding: 80px 0 60px; border-bottom: 3px solid #2563eb; margin-bottom: 48px; }
+  .cover .logo { display: inline-flex; align-items: center; justify-content: center; width: 64px; height: 64px; background: #2563eb; border-radius: 16px; color: #fff; font-weight: 800; font-size: 28px; margin-bottom: 16px; }
+  .cover h1 { font-size: 40px; font-weight: 800; letter-spacing: -1px; }
+  .cover .subtitle { font-size: 18px; color: #64748b; font-weight: 500; margin-top: 4px; }
+  .cover .meta { font-size: 13px; color: #94a3b8; margin-top: 16px; }
+  .cover .badges { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
+  .cover .badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .cover .badge.conf { background: #fef2f2; color: #dc2626; }
+  .cover .badge.ver { background: #f0f9ff; color: #2563eb; }
+
+  /* Sections */
+  h2 { font-size: 20px; font-weight: 700; margin: 40px 0 16px; display: flex; align-items: center; gap: 8px; color: #1e293b; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; }
+  h2 .icon { font-size: 20px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: #334155; }
+
+  p { font-size: 14px; color: #475569; margin-bottom: 12px; }
+  strong { color: #1e293b; }
+  ul { padding-left: 20px; margin-bottom: 12px; }
+  li { font-size: 13px; color: #475569; margin-bottom: 4px; }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+  .card .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .card .value { font-size: 24px; font-weight: 700; color: #1e293b; margin-top: 2px; }
+  .card .sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+  th { font-weight: 600; color: #1e293b; background: #f8fafc; }
+  td { color: #475569; }
+  tr:last-child td { border-bottom: none; }
+
+  /* Module cards */
+  .module-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .module { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
+  .module .name { font-size: 14px; font-weight: 600; color: #1e293b; }
+  .module .status { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #dcfce7; color: #166534; margin-left: 6px; }
+  .module .desc { font-size: 12px; color: #64748b; margin-top: 4px; }
+
+  /* Highlight box */
+  .highlight { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+
+  /* Footer */
+  .footer { text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 24px; margin-top: 48px; }
+
+  /* Download bar */
+  .download-bar { position: sticky; top: 0; background: rgba(255,255,255,0.95); backdrop-filter: blur(8px); padding: 12px 40px; border-bottom: 1px solid #e2e8f0; z-index: 10; display: flex; justify-content: flex-end; gap: 8px; }
+  .download-bar button { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-outline { background: #fff; color: #334155; border: 1px solid #e2e8f0; }
+</style>
+</head>
+<body>
+<div class="download-bar no-print">
+  <button class="btn-outline" onclick="window.print()">🖨️ Print / Save PDF</button>
+</div>
+
+<div class="page">
+
+<!-- ═══ COVER ═══ -->
+<div class="cover">
+  <div class="logo">V</div>
+  <h1>VantoOS</h1>
+  <p class="subtitle">AI Executive Command Center</p>
+  <p class="subtitle" style="font-size:15px; margin-top:4px;">Full Product & Technical Report</p>
+  <p class="meta">Version 1.0 — March 2026</p>
+  <div class="badges">
+    <span class="badge conf">Confidential</span>
+    <span class="badge ver">v1.0 Complete</span>
+  </div>
+</div>
+
+<!-- ═══ EXECUTIVE SUMMARY ═══ -->
+<h2><span class="icon">📋</span> 1. Executive Summary</h2>
+<div class="highlight">
+  <p><strong>VantoOS</strong> is an AI-powered executive operating system designed for South African leaders managing complex, multi-stakeholder professional lives. Unlike generic productivity tools, VantoOS acts as a <em>living secretary</em> — proactively surfacing the right information, preparing for meetings, managing financial intelligence, and providing PhD-level strategic advice for every project.</p>
+  <p style="margin-bottom:0">The platform consolidates <strong>12 functional modules</strong>, <strong>32+ database tables</strong>, <strong>17 serverless edge functions</strong>, and a <strong>multi-model AI architecture</strong> into a single keyboard-first interface with full mobile responsiveness.</p>
+</div>
+
+<div class="card-grid">
+  <div class="card"><div class="label">Modules</div><div class="value">12</div><div class="sub">Live production modules</div></div>
+  <div class="card"><div class="label">Database Tables</div><div class="value">32+</div><div class="sub">All with Row Level Security</div></div>
+  <div class="card"><div class="label">Edge Functions</div><div class="value">17</div><div class="sub">Serverless AI & data processing</div></div>
+  <div class="card"><div class="label">AI Models</div><div class="value">4</div><div class="sub">Multi-model with auto-fallback</div></div>
+</div>
+
+<!-- ═══ TARGET MARKET ═══ -->
+<h2><span class="icon">🎯</span> 2. Vision & Target Market</h2>
+<table>
+  <tr><th style="width:30%">Attribute</th><th>Detail</th></tr>
+  <tr><td>Name</td><td>VantoOS — AI Executive Command Center</td></tr>
+  <tr><td>Target User</td><td>C-suite executives, government leaders, legal/accounting professionals, multinational operators</td></tr>
+  <tr><td>Geography Focus</td><td>South Africa (ZAR currency, POPIA compliance, SA tax structures)</td></tr>
+  <tr><td>Core Promise</td><td>Proactive AI assistance: daily briefings, pre-meeting prep, financial intelligence, strategic project partnering</td></tr>
+  <tr><td>Core Differentiator</td><td>AI that understands context, remembers strategy, and proactively manages your day — a co-pilot, not a chatbot</td></tr>
+</table>
+
+<!-- ═══ PRODUCT MODULES ═══ -->
+<h2><span class="icon">🧩</span> 3. Product Modules (All Live)</h2>
+
+<div class="module-grid">
+  <div class="module">
+    <div class="name">⚡ AI Command Center <span class="status">LIVE</span></div>
+    <div class="desc">Daily AI briefings with greeting, day overview, focus areas, time blocks, "3 Commands for Today." AI-ranked top 5 priorities, compliance alerts, 48hr reminder lookahead.</div>
+  </div>
+  <div class="module">
+    <div class="name">📋 Plan Hub <span class="status">LIVE</span></div>
+    <div class="desc">6-tab workspace: Today, Tasks, Reminders, Meetings, Notes, Calendar. Voice input, AI action extraction, Secretary Mode, Command Bar (⌘K), client/matter tagging.</div>
+  </div>
+  <div class="module">
+    <div class="name">💰 Finance Intelligence <span class="status">LIVE</span></div>
+    <div class="desc">Income/expense tracking, debt radar, income engine, bank statement import (CSV/OFX), AI categorization, budget engine with recurring events, AI financial mentor.</div>
+  </div>
+  <div class="module">
+    <div class="name">📈 Invest & Trade <span class="status">LIVE</span></div>
+    <div class="desc">Market pulse (FX, crypto, commodities), 6 beginner lessons, custom watchlists, manual portfolio tracker, paper trading, price alerts, AI investment mentor.</div>
+  </div>
+  <div class="module">
+    <div class="name">🧠 AI Senior Partner <span class="status">LIVE</span></div>
+    <div class="desc">PhD-level strategic co-founder per project. 5 modes: Executive Brief, Sprint Plan, Sell-Readiness Audit (0-100 scorecard), Funding Pathways (verified sources only), Memory Update.</div>
+  </div>
+  <div class="module">
+    <div class="name">🗂️ Portfolio Partner <span class="status">LIVE</span></div>
+    <div class="desc">Cross-project CEO command room. Momentum/risk/readiness scoring, This Week Focus, Portfolio Scan, project comparison, AI-suggested tasks with confirm-before-create.</div>
+  </div>
+  <div class="module">
+    <div class="name">🌍 Funding Pathways <span class="status">LIVE</span></div>
+    <div class="desc">Verified funding programs with source citations — no hallucinated data. Cached in funding_cache with org name, program, eligibility, ticket size, source URLs.</div>
+  </div>
+  <div class="module">
+    <div class="name">🛡️ Compliance Tracker <span class="status">LIVE</span></div>
+    <div class="desc">Regulatory deadline tracking for SA professionals: tax, CIPC, POPIA, BEE. Overdue items surfaced on Dashboard and Weekly Report.</div>
+  </div>
+  <div class="module">
+    <div class="name">👥 Client & Matter Mgmt <span class="status">LIVE</span></div>
+    <div class="desc">Client CRUD with type classification, reference codes, notes. Cross-entity tagging: link clients to tasks, meetings, finance entries, projects.</div>
+  </div>
+  <div class="module">
+    <div class="name">✉️ Email Client <span class="status">LIVE</span></div>
+    <div class="desc">Superhuman-inspired keyboard-first inbox. Multi-account, j/k navigation, archive/snooze/star, one-key action creation. Gmail OAuth integration planned.</div>
+  </div>
+  <div class="module">
+    <div class="name">📊 Executive Reports <span class="status">LIVE</span></div>
+    <div class="desc">Weekly Executive Pack (plan/finance/compliance/clients) with copy-to-clipboard. Investor Report with print/PDF export. Both accessible from Reports nav.</div>
+  </div>
+  <div class="module">
+    <div class="name">🎙️ Voice & Secretary <span class="status">LIVE</span></div>
+    <div class="desc">Speech-to-text with NLP command parsing. Secretary Mode: morning briefings, pre-meeting prompts, end-of-day reviews. Dictation across all modules.</div>
+  </div>
+</div>
+
+<!-- ═══ PARTNER MEMORY ═══ -->
+<h2><span class="icon">🧠</span> 4. AI Partner Memory System</h2>
+<div class="highlight">
+  <p>Each project maintains a <strong>persistent Partner Memory</strong> — a structured card that grounds all AI interactions with consistent context across sessions:</p>
+  <ul>
+    <li><strong>North Star</strong> — The project's ultimate goal</li>
+    <li><strong>Target Customer</strong> — Who the project serves</li>
+    <li><strong>Business Model</strong> — How it makes money</li>
+    <li><strong>Stage</strong> — idea / mvp / beta / live / scaling</li>
+    <li><strong>Primary Constraint</strong> — Current bottleneck</li>
+    <li><strong>Weekly Focus</strong> — This week's priority</li>
+    <li><strong>Key Assumptions & Risks</strong> — JSON arrays for tracking</li>
+    <li><strong>Auto-update toggle</strong> — AI can propose memory updates (default OFF)</li>
+  </ul>
+  <p style="margin-bottom:0">Memory is injected into every AI Partner call, ensuring the AI never "forgets" strategic context. Updates require explicit user confirmation (diff preview).</p>
+</div>
+
+<!-- ═══ AI ARCHITECTURE ═══ -->
+<h2><span class="icon">🤖</span> 5. AI Architecture</h2>
+
+<h3>5.1 Multi-Model Gateway</h3>
+<table>
+  <tr><th>Model</th><th>Use Case</th><th>Priority</th></tr>
+  <tr><td>google/gemini-2.5-flash</td><td>Speed-critical: briefings, extraction, categorization</td><td>Default</td></tr>
+  <tr><td>google/gemini-2.5-pro</td><td>Complex reasoning: audits, strategic analysis</td><td>Quality tasks</td></tr>
+  <tr><td>openai/gpt-5</td><td>High-accuracy fallback</td><td>Fallback #1</td></tr>
+  <tr><td>openai/gpt-5-mini</td><td>Cost-efficient fallback</td><td>Fallback #2</td></tr>
+</table>
+<p>All AI calls route through the centralized <code>ai-gateway</code> edge function with automatic model fallback, rate limiting, POPIA-compliant PII redaction, and structured output validation. Users can configure fallback priority (fastest vs quality) in Settings.</p>
+
+<h3>5.2 Edge Functions (17 Serverless Functions)</h3>
+<table>
+  <tr><th>Function</th><th>Purpose</th></tr>
+  <tr><td>ai-gateway</td><td>Multi-model AI routing with automatic fallback</td></tr>
+  <tr><td>run-assistant</td><td>Daily AI briefing generation (full data snapshot)</td></tr>
+  <tr><td>snapshot-build</td><td>Compressed data snapshot builder for AI context</td></tr>
+  <tr><td>plan-ai-secretary</td><td>Secretary Mode briefings (morning/pre-meeting/EOD)</td></tr>
+  <tr><td>plan-ai-extract-actions</td><td>NLP extraction of tasks/reminders/meetings from notes</td></tr>
+  <tr><td>project-ai-partner</td><td>Strategic AI partner: 5 modes with memory injection</td></tr>
+  <tr><td>project-ai-extract-actions</td><td>Project note → action extraction</td></tr>
+  <tr><td>project-ai-funding-search</td><td>Verified funding source search with citations</td></tr>
+  <tr><td>portfolio-ai-partner</td><td>Cross-project analysis: focus, scan, compare, suggest</td></tr>
+  <tr><td>finance-mentor</td><td>AI financial briefing with income/expense analysis</td></tr>
+  <tr><td>finance-ai-route</td><td>Finance AI query routing</td></tr>
+  <tr><td>finance-snapshot-build</td><td>Financial data snapshot for AI context</td></tr>
+  <tr><td>bank-import-parse</td><td>Bank statement parsing (CSV/OFX)</td></tr>
+  <tr><td>bank-categorize-ai</td><td>AI-powered transaction categorization</td></tr>
+  <tr><td>budget-generate-events</td><td>Generates upcoming budget payment events</td></tr>
+  <tr><td>invest-market-pulse</td><td>Market data refresh (FX, crypto, commodities)</td></tr>
+  <tr><td>invest-ai-mentor</td><td>AI investment coaching with market context</td></tr>
+  <tr><td>admin-health</td><td>System health monitoring & diagnostics</td></tr>
+</table>
+
+<!-- ═══ DATABASE ═══ -->
+<h2><span class="icon">🗄️</span> 6. Database Schema (32+ Tables)</h2>
+<p>All user-data tables enforce <strong>Row Level Security (RLS)</strong> scoped to <code>auth.uid() = user_id</code>. Soft-delete pattern (<code>deleted_at</code>) across all tables for data recovery.</p>
+
+<h3>6.1 Core Planning</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>tasks</td><td>Task management with priority, due dates, project/client linking</td></tr>
+  <tr><td>reminders</td><td>Time-based reminders with project/task linking</td></tr>
+  <tr><td>meetings</td><td>Calendar events with attendees (JSON), location, project linking</td></tr>
+  <tr><td>notes_daily</td><td>Daily structured notes with links, AI extraction support</td></tr>
+</table>
+
+<h3>6.2 Projects & AI Partner</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>projects</td><td>Project entities with status, progress, pin, blocked flags, tags</td></tr>
+  <tr><td>project_notes</td><td>Per-project daily notes</td></tr>
+  <tr><td>project_links</td><td>Project bookmark management</td></tr>
+  <tr><td>project_partner_memory</td><td>AI Partner persistent memory (North Star, model, stage, etc.)</td></tr>
+  <tr><td>project_partner_scores</td><td>Portfolio scoring: momentum, risk, sell-readiness</td></tr>
+  <tr><td>funding_cache</td><td>Verified funding programs with source citations</td></tr>
+</table>
+
+<h3>6.3 Finance & Banking</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>finance_entries</td><td>Income/expense records with categories</td></tr>
+  <tr><td>finance_budget_items</td><td>Recurring budget items with cadence & autopay</td></tr>
+  <tr><td>finance_budget_events</td><td>Generated payment events from budget items</td></tr>
+  <tr><td>finance_notes</td><td>Monthly financial annotations</td></tr>
+  <tr><td>finance_profiles</td><td>User financial profile (VAT, provisional tax, etc.)</td></tr>
+  <tr><td>debts</td><td>Debt tracking with interest rates & repayment</td></tr>
+  <tr><td>income_streams</td><td>Multiple income sources with targets</td></tr>
+  <tr><td>opportunities</td><td>Business opportunities (AI-surfaced & manual)</td></tr>
+  <tr><td>bank_accounts</td><td>Linked bank accounts</td></tr>
+  <tr><td>bank_statement_imports</td><td>Import records with status tracking</td></tr>
+  <tr><td>bank_transactions</td><td>Parsed transactions with deduplication (fingerprint hash)</td></tr>
+  <tr><td>merchant_rules</td><td>Category mapping rules for auto-categorization</td></tr>
+</table>
+
+<h3>6.4 Investment</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>invest_watchlists</td><td>Custom watchlist groups</td></tr>
+  <tr><td>invest_watchlist_items</td><td>Symbols in watchlists</td></tr>
+  <tr><td>invest_manual_holdings</td><td>Manual portfolio holdings with avg cost</td></tr>
+  <tr><td>invest_paper_trades</td><td>Simulated trades for education</td></tr>
+  <tr><td>invest_alerts</td><td>Price-based alerts (above/below/change)</td></tr>
+  <tr><td>market_prices_cache</td><td>Market price cache (public read)</td></tr>
+  <tr><td>market_news_cache</td><td>Market news cache (public read)</td></tr>
+</table>
+
+<h3>6.5 Communication & Organization</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>email_accounts</td><td>Email account configurations</td></tr>
+  <tr><td>email_messages</td><td>Email records with triage metadata</td></tr>
+  <tr><td>email_oauth_tokens</td><td>OAuth credentials for email providers</td></tr>
+  <tr><td>clients</td><td>Client/matter entities with type & status</td></tr>
+  <tr><td>entity_client_links</td><td>Cross-entity client associations</td></tr>
+  <tr><td>entity_tags / tags</td><td>Tagging system for all entities</td></tr>
+  <tr><td>compliance_reminders</td><td>Regulatory compliance deadlines</td></tr>
+</table>
+
+<h3>6.6 System</h3>
+<table>
+  <tr><th>Table</th><th>Purpose</th></tr>
+  <tr><td>executive_context</td><td>AI personalization key-value pairs</td></tr>
+  <tr><td>user_preferences</td><td>App preferences (AI provider order, etc.)</td></tr>
+  <tr><td>notifications</td><td>System notifications</td></tr>
+  <tr><td>attachments</td><td>File attachments for any entity</td></tr>
+  <tr><td>assistant_runs</td><td>AI run history with snapshots & results</td></tr>
+</table>
+
+<!-- ═══ TECH STACK ═══ -->
+<h2><span class="icon">⚙️</span> 7. Technology Stack</h2>
+<div class="card-grid">
+  <div class="card"><div class="label">Frontend</div><div class="value" style="font-size:14px;">React 18 + TypeScript + Vite</div><div class="sub">Tailwind CSS, shadcn/ui, TanStack Query</div></div>
+  <div class="card"><div class="label">Backend</div><div class="value" style="font-size:14px;">Lovable Cloud (Supabase)</div><div class="sub">PostgreSQL, Deno Edge Functions, RLS</div></div>
+  <div class="card"><div class="label">AI</div><div class="value" style="font-size:14px;">Multi-Model Gateway</div><div class="sub">Gemini 2.5, GPT-5, auto-fallback</div></div>
+  <div class="card"><div class="label">Libraries</div><div class="value" style="font-size:14px;">Recharts, date-fns, Zod, cmdk</div><div class="sub">React Router v6, Sonner, React Hook Form</div></div>
+</div>
+
+<!-- ═══ ROUTES ═══ -->
+<h2><span class="icon">🗺️</span> 8. Route Map</h2>
+<table>
+  <tr><th>Route</th><th>Module</th></tr>
+  <tr><td>/</td><td>Dashboard — AI Executive Command Center</td></tr>
+  <tr><td>/plan</td><td>Plan Hub (Today, Tasks, Reminders, Meetings, Notes, Calendar)</td></tr>
+  <tr><td>/email</td><td>Email — Keyboard-first inbox</td></tr>
+  <tr><td>/finance</td><td>Finance Intelligence (with Invest sub-module)</td></tr>
+  <tr><td>/projects</td><td>Projects — with AI Senior Partner per project</td></tr>
+  <tr><td>/dashboard/partner</td><td>Portfolio Partner — Cross-project command room</td></tr>
+  <tr><td>/investor-report</td><td>Investor Report — Printable product overview</td></tr>
+  <tr><td>/weekly-report</td><td>Weekly Executive Pack</td></tr>
+  <tr><td>/travel</td><td>Trip management</td></tr>
+  <tr><td>/shopping</td><td>Shopping lists</td></tr>
+  <tr><td>/settings</td><td>Settings, context, clients, preferences, exports</td></tr>
+  <tr><td>/admin/health</td><td>System health monitoring</td></tr>
+</table>
+
+<!-- ═══ SECURITY ═══ -->
+<h2><span class="icon">🔒</span> 9. Security & Compliance</h2>
+<table>
+  <tr><th>Area</th><th>Implementation</th></tr>
+  <tr><td>Authentication</td><td>Email/password via Supabase Auth with email verification</td></tr>
+  <tr><td>Authorization</td><td>Row Level Security on every table, scoped to auth.uid()</td></tr>
+  <tr><td>Data Protection</td><td>POPIA-compliant PII redaction before AI processing</td></tr>
+  <tr><td>AI Safety</td><td>No PII in prompts, no hallucinated funding data, confirm-before-create</td></tr>
+  <tr><td>Soft Delete</td><td>All deletions are recoverable (deleted_at column)</td></tr>
+  <tr><td>Data Export</td><td>CSV export for finance entries and debts</td></tr>
+  <tr><td>Secrets</td><td>All API keys managed via Cloud secrets — never in code</td></tr>
+</table>
+
+<!-- ═══ NON-NEGOTIABLE RULES ═══ -->
+<h2><span class="icon">⚠️</span> 10. AI Non-Negotiable Rules</h2>
+<ul>
+  <li>Snapshot cap ≤ 3,000 characters for AI context windows</li>
+  <li>POPIA redaction: SA IDs, bank numbers, addresses stripped before any AI call</li>
+  <li>Confirm-before-create: All AI-suggested actions require explicit user approval</li>
+  <li>No hallucinated funding: Specific programs only from verified <code>funding_cache</code> with source URLs</li>
+  <li>No secrets in logs or client-side code</li>
+  <li>AI Partner Memory updates require diff preview + user confirmation</li>
+  <li>All suggested tasks use the existing task schema — no custom fields</li>
+</ul>
+
+<!-- ═══ ROADMAP ═══ -->
+<h2><span class="icon">🗓️</span> 11. Roadmap</h2>
+<div class="card-grid" style="grid-template-columns: 1fr 1fr;">
+  <div class="card" style="border-color: #bbf7d0;">
+    <div class="label" style="color:#166534;">✅ Delivered</div>
+    <ul style="margin-top:8px;">
+      <li>Executive Dashboard with AI briefings</li>
+      <li>Plan Hub (6 tabs, voice, secretary)</li>
+      <li>Finance module with bank imports & AI mentor</li>
+      <li>Budget engine with recurring events</li>
+      <li>Invest & Trade with paper trading</li>
+      <li>AI Senior Partner (5 modes)</li>
+      <li>Partner Memory system</li>
+      <li>Verified Funding Pathways</li>
+      <li>Portfolio Partner command room</li>
+      <li>Email client (keyboard-first, mock)</li>
+      <li>Weekly & Investor Reports (exportable)</li>
+      <li>Voice input & dictation</li>
+      <li>Secretary Mode</li>
+      <li>Compliance tracking</li>
+      <li>Client & Matter management</li>
+      <li>Admin health monitoring</li>
+    </ul>
+  </div>
+  <div class="card" style="border-color: #bfdbfe;">
+    <div class="label" style="color:#2563eb;">🔄 Planned</div>
+    <ul style="margin-top:8px;">
+      <li>Gmail OAuth integration</li>
+      <li>Email-to-itinerary import</li>
+      <li>Shopping ↔ Budget linking</li>
+      <li>Mobile PWA optimization</li>
+      <li>Push notifications</li>
+      <li>Multi-currency support</li>
+      <li>Document/contract management</li>
+      <li>Team collaboration features</li>
+      <li>API for third-party integrations</li>
+      <li>Advanced analytics dashboard</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<div class="footer">
+  <p><strong>VantoOS</strong> — AI Executive Command Center</p>
+  <p style="margin-top:4px;">© 2026 VantoOS. All rights reserved. This document is confidential.</p>
+  <p style="margin-top:4px;">Generated March 2026 | Version 1.0</p>
+</div>
+
+</div>
+</body>
+</html>
