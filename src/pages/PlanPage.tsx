@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { taskService, type Task, type TaskInsert } from "@/services/taskService";
+import { projectService } from "@/services/projectService";
 import { reminderService, type Reminder, type ReminderInsert } from "@/services/reminderService";
 import { meetingService, type Meeting, type MeetingInsert } from "@/services/meetingService";
 import { financeEntryService } from "@/services/financeService";
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckSquare, Bell, Calendar as CalendarIcon, Clock, MapPin,
-  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search
+  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search, FolderKanban
 } from "lucide-react";
 import { toast } from "sonner";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
@@ -355,6 +356,14 @@ export default function PlanPage() {
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
+  const projects = useQuery({ queryKey: ["projects"], queryFn: projectService.list });
+
+  // Build project name lookup
+  const projectNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    (projects.data ?? []).forEach(p => { map[p.id] = p.name; });
+    return map;
+  }, [projects.data]);
 
   // Load secretary settings
   useEffect(() => {
@@ -568,6 +577,9 @@ export default function PlanPage() {
                         <div className="min-w-0">
                           <span className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
                           {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                          {t.project_id && projectNameMap[t.project_id] && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary mt-0.5"><FolderKanban className="h-2.5 w-2.5" />{projectNameMap[t.project_id]}</span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -619,6 +631,9 @@ export default function PlanPage() {
                         <div className="min-w-0">
                           <span className={`text-sm font-medium ${r.is_done ? "line-through text-muted-foreground" : ""}`}>{r.title}</span>
                           <p className="text-xs text-muted-foreground"><Bell className="mr-1 inline h-3 w-3" />{format(new Date(r.reminder_time), "MMM d, h:mm a")}</p>
+                          {r.project_id && projectNameMap[r.project_id] && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary mt-0.5"><FolderKanban className="h-2.5 w-2.5" />{projectNameMap[r.project_id]}</span>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -653,6 +668,9 @@ export default function PlanPage() {
                           <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(new Date(m.start_time), "MMM d, h:mm a")}</span>
                           {m.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{m.location}</span>}
                         </div>
+                        {m.project_id && projectNameMap[m.project_id] && (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-primary mt-0.5"><FolderKanban className="h-2.5 w-2.5" />{projectNameMap[m.project_id]}</span>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

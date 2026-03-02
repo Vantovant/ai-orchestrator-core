@@ -1,15 +1,18 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, Clock, Trash2, Save, X, Bell, Calendar, ArrowRight, Sparkles } from "lucide-react";
+import { CheckCircle2, Clock, Trash2, Save, X, Bell, Calendar, ArrowRight, Sparkles, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { Task } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
+import { projectService } from "@/services/projectService";
 
 interface Props {
   task: Task | null;
@@ -27,6 +30,7 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function TaskDetailDrawer({ task, open, onClose, onUpdate, onDelete }: Props) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -74,6 +78,12 @@ export default function TaskDetailDrawer({ task, open, onClose, onUpdate, onDele
     onUpdate(task.id, { due_date: newDate.toISOString() });
     toast.success(`Snoozed ${hours}h`);
   };
+
+  const projectQuery = useQuery({
+    queryKey: ["project", task?.project_id],
+    queryFn: () => projectService.get(task!.project_id!),
+    enabled: !!task?.project_id,
+  });
 
   if (!task) return null;
 
@@ -125,6 +135,15 @@ export default function TaskDetailDrawer({ task, open, onClose, onUpdate, onDele
                 {task.title}
               </h3>
               {task.description && <p className="text-sm text-muted-foreground mt-1">{task.description}</p>}
+              {projectQuery.data && (
+                <button
+                  className="flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
+                  onClick={() => { onClose(); navigate(`/projects?open=${task.project_id}`); }}
+                >
+                  <FolderKanban className="h-3 w-3" />
+                  Project: {projectQuery.data.name}
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

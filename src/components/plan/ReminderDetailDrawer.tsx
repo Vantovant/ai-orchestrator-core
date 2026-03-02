@@ -1,16 +1,19 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Bell, Clock, Trash2, Save, X, CheckSquare, Calendar as CalendarIcon, MapPin, Video } from "lucide-react";
+import { Bell, Clock, Trash2, Save, X, CheckSquare, Calendar as CalendarIcon, MapPin, Video, FolderKanban } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { Reminder } from "@/services/reminderService";
 import { taskService } from "@/services/taskService";
 import { meetingService } from "@/services/meetingService";
 import { reminderService } from "@/services/reminderService";
+import { projectService } from "@/services/projectService";
 
 const MEETING_KEYWORDS = /\b(meeting|zoom|teams|google\s*meet|call|sync|session|standup|huddle|catch-?up)\b/i;
 const MEETING_LINK_PATTERN = /https?:\/\/[^\s]*(zoom\.us|teams\.microsoft\.com|meet\.google\.com)[^\s]*/i;
@@ -32,6 +35,7 @@ interface Props {
 }
 
 export default function ReminderDetailDrawer({ reminder, open, onClose, onToggle, onDelete, onMeetingCreated }: Props) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState("");
   const [reminderTime, setReminderTime] = useState("");
@@ -130,6 +134,12 @@ export default function ReminderDetailDrawer({ reminder, open, onClose, onToggle
     }
   };
 
+  const projectQuery = useQuery({
+    queryKey: ["project", reminder?.project_id],
+    queryFn: () => projectService.get(reminder!.project_id!),
+    enabled: !!reminder?.project_id,
+  });
+
   if (!reminder) return null;
 
   const isPast = new Date(reminder.reminder_time) < new Date();
@@ -181,6 +191,15 @@ export default function ReminderDetailDrawer({ reminder, open, onClose, onToggle
                   {reminder.title}
                 </h3>
                 {reminder.description && <p className="text-sm text-muted-foreground mt-1">{reminder.description}</p>}
+                {projectQuery.data && (
+                  <button
+                    className="flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
+                    onClick={() => { onClose(); navigate(`/projects?open=${reminder.project_id}`); }}
+                  >
+                    <FolderKanban className="h-3 w-3" />
+                    Project: {projectQuery.data.name}
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
