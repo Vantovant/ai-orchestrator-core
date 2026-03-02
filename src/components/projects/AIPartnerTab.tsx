@@ -4,17 +4,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { taskService } from "@/services/taskService";
-import { reminderService } from "@/services/reminderService";
+import PartnerMemoryPanel from "@/components/projects/PartnerMemoryPanel";
+import FundingPathwaysTab from "@/components/projects/FundingPathwaysTab";
 import {
   Brain, Zap, Target, ShieldCheck, Loader2, CheckCircle2,
-  AlertTriangle, ArrowRight, Calendar, Clock, Sparkles,
+  AlertTriangle, ArrowRight, Calendar, Clock, Sparkles, Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
 
-type Mode = "executive_brief" | "sprint_plan" | "sell_readiness";
+type Mode = "executive_brief" | "sprint_plan" | "sell_readiness" | "funding_pathways";
 
 interface AIPartnerTabProps {
   projectId: string;
@@ -25,6 +25,7 @@ const modeConfig: Record<Mode, { label: string; icon: any; description: string; 
   executive_brief: { label: "Executive Brief", icon: Brain, description: "Status, priorities, risks, prep", color: "text-primary" },
   sprint_plan: { label: "Sprint Plan", icon: Zap, description: "7-day action plan with daily items", color: "text-warning" },
   sell_readiness: { label: "Sell-Readiness", icon: ShieldCheck, description: "Scorecard & missing items audit", color: "text-success" },
+  funding_pathways: { label: "Funding", icon: Banknote, description: "Funding types, readiness & sources", color: "text-primary" },
 };
 
 export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabProps) {
@@ -46,6 +47,7 @@ export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabPro
     onSuccess: (data) => {
       setResult(data);
       setAppliedTasks(new Set());
+      qc.invalidateQueries({ queryKey: ["partner_scores_all"] });
     },
     onError: (e: any) => {
       toast.error(e.message || "AI Partner unavailable");
@@ -53,6 +55,11 @@ export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabPro
   });
 
   const handleRun = (mode: Mode) => {
+    if (mode === "funding_pathways") {
+      setActiveMode(mode);
+      setResult(null);
+      return; // Funding has its own tab UI
+    }
     setActiveMode(mode);
     setResult(null);
     aiMut.mutate(mode);
@@ -85,8 +92,11 @@ export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabPro
 
   return (
     <div className="space-y-4">
+      {/* Partner Memory */}
+      <PartnerMemoryPanel projectId={projectId} projectName={projectName} />
+
       {/* Mode buttons */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         {(Object.entries(modeConfig) as [Mode, typeof modeConfig[Mode]][]).map(([mode, cfg]) => {
           const Icon = cfg.icon;
           const isActive = activeMode === mode;
@@ -119,13 +129,18 @@ export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabPro
         </Card>
       )}
 
+      {/* Funding Pathways has its own UI */}
+      {activeMode === "funding_pathways" && !aiMut.isPending && (
+        <FundingPathwaysTab projectId={projectId} projectName={projectName} />
+      )}
+
       {/* Results */}
       {r && activeMode === "executive_brief" && <ExecutiveBriefResult data={r} onApplyTask={handleApplyTask} appliedTasks={appliedTasks} applying={applying} />}
       {r && activeMode === "sprint_plan" && <SprintPlanResult data={r} onApplyTask={handleApplyTask} appliedTasks={appliedTasks} applying={applying} />}
       {r && activeMode === "sell_readiness" && <SellReadinessResult data={r} onApplyTask={handleApplyTask} appliedTasks={appliedTasks} applying={applying} />}
 
       {/* Metadata */}
-      {result && (
+      {result && activeMode !== "funding_pathways" && (
         <p className="text-[10px] text-muted-foreground text-right">
           Snapshot: {result.snapshot_len} chars {result.was_truncated && "(truncated)"} • AI status: {result.ai_status}
         </p>
@@ -142,7 +157,6 @@ function ExecutiveBriefResult({ data, onApplyTask, appliedTasks, applying }: any
         <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Brain className="h-4 w-4 text-primary" /> Executive Brief</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm">{data.status_summary}</p>
-
           {data.top_priorities?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">TOP PRIORITIES</h4>
@@ -160,7 +174,6 @@ function ExecutiveBriefResult({ data, onApplyTask, appliedTasks, applying }: any
               </div>
             </div>
           )}
-
           {data.biggest_risk && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">BIGGEST RISK</h4>
@@ -176,7 +189,6 @@ function ExecutiveBriefResult({ data, onApplyTask, appliedTasks, applying }: any
               </div>
             </div>
           )}
-
           {data.meeting_prep && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">MEETING PREP</h4>
@@ -185,7 +197,6 @@ function ExecutiveBriefResult({ data, onApplyTask, appliedTasks, applying }: any
           )}
         </CardContent>
       </Card>
-
       <SuggestedTasksList tasks={data.suggested_tasks} onApply={onApplyTask} applied={appliedTasks} applying={applying} />
     </div>
   );
@@ -208,7 +219,6 @@ function SprintPlanResult({ data, onApplyTask, appliedTasks, applying }: any) {
               </div>
             </div>
           )}
-
           {data.daily_plan?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">DAILY ACTIONS</h4>
@@ -219,8 +229,7 @@ function SprintPlanResult({ data, onApplyTask, appliedTasks, applying }: any) {
                     <ul className="space-y-0.5">
                       {d.actions?.map((a: string, j: number) => (
                         <li key={j} className="text-xs flex items-start gap-1.5">
-                          <ArrowRight className="h-3 w-3 shrink-0 mt-0.5 text-muted-foreground" />
-                          {a}
+                          <ArrowRight className="h-3 w-3 shrink-0 mt-0.5 text-muted-foreground" />{a}
                         </li>
                       ))}
                     </ul>
@@ -229,7 +238,6 @@ function SprintPlanResult({ data, onApplyTask, appliedTasks, applying }: any) {
               </div>
             </div>
           )}
-
           {data.postpone?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">POSTPONE</h4>
@@ -240,7 +248,6 @@ function SprintPlanResult({ data, onApplyTask, appliedTasks, applying }: any) {
               ))}
             </div>
           )}
-
           {data.quick_wins?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">QUICK WINS</h4>
@@ -255,7 +262,6 @@ function SprintPlanResult({ data, onApplyTask, appliedTasks, applying }: any) {
           )}
         </CardContent>
       </Card>
-
       <SuggestedTasksList tasks={data.suggested_tasks} onApply={onApplyTask} applied={appliedTasks} applying={applying} />
     </div>
   );
@@ -272,19 +278,13 @@ function SellReadinessResult({ data, onApplyTask, appliedTasks, applying }: any)
     { key: "compliance", label: "Compliance" },
     { key: "support_docs", label: "Support & Docs" },
   ];
-
-  const verdictColors: Record<string, string> = {
-    ready: "text-success",
-    almost_ready: "text-warning",
-    not_ready: "text-destructive",
-  };
+  const verdictColors: Record<string, string> = { ready: "text-success", almost_ready: "text-warning", not_ready: "text-destructive" };
 
   return (
     <div className="space-y-3">
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-success" /> Sell-Readiness Audit</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          {/* Overall score */}
           <div className="flex items-center gap-4">
             <div className="text-center">
               <p className="text-3xl font-bold text-primary">{data.overall_score ?? 0}</p>
@@ -297,10 +297,7 @@ function SellReadinessResult({ data, onApplyTask, appliedTasks, applying }: any)
               </p>
             </div>
           </div>
-
           {data.summary && <p className="text-sm text-muted-foreground">{data.summary}</p>}
-
-          {/* Dimension scores */}
           {data.scores && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">SCORECARD</h4>
@@ -318,8 +315,6 @@ function SellReadinessResult({ data, onApplyTask, appliedTasks, applying }: any)
               </div>
             </div>
           )}
-
-          {/* Missing items */}
           {data.missing_items?.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-muted-foreground mb-2">MISSING ITEMS</h4>
@@ -341,16 +336,14 @@ function SellReadinessResult({ data, onApplyTask, appliedTasks, applying }: any)
           )}
         </CardContent>
       </Card>
-
       <SuggestedTasksList tasks={data.suggested_tasks} onApply={onApplyTask} applied={appliedTasks} applying={applying} />
     </div>
   );
 }
 
-// ── Suggested Tasks (confirm-before-apply) ──
+// ── Suggested Tasks ──
 function SuggestedTasksList({ tasks, onApply, applied, applying }: { tasks?: any[]; onApply: (t: any, i: number) => void; applied: Set<number>; applying: boolean }) {
   if (!tasks?.length) return null;
-
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Suggested Tasks</CardTitle></CardHeader>
@@ -368,15 +361,8 @@ function SuggestedTasksList({ tasks, onApply, applied, applying }: { tasks?: any
             {applied.has(i) ? (
               <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0 h-7 text-xs gap-1"
-                onClick={() => onApply(t, i)}
-                disabled={applying}
-              >
-                {applying ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />}
-                Add
+              <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1" onClick={() => onApply(t, i)} disabled={applying}>
+                {applying ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowRight className="h-3 w-3" />} Add
               </Button>
             )}
           </div>

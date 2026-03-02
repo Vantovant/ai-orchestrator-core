@@ -878,6 +878,68 @@ export type Database = {
         }
         Relationships: []
       }
+      funding_cache: {
+        Row: {
+          created_at: string
+          eligibility: string | null
+          expires_at: string | null
+          fetched_at: string
+          funding_type: string
+          id: string
+          org_name: string
+          program_name: string
+          project_id: string | null
+          region: string
+          source_name: string | null
+          source_url: string
+          summary: string
+          ticket_size_range: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          eligibility?: string | null
+          expires_at?: string | null
+          fetched_at?: string
+          funding_type?: string
+          id?: string
+          org_name: string
+          program_name: string
+          project_id?: string | null
+          region?: string
+          source_name?: string | null
+          source_url: string
+          summary?: string
+          ticket_size_range?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          eligibility?: string | null
+          expires_at?: string | null
+          fetched_at?: string
+          funding_type?: string
+          id?: string
+          org_name?: string
+          program_name?: string
+          project_id?: string | null
+          region?: string
+          source_name?: string | null
+          source_url?: string
+          summary?: string
+          ticket_size_range?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funding_cache_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       income_streams: {
         Row: {
           created_at: string
@@ -1455,6 +1517,112 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_notes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_partner_memory: {
+        Row: {
+          auto_update_enabled: boolean
+          business_model: string | null
+          created_at: string
+          id: string
+          key_assumptions: Json | null
+          key_risks: Json | null
+          last_partner_summary: string | null
+          north_star: string | null
+          primary_constraint: string | null
+          project_id: string
+          stage: string
+          target_customer: string | null
+          updated_at: string
+          user_id: string
+          weekly_focus: string | null
+        }
+        Insert: {
+          auto_update_enabled?: boolean
+          business_model?: string | null
+          created_at?: string
+          id?: string
+          key_assumptions?: Json | null
+          key_risks?: Json | null
+          last_partner_summary?: string | null
+          north_star?: string | null
+          primary_constraint?: string | null
+          project_id: string
+          stage?: string
+          target_customer?: string | null
+          updated_at?: string
+          user_id: string
+          weekly_focus?: string | null
+        }
+        Update: {
+          auto_update_enabled?: boolean
+          business_model?: string | null
+          created_at?: string
+          id?: string
+          key_assumptions?: Json | null
+          key_risks?: Json | null
+          last_partner_summary?: string | null
+          north_star?: string | null
+          primary_constraint?: string | null
+          project_id?: string
+          stage?: string
+          target_customer?: string | null
+          updated_at?: string
+          user_id?: string
+          weekly_focus?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_partner_memory_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_partner_scores: {
+        Row: {
+          id: string
+          last_audit_at: string | null
+          last_brief_at: string | null
+          momentum_score: number | null
+          project_id: string
+          risk_level: string | null
+          sell_readiness_score: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          last_audit_at?: string | null
+          last_brief_at?: string | null
+          momentum_score?: number | null
+          project_id: string
+          risk_level?: string | null
+          sell_readiness_score?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          last_audit_at?: string | null
+          last_brief_at?: string | null
+          momentum_score?: number | null
+          project_id?: string
+          risk_level?: string | null
+          sell_readiness_score?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_partner_scores_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"

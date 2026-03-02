@@ -17,6 +17,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
 import WeeklyReportPage from "@/pages/WeeklyReportPage";
 import AdminHealthPage from "@/pages/AdminHealthPage";
+import PortfolioPartnerPage from "@/pages/PortfolioPartnerPage";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/weekly-report" element={<WeeklyReportPage />} />
         <Route path="/admin/health" element={<AdminHealthPage />} />
+        <Route path="/dashboard/partner" element={<PortfolioPartnerPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
