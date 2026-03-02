@@ -917,6 +917,263 @@ export type Database = {
         }
         Relationships: []
       }
+      invest_alerts: {
+        Row: {
+          asset_type: string
+          created_at: string
+          deleted_at: string | null
+          enabled: boolean
+          id: string
+          params: Json
+          rule_type: string
+          symbol: string
+          triggered_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_type?: string
+          created_at?: string
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          params?: Json
+          rule_type?: string
+          symbol: string
+          triggered_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_type?: string
+          created_at?: string
+          deleted_at?: string | null
+          enabled?: boolean
+          id?: string
+          params?: Json
+          rule_type?: string
+          symbol?: string
+          triggered_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      invest_manual_holdings: {
+        Row: {
+          asset_type: string
+          avg_cost: number | null
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          id: string
+          notes: string | null
+          qty: number
+          symbol: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_type?: string
+          avg_cost?: number | null
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          qty?: number
+          symbol: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_type?: string
+          avg_cost?: number | null
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          qty?: number
+          symbol?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      invest_paper_trades: {
+        Row: {
+          asset_type: string
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          id: string
+          notes: string | null
+          occurred_at: string
+          price_at_time: number
+          qty: number
+          side: string
+          symbol: string
+          user_id: string
+        }
+        Insert: {
+          asset_type?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          occurred_at?: string
+          price_at_time?: number
+          qty?: number
+          side?: string
+          symbol: string
+          user_id: string
+        }
+        Update: {
+          asset_type?: string
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          id?: string
+          notes?: string | null
+          occurred_at?: string
+          price_at_time?: number
+          qty?: number
+          side?: string
+          symbol?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      invest_watchlist_items: {
+        Row: {
+          asset_type: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          symbol: string
+          user_id: string
+          watchlist_id: string
+        }
+        Insert: {
+          asset_type?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          symbol: string
+          user_id: string
+          watchlist_id: string
+        }
+        Update: {
+          asset_type?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          symbol?: string
+          user_id?: string
+          watchlist_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invest_watchlist_items_watchlist_id_fkey"
+            columns: ["watchlist_id"]
+            isOneToOne: false
+            referencedRelation: "invest_watchlists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invest_watchlists: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      market_news_cache: {
+        Row: {
+          created_at: string
+          id: string
+          published_at: string
+          source: string | null
+          summary: string | null
+          tags: Json | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          published_at?: string
+          source?: string | null
+          summary?: string | null
+          tags?: Json | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          published_at?: string
+          source?: string | null
+          summary?: string | null
+          tags?: Json | null
+          title?: string
+        }
+        Relationships: []
+      }
+      market_prices_cache: {
+        Row: {
+          asof: string
+          asset_type: string
+          change_1d: number | null
+          change_7d: number | null
+          currency: string
+          id: string
+          price: number
+          symbol: string
+        }
+        Insert: {
+          asof?: string
+          asset_type?: string
+          change_1d?: number | null
+          change_7d?: number | null
+          currency?: string
+          id?: string
+          price?: number
+          symbol: string
+        }
+        Update: {
+          asof?: string
+          asset_type?: string
+          change_1d?: number | null
+          change_7d?: number | null
+          currency?: string
+          id?: string
+          price?: number
+          symbol?: string
+        }
+        Relationships: []
+      }
       meetings: {
         Row: {
           attendees: Json | null
