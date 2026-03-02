@@ -12,6 +12,7 @@ import EmailPage from "@/pages/EmailPage";
 import FinancePage from "@/pages/FinancePage";
 import TravelPage from "@/pages/TravelPage";
 import ShoppingPage from "@/pages/ShoppingPage";
+import ProjectsPage from "@/pages/ProjectsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
 import WeeklyReportPage from "@/pages/WeeklyReportPage";
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="/calendar" element={<Navigate to="/plan?tab=calendar" replace />} />
         <Route path="/email" element={<EmailPage />} />
         <Route path="/finance" element={<FinancePage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/travel" element={<TravelPage />} />
         <Route path="/shopping" element={<ShoppingPage />} />
         <Route path="/settings" element={<SettingsPage />} />

@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.invest-ai-mentor]
 verify_jwt = false
+
+[functions.project-ai-extract-actions]
+verify_jwt = false

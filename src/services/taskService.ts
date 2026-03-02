@@ -10,12 +10,13 @@ export interface Task {
   due_date: string | null;
   source: string | null;
   estimated_minutes: number | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
 }
 
-export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "source" | "estimated_minutes">>;
+export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "source" | "estimated_minutes" | "project_id">>;
 
 export const taskService = {
   async list() {

@@ -8,12 +8,13 @@ export interface Reminder {
   reminder_time: string;
   is_done: boolean;
   task_id: string | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
 }
 
-export type ReminderInsert = Pick<Reminder, "title" | "reminder_time"> & Partial<Pick<Reminder, "description" | "task_id">>;
+export type ReminderInsert = Pick<Reminder, "title" | "reminder_time"> & Partial<Pick<Reminder, "description" | "task_id" | "project_id">>;
 
 export const reminderService = {
   async list() {

@@ -10,12 +10,13 @@ export interface Meeting {
   location: string | null;
   attendees: any;
   notes: string | null;
+  project_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
 }
 
-export type MeetingInsert = Pick<Meeting, "title" | "start_time" | "end_time"> & Partial<Pick<Meeting, "description" | "location" | "attendees" | "notes">>;
+export type MeetingInsert = Pick<Meeting, "title" | "start_time" | "end_time"> & Partial<Pick<Meeting, "description" | "location" | "attendees" | "notes" | "project_id">>;
 
 export const meetingService = {
   async list() {
