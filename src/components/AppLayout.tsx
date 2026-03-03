@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked
 } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -21,6 +21,7 @@ const navItems = [
   { to: "/travel", label: "Travel", icon: Plane },
   { to: "/shopping", label: "Shopping", icon: ShoppingCart },
   { to: "/testers", label: "Testers", icon: Users },
+  { to: "/manual", label: "User Manual", icon: BookMarked },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
