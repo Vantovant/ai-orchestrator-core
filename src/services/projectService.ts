@@ -6,6 +6,7 @@ export interface Project {
   name: string;
   description: string;
   status: string;
+  solution_type: string;
   progress_manual: number;
   progress_mode: string;
   tags: string[];
