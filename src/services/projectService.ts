@@ -11,6 +11,10 @@ export interface Project {
   tags: string[];
   is_blocked: boolean;
   is_pinned: boolean;
+  health: string;
+  blocked_reason: string | null;
+  blocked_by: string | null;
+  unblock_eta: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

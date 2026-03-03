@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_log: {
+        Row: {
+          actor_id: string
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          project_id: string
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          project_id: string
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assistant_runs: {
         Row: {
           created_at: string
@@ -1581,6 +1616,50 @@ export type Database = {
         }
         Relationships: []
       }
+      project_accomplishments: {
+        Row: {
+          category: string
+          created_at: string
+          details: string | null
+          happened_at: string
+          id: string
+          link_url: string | null
+          project_id: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          details?: string | null
+          happened_at?: string
+          id?: string
+          link_url?: string | null
+          project_id: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          details?: string | null
+          happened_at?: string
+          id?: string
+          link_url?: string | null
+          project_id?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_accomplishments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_links: {
         Row: {
           created_at: string
@@ -1771,9 +1850,12 @@ export type Database = {
       }
       projects: {
         Row: {
+          blocked_by: string | null
+          blocked_reason: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
+          health: string
           id: string
           is_blocked: boolean
           is_pinned: boolean
@@ -1782,13 +1864,17 @@ export type Database = {
           progress_mode: string
           status: string
           tags: string[] | null
+          unblock_eta: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          blocked_by?: string | null
+          blocked_reason?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
+          health?: string
           id?: string
           is_blocked?: boolean
           is_pinned?: boolean
@@ -1797,13 +1883,17 @@ export type Database = {
           progress_mode?: string
           status?: string
           tags?: string[] | null
+          unblock_eta?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          blocked_by?: string | null
+          blocked_reason?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
+          health?: string
           id?: string
           is_blocked?: boolean
           is_pinned?: boolean
@@ -1812,6 +1902,7 @@ export type Database = {
           progress_mode?: string
           status?: string
           tags?: string[] | null
+          unblock_eta?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -1906,45 +1997,54 @@ export type Database = {
       }
       tasks: {
         Row: {
+          completed_at: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           due_date: string | null
           estimated_minutes: number | null
           id: string
+          order_index: number
           priority: string
           project_id: string | null
           source: string | null
+          start_date: string | null
           status: string
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
           id?: string
+          order_index?: number
           priority?: string
           project_id?: string | null
           source?: string | null
+          start_date?: string | null
           status?: string
           title: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
           id?: string
+          order_index?: number
           priority?: string
           project_id?: string | null
           source?: string | null
+          start_date?: string | null
           status?: string
           title?: string
           updated_at?: string
