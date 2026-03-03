@@ -52,8 +52,9 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
-        <img src={vantoosLogo} alt="VantoOS" className="h-9 w-auto" />
+      <div className="flex flex-col items-start gap-1 border-b border-sidebar-border px-4 py-4">
+        <img src={vantoosLogo} alt="VantoOS" className="h-14 w-auto" />
+        <span className="text-sm font-medium text-sidebar-foreground/70 tracking-wide">Plan. Fund. Deliver.</span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNav.map(({ to, label, icon: Icon }) => (
@@ -131,7 +132,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarNav onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
-          <img src={vantoosLogo} alt="VantoOS" className="h-7 w-auto" />
+          <img src={vantoosLogo} alt="VantoOS" className="h-10 w-auto" />
         </header>
         <main className="flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
         <PageGuide />
