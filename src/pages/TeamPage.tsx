@@ -125,9 +125,21 @@ export default function TeamPage() {
     fetchStats();
   };
 
-  const copyToken = (token: string) => {
-    navigator.clipboard.writeText(token);
-    toast.success("Invite code copied!");
+  const copyToken = (token: string, label?: string) => {
+    const signupUrl = "https://vantoos-ai-core.lovable.app";
+    const message = `You've been invited to join VantoOS — an AI-powered executive operating system designed for founders, operators, and teams who want to manage projects, tasks, finances, and knowledge in one intelligent workspace.
+
+📋 Purpose: ${label || "Tester access"} — You're being onboarded as an agent/tester to explore and validate the platform.
+
+🔗 Sign up here: ${signupUrl}
+
+🔑 Your invite code: ${token}
+
+Enter this code during registration to activate your account. The code may have limited uses, so please sign up promptly.
+
+Welcome aboard!`;
+    navigator.clipboard.writeText(message);
+    toast.success("Invite message with code copied to clipboard!");
   };
 
   const generateReport = async () => {
@@ -241,7 +253,7 @@ export default function TeamPage() {
                     </Badge>
                   </div>
                   <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToken(inv.token)}><Copy className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => copyToken(inv.token, inv.label)}><Copy className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => deleteInvite(inv.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 </div>
