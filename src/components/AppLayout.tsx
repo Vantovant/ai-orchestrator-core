@@ -6,8 +6,11 @@ import {
   LayoutDashboard, ClipboardList, Mail,
   DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { supabase } from "@/integrations/supabase/client";
+
+const ADMIN_ROUTES = ["/testers", "/onboarding-emails"];
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -36,6 +39,15 @@ const mobileNavItems = [
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const { signOut, user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_roles").select("id").eq("user_id", user.id).eq("role", "admin").limit(1)
+      .then(({ data }) => setIsAdmin((data ?? []).length > 0));
+  }, [user]);
+
+  const visibleNav = navItems.filter(item => !ADMIN_ROUTES.includes(item.to) || isAdmin);
 
   return (
     <>
@@ -46,7 +58,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         <span className="text-lg font-bold">VantoOS</span>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {visibleNav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

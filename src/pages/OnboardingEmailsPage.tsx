@@ -1,7 +1,11 @@
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Copy, Download } from "lucide-react";
+import { Copy, Download, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const BASE = "https://executive.onlinecourseformlm.com";
 
@@ -329,6 +333,29 @@ ${rows}</body></html>`;
 }
 
 export default function OnboardingEmailsPage() {
+  const { user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("user_roles").select("id").eq("user_id", user.id).eq("role", "admin").limit(1)
+      .then(({ data }) => setIsAdmin((data ?? []).length > 0));
+  }, [user]);
+
+  if (isAdmin === null) {
+    return <div className="flex items-center justify-center min-h-[60vh]"><Skeleton className="h-40 w-80" /></div>;
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3 text-center">
+        <ShieldAlert className="h-12 w-12 text-destructive" />
+        <h2 className="text-lg font-semibold">Admin Access Only</h2>
+        <p className="text-sm text-muted-foreground">This page is restricted to administrators.</p>
+      </div>
+    );
+  }
+
   const copyEmail = (idx: number) => {
     const e = EMAILS[idx];
     const text = `Subject: ${e.subject}\n\n${e.body}`;
