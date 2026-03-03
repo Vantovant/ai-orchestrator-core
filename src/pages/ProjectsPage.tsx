@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   FolderKanban, Plus, Search, Pin, MoreHorizontal,
   CheckCircle2, PauseCircle, CircleDot, AlertTriangle, ArrowRight, Brain,
+  Briefcase, Gavel,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -28,6 +29,7 @@ export default function ProjectsPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("all");
+  const [solutionFilter, setSolutionFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
@@ -35,6 +37,7 @@ export default function ProjectsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("active");
+  const [solutionType, setSolutionType] = useState("standard");
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectService.list });
 
@@ -58,9 +61,10 @@ export default function ProjectsPage() {
   const filtered = useMemo(() => {
     let list = projects.data ?? [];
     if (filter !== "all") list = list.filter((p) => p.status === filter);
+    if (solutionFilter !== "all") list = list.filter((p) => (p as any).solution_type === solutionFilter);
     if (search) list = list.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
     return list;
-  }, [projects.data, filter, search]);
+  }, [projects.data, filter, solutionFilter, search]);
 
   // If a project is selected, show detail view
   if (selectedProjectId) {
@@ -107,6 +111,15 @@ export default function ProjectsPage() {
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={solutionFilter} onValueChange={setSolutionFilter}>
+          <SelectTrigger className="w-[160px] h-9 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            <SelectItem value="standard">Standard</SelectItem>
+            <SelectItem value="funded_business">Funded Business</SelectItem>
+            <SelectItem value="tender">TenderOS</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Project Cards */}
@@ -144,7 +157,7 @@ export default function ProjectsPage() {
             className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
-              createMut.mutate({ name, description, status });
+              createMut.mutate({ name, description, status, solution_type: solutionType } as any);
             }}
           >
             <Input placeholder="Project name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -156,6 +169,17 @@ export default function ProjectsPage() {
                 <SelectItem value="paused">Paused</SelectItem>
               </SelectContent>
             </Select>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Solution Type</label>
+              <Select value={solutionType} onValueChange={setSolutionType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard Project</SelectItem>
+                  <SelectItem value="funded_business">Funded Business Solution</SelectItem>
+                  <SelectItem value="tender">TenderOS (Government Tender)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button type="submit" className="w-full" disabled={createMut.isPending}>
               {createMut.isPending ? "Creating..." : "Create Project"}
             </Button>

@@ -30,12 +30,22 @@ import TasksTimelineView from "@/components/projects/TasksTimelineView";
 import AccomplishmentsSection from "@/components/projects/AccomplishmentsSection";
 import BlockedModal from "@/components/projects/BlockedModal";
 import ImportWizard from "@/components/projects/ImportWizard";
+// Solution tabs
+import BusinessCaseTab from "@/components/solutions/BusinessCaseTab";
+import FinancialModelTab from "@/components/solutions/FinancialModelTab";
+import FundingPackTab from "@/components/solutions/FundingPackTab";
+import TenderBriefTab from "@/components/solutions/TenderBriefTab";
+import TenderRequirementsTab from "@/components/solutions/TenderRequirementsTab";
+import TenderComplianceTab from "@/components/solutions/TenderComplianceTab";
+import TenderProposalTab from "@/components/solutions/TenderProposalTab";
+import BidReadinessCard from "@/components/solutions/BidReadinessCard";
 import {
   ArrowLeft, CheckCircle2, CircleDot, PauseCircle, AlertTriangle,
   Plus, Link2, Trash2, ExternalLink, Target, Calendar, FileText,
   Clock, Save, Sparkles, FolderKanban, Loader2, BookOpen, Copy,
   ChevronLeft, ChevronRight, Brain, LayoutList, Kanban, GanttChart,
-  Trophy, Upload, Shield,
+  Trophy, Upload, Shield, DollarSign, Banknote, Briefcase, Gavel,
+  ClipboardCheck, FileEdit, Send,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
@@ -259,6 +269,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
   if (!project.data) return <div className="text-center py-12 text-muted-foreground">Project not found</div>;
 
   const p = project.data;
+  const solutionType = (p as any).solution_type || "standard";
   const tasks = linkedTasks.data ?? [];
   const meetings = linkedMeetings.data ?? [];
   const doneTasks = tasks.filter((t: any) => t.status === "done").length;
@@ -286,6 +297,12 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
               {hc.label}
             </Badge>
             <Badge variant="secondary" className="text-xs capitalize">{p.status}</Badge>
+            {solutionType !== "standard" && (
+              <Badge variant="outline" className="text-xs capitalize gap-1">
+                {solutionType === "funded_business" ? <Briefcase className="h-3 w-3" /> : <Gavel className="h-3 w-3" />}
+                {solutionType === "funded_business" ? "Funded Business" : "TenderOS"}
+              </Badge>
+            )}
             {totalTasks > 0 && (
               <Badge variant="outline" className="text-xs">{doneTasks}/{totalTasks} complete</Badge>
             )}
@@ -297,10 +314,31 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-          <TabsList className="w-full md:w-auto">
+          <TabsList className="w-full md:w-auto flex-wrap">
             <TabsTrigger value="overview" className="gap-1 text-xs sm:text-sm"><Target className="h-3.5 w-3.5 hidden sm:inline" /> Overview</TabsTrigger>
             <TabsTrigger value="tasks" className="gap-1 text-xs sm:text-sm"><CheckCircle2 className="h-3.5 w-3.5 hidden sm:inline" /> Tasks</TabsTrigger>
             <TabsTrigger value="accomplishments" className="gap-1 text-xs sm:text-sm"><Trophy className="h-3.5 w-3.5 hidden sm:inline" /> Done</TabsTrigger>
+
+            {/* Funded Business tabs */}
+            {solutionType === "funded_business" && (
+              <>
+                <TabsTrigger value="business_case" className="gap-1 text-xs sm:text-sm"><Briefcase className="h-3.5 w-3.5 hidden sm:inline" /> Case</TabsTrigger>
+                <TabsTrigger value="financial_model" className="gap-1 text-xs sm:text-sm"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Financials</TabsTrigger>
+                <TabsTrigger value="funding_pack" className="gap-1 text-xs sm:text-sm"><Banknote className="h-3.5 w-3.5 hidden sm:inline" /> Funding</TabsTrigger>
+              </>
+            )}
+
+            {/* TenderOS tabs */}
+            {solutionType === "tender" && (
+              <>
+                <TabsTrigger value="tender_brief" className="gap-1 text-xs sm:text-sm"><Gavel className="h-3.5 w-3.5 hidden sm:inline" /> Brief</TabsTrigger>
+                <TabsTrigger value="tender_compliance" className="gap-1 text-xs sm:text-sm"><Shield className="h-3.5 w-3.5 hidden sm:inline" /> Compliance</TabsTrigger>
+                <TabsTrigger value="tender_requirements" className="gap-1 text-xs sm:text-sm"><ClipboardCheck className="h-3.5 w-3.5 hidden sm:inline" /> Reqs</TabsTrigger>
+                <TabsTrigger value="tender_proposal" className="gap-1 text-xs sm:text-sm"><FileEdit className="h-3.5 w-3.5 hidden sm:inline" /> Proposal</TabsTrigger>
+                <TabsTrigger value="financial_model" className="gap-1 text-xs sm:text-sm"><DollarSign className="h-3.5 w-3.5 hidden sm:inline" /> Pricing</TabsTrigger>
+              </>
+            )}
+
             <TabsTrigger value="meetings" className="gap-1 text-xs sm:text-sm"><Calendar className="h-3.5 w-3.5 hidden sm:inline" /> Meetings</TabsTrigger>
             <TabsTrigger value="notes" className="gap-1 text-xs sm:text-sm"><FileText className="h-3.5 w-3.5 hidden sm:inline" /> Notes</TabsTrigger>
             <TabsTrigger value="links" className="gap-1 text-xs sm:text-sm"><Link2 className="h-3.5 w-3.5 hidden sm:inline" /> Links</TabsTrigger>
@@ -314,6 +352,9 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             {p.description && (
               <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">{p.description}</p></CardContent></Card>
             )}
+
+            {/* Bid Readiness for tenders */}
+            {solutionType === "tender" && <BidReadinessCard projectId={projectId} />}
 
             <div className="grid gap-4 sm:grid-cols-2">
               {/* Progress Card */}
@@ -377,10 +418,8 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
               </Card>
             )}
 
-            {/* Accomplishments preview */}
             <AccomplishmentsSection projectId={projectId} limit={5} />
 
-            {/* Upcoming Meetings */}
             {meetings.filter((m: any) => new Date(m.start_time) >= new Date()).length > 0 && (
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Upcoming Meetings</CardTitle></CardHeader>
@@ -401,7 +440,6 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
         {/* TASKS */}
         <TabsContent value="tasks">
           <div className="space-y-3">
-            {/* View Switcher + Import */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex rounded-lg border overflow-hidden">
                 <Button variant={tasksView === "table" ? "default" : "ghost"} size="sm" className="gap-1 rounded-none text-xs" onClick={() => setTasksView("table")}>
@@ -453,6 +491,26 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
         <TabsContent value="accomplishments">
           <AccomplishmentsSection projectId={projectId} showAll />
         </TabsContent>
+
+        {/* FUNDED BUSINESS TABS */}
+        {solutionType === "funded_business" && (
+          <>
+            <TabsContent value="business_case"><BusinessCaseTab projectId={projectId} /></TabsContent>
+            <TabsContent value="financial_model"><FinancialModelTab projectId={projectId} /></TabsContent>
+            <TabsContent value="funding_pack"><FundingPackTab projectId={projectId} /></TabsContent>
+          </>
+        )}
+
+        {/* TENDER TABS */}
+        {solutionType === "tender" && (
+          <>
+            <TabsContent value="tender_brief"><TenderBriefTab projectId={projectId} /></TabsContent>
+            <TabsContent value="tender_compliance"><TenderComplianceTab projectId={projectId} /></TabsContent>
+            <TabsContent value="tender_requirements"><TenderRequirementsTab projectId={projectId} /></TabsContent>
+            <TabsContent value="tender_proposal"><TenderProposalTab projectId={projectId} /></TabsContent>
+            <TabsContent value="financial_model"><FinancialModelTab projectId={projectId} /></TabsContent>
+          </>
+        )}
 
         {/* MEETINGS */}
         <TabsContent value="meetings">

@@ -321,6 +321,56 @@ export type Database = {
           },
         ]
       }
+      business_cases: {
+        Row: {
+          created_at: string
+          customer: string
+          deleted_at: string | null
+          id: string
+          model: string
+          offer: string
+          problem: string
+          project_id: string
+          risks_json: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer?: string
+          deleted_at?: string | null
+          id?: string
+          model?: string
+          offer?: string
+          problem?: string
+          project_id: string
+          risks_json?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          customer?: string
+          deleted_at?: string | null
+          id?: string
+          model?: string
+          offer?: string
+          problem?: string
+          project_id?: string
+          risks_json?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_cases_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           created_at: string
@@ -958,6 +1008,65 @@ export type Database = {
         }
         Relationships: []
       }
+      financial_models: {
+        Row: {
+          assumptions_json: Json
+          cashflow_json: Json
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          funding_target_amount: number | null
+          id: string
+          monthly_costs_json: Json
+          pricing_json: Json
+          project_id: string
+          runway_months: number | null
+          startup_costs_json: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assumptions_json?: Json
+          cashflow_json?: Json
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          funding_target_amount?: number | null
+          id?: string
+          monthly_costs_json?: Json
+          pricing_json?: Json
+          project_id: string
+          runway_months?: number | null
+          startup_costs_json?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assumptions_json?: Json
+          cashflow_json?: Json
+          created_at?: string
+          currency?: string
+          deleted_at?: string | null
+          funding_target_amount?: number | null
+          id?: string
+          monthly_costs_json?: Json
+          pricing_json?: Json
+          project_id?: string
+          runway_months?: number | null
+          startup_costs_json?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_models_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funding_cache: {
         Row: {
           created_at: string
@@ -1013,6 +1122,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "funding_cache_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funding_packs: {
+        Row: {
+          ask_amount: number | null
+          created_at: string
+          deadline: string | null
+          deleted_at: string | null
+          id: string
+          milestones_json: Json
+          project_id: string
+          status: string
+          updated_at: string
+          use_of_funds_json: Json
+          user_id: string
+        }
+        Insert: {
+          ask_amount?: number | null
+          created_at?: string
+          deadline?: string | null
+          deleted_at?: string | null
+          id?: string
+          milestones_json?: Json
+          project_id: string
+          status?: string
+          updated_at?: string
+          use_of_funds_json?: Json
+          user_id: string
+        }
+        Update: {
+          ask_amount?: number | null
+          created_at?: string
+          deadline?: string | null
+          deleted_at?: string | null
+          id?: string
+          milestones_json?: Json
+          project_id?: string
+          status?: string
+          updated_at?: string
+          use_of_funds_json?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "funding_packs_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -1753,6 +1912,53 @@ export type Database = {
           },
         ]
       }
+      project_documents: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          doc_type: string
+          expires_at: string | null
+          id: string
+          label: string
+          project_id: string
+          url: string
+          user_id: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          doc_type?: string
+          expires_at?: string | null
+          id?: string
+          label?: string
+          project_id: string
+          url: string
+          user_id: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          doc_type?: string
+          expires_at?: string | null
+          id?: string
+          label?: string
+          project_id?: string
+          url?: string
+          user_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_links: {
         Row: {
           created_at: string
@@ -1784,6 +1990,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "project_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_milestones: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          due_date: string | null
+          evidence_url: string | null
+          id: string
+          project_id: string
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          evidence_url?: string | null
+          id?: string
+          project_id: string
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          due_date?: string | null
+          evidence_url?: string | null
+          id?: string
+          project_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_milestones_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -1955,6 +2208,7 @@ export type Database = {
           name: string
           progress_manual: number
           progress_mode: string
+          solution_type: string
           status: string
           tags: string[] | null
           unblock_eta: string | null
@@ -1974,6 +2228,7 @@ export type Database = {
           name: string
           progress_manual?: number
           progress_mode?: string
+          solution_type?: string
           status?: string
           tags?: string[] | null
           unblock_eta?: string | null
@@ -1993,6 +2248,7 @@ export type Database = {
           name?: string
           progress_manual?: number
           progress_mode?: string
+          solution_type?: string
           status?: string
           tags?: string[] | null
           unblock_eta?: string | null
@@ -2146,6 +2402,294 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tender_compliance_items: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          doc_id: string | null
+          expires_at: string | null
+          id: string
+          item_name: string
+          required: boolean
+          status: string
+          tender_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          doc_id?: string | null
+          expires_at?: string | null
+          id?: string
+          item_name: string
+          required?: boolean
+          status?: string
+          tender_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          doc_id?: string | null
+          expires_at?: string | null
+          id?: string
+          item_name?: string
+          required?: boolean
+          status?: string
+          tender_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tender_compliance_items_tender_id_fkey"
+            columns: ["tender_id"]
+            isOneToOne: false
+            referencedRelation: "tenders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tender_pricing: {
+        Row: {
+          assumptions_json: Json
+          cashflow_impact_json: Json
+          created_at: string
+          deleted_at: string | null
+          id: string
+          margin_pct: number | null
+          pricing_csv_url: string | null
+          tender_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assumptions_json?: Json
+          cashflow_impact_json?: Json
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          margin_pct?: number | null
+          pricing_csv_url?: string | null
+          tender_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assumptions_json?: Json
+          cashflow_impact_json?: Json
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          margin_pct?: number | null
+          pricing_csv_url?: string | null
+          tender_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tender_pricing_tender_id_fkey"
+            columns: ["tender_id"]
+            isOneToOne: false
+            referencedRelation: "tenders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tender_proposals: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          exec_summary: string
+          experience: string
+          id: string
+          methodology: string
+          qa_plan: string
+          risk_mitigation: string
+          team: string
+          tender_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          exec_summary?: string
+          experience?: string
+          id?: string
+          methodology?: string
+          qa_plan?: string
+          risk_mitigation?: string
+          team?: string
+          tender_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          exec_summary?: string
+          experience?: string
+          id?: string
+          methodology?: string
+          qa_plan?: string
+          risk_mitigation?: string
+          team?: string
+          tender_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tender_proposals_tender_id_fkey"
+            columns: ["tender_id"]
+            isOneToOne: false
+            referencedRelation: "tenders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tender_requirements: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          mandatory: boolean
+          requirement: string
+          source_section: string | null
+          status: string
+          tender_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          mandatory?: boolean
+          requirement: string
+          source_section?: string | null
+          status?: string
+          tender_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          mandatory?: boolean
+          requirement?: string
+          source_section?: string | null
+          status?: string
+          tender_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tender_requirements_tender_id_fkey"
+            columns: ["tender_id"]
+            isOneToOne: false
+            referencedRelation: "tenders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tender_submissions: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          method: string
+          proof_url: string | null
+          submitted_at: string
+          tender_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          method?: string
+          proof_url?: string | null
+          submitted_at?: string
+          tender_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          method?: string
+          proof_url?: string | null
+          submitted_at?: string
+          tender_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tender_submissions_tender_id_fkey"
+            columns: ["tender_id"]
+            isOneToOne: false
+            referencedRelation: "tenders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenders: {
+        Row: {
+          briefing_required: boolean
+          closing_at: string | null
+          contact: string | null
+          created_at: string
+          deleted_at: string | null
+          entity: string
+          id: string
+          project_id: string
+          ref_no: string
+          status: string
+          submission_method: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          briefing_required?: boolean
+          closing_at?: string | null
+          contact?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          entity?: string
+          id?: string
+          project_id: string
+          ref_no?: string
+          status?: string
+          submission_method?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          briefing_required?: boolean
+          closing_at?: string | null
+          contact?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          entity?: string
+          id?: string
+          project_id?: string
+          ref_no?: string
+          status?: string
+          submission_method?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenders_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
