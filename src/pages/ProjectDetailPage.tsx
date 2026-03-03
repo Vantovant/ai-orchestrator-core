@@ -39,6 +39,9 @@ import TenderRequirementsTab from "@/components/solutions/TenderRequirementsTab"
 import TenderComplianceTab from "@/components/solutions/TenderComplianceTab";
 import TenderProposalTab from "@/components/solutions/TenderProposalTab";
 import BidReadinessCard from "@/components/solutions/BidReadinessCard";
+import FundableReadinessCard from "@/components/solutions/FundableReadinessCard";
+import MentorBriefCard from "@/components/solutions/MentorBriefCard";
+import UpgradeToSolutionModal from "@/components/solutions/UpgradeToSolutionModal";
 import {
   ArrowLeft, CheckCircle2, CircleDot, PauseCircle, AlertTriangle,
   Plus, Link2, Trash2, ExternalLink, Target, Calendar, FileText,
@@ -65,6 +68,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
   const [editing, setEditing] = useState(false);
   const [blockedModalOpen, setBlockedModalOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   // Edit state
   const [editName, setEditName] = useState("");
@@ -308,6 +312,11 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             )}
           </div>
         </div>
+        {solutionType === "standard" && (
+          <Button variant="outline" size="sm" className="gap-1" onClick={() => setUpgradeOpen(true)}>
+            <Sparkles className="h-3.5 w-3.5" /> Upgrade to Solution
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={startEdit}>Edit</Button>
       </div>
 
@@ -353,8 +362,14 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
               <Card><CardContent className="p-4"><p className="text-sm text-muted-foreground">{p.description}</p></CardContent></Card>
             )}
 
-            {/* Bid Readiness for tenders */}
+            {/* Readiness Cards */}
             {solutionType === "tender" && <BidReadinessCard projectId={projectId} />}
+            {solutionType === "funded_business" && <FundableReadinessCard projectId={projectId} />}
+
+            {/* Mentor Brief for solution types */}
+            {solutionType !== "standard" && (
+              <MentorBriefCard projectId={projectId} projectName={p.name} solutionType={solutionType} />
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               {/* Progress Card */}
@@ -584,6 +599,14 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
         onClose={() => setImportOpen(false)}
         onImport={(tasks) => importTasksMut.mutate(tasks)}
         isPending={importTasksMut.isPending}
+      />
+
+      {/* Upgrade Modal */}
+      <UpgradeToSolutionModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        projectId={projectId}
+        projectName={p.name}
       />
 
       {/* Detail Drawers */}
