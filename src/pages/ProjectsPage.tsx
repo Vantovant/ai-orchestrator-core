@@ -169,6 +169,12 @@ export default function ProjectsPage() {
 function ProjectCard({ project, onClick, onTogglePin }: { project: Project; onClick: () => void; onTogglePin: () => void }) {
   const sc = statusConfig[project.status] ?? statusConfig.active;
   const StatusIcon = sc.icon;
+  const healthConfig: Record<string, { color: string; label: string }> = {
+    on_track: { color: "text-success", label: "On Track" },
+    at_risk: { color: "text-warning", label: "At Risk" },
+    blocked: { color: "text-destructive", label: "Blocked" },
+  };
+  const hc = healthConfig[project.health] || healthConfig.on_track;
 
   return (
     <Card
@@ -204,15 +210,18 @@ function ProjectCard({ project, onClick, onTogglePin }: { project: Project; onCl
           <Progress value={project.progress_manual} className="h-1.5" />
         </div>
 
-        {project.is_blocked && (
-          <Badge variant="destructive" className="text-[10px] gap-1">
-            <AlertTriangle className="h-3 w-3" /> Blocked
-          </Badge>
-        )}
-
-        <div className="flex items-center gap-1.5">
-          <Brain className="h-3 w-3 text-primary/60" />
-          <span className="text-[10px] text-muted-foreground">AI Partner ready</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {project.health === "blocked" && (
+            <Badge variant="destructive" className="text-[10px] gap-1">
+              <AlertTriangle className="h-3 w-3" /> Blocked
+            </Badge>
+          )}
+          {project.health === "at_risk" && (
+            <Badge variant="outline" className="text-[10px] gap-1 text-warning border-warning">
+              <AlertTriangle className="h-3 w-3" /> At Risk
+            </Badge>
+          )}
+          <Badge variant="outline" className={`text-[10px] gap-1 ${hc.color}`}>{hc.label}</Badge>
         </div>
 
         <div className="flex items-center justify-between">
