@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import PageGuide from "@/components/guide/PageGuide";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,6 +122,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="font-bold">VantoOS</span>
         </header>
         <main className="flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
+        <PageGuide />
         <MobileBottomNav />
       </div>
     </div>
