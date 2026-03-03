@@ -86,18 +86,26 @@ serve(async (req) => {
       executiveContext: contextMap,
     };
 
-    // TOKEN DISCIPLINE: hard cap at 3000 chars
+    // TOKEN DISCIPLINE: hard cap at 3000 chars — trim data before serializing
     let snapshotStr = JSON.stringify(snapshot);
-    const was_truncated = snapshotStr.length > SNAPSHOT_HARD_CAP;
-    if (was_truncated) {
-      snapshotStr = snapshotStr.slice(0, SNAPSHOT_HARD_CAP);
+    let was_truncated = false;
+
+    if (snapshotStr.length > SNAPSHOT_HARD_CAP) {
+      was_truncated = true;
+      // Progressively trim until under cap
+      const trimmed: any = { ...snapshot };
+      trimmed.executiveContext = {};
+      snapshotStr = JSON.stringify(trimmed);
+
+      if (snapshotStr.length > SNAPSHOT_HARD_CAP) {
+        trimmed.topTasks = (trimmed.topTasks || []).slice(0, 5);
+        trimmed.urgentReminders = (trimmed.urgentReminders || []).slice(0, 3);
+        snapshotStr = JSON.stringify(trimmed);
+      }
     }
 
-    return new Response(JSON.stringify({
-      ...JSON.parse(was_truncated ? snapshotStr + '"}' : snapshotStr),
-      snapshot_len: Math.min(snapshotStr.length, SNAPSHOT_HARD_CAP),
-      was_truncated,
-    }), {
+    const result = { ...JSON.parse(snapshotStr), snapshot_len: snapshotStr.length, was_truncated };
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
