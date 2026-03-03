@@ -23,6 +23,7 @@ import InvestorReportPage from "@/pages/InvestorReportPage";
 import KnowledgeBasePage from "@/pages/KnowledgeBasePage";
 import TeamPage from "@/pages/TeamPage";
 import UserManualPage from "@/pages/UserManualPage";
+import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ function AppRoutes() {
         <Route path="/investor-report" element={<InvestorReportPage />} />
         <Route path="/testers" element={<TeamPage />} />
         <Route path="/manual" element={<UserManualPage />} />
+        <Route path="/onboarding-emails" element={<OnboardingEmailsPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
