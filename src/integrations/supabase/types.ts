@@ -49,6 +49,51 @@ export type Database = {
           },
         ]
       }
+      ai_call_log: {
+        Row: {
+          byok_user: boolean
+          calling_function: string
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          fallback_provider: string | null
+          id: string
+          primary_provider: string
+          snapshot_len: number
+          used_provider: string
+          user_id: string
+          was_truncated: boolean
+        }
+        Insert: {
+          byok_user?: boolean
+          calling_function?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          fallback_provider?: string | null
+          id?: string
+          primary_provider?: string
+          snapshot_len?: number
+          used_provider?: string
+          user_id: string
+          was_truncated?: boolean
+        }
+        Update: {
+          byok_user?: boolean
+          calling_function?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          fallback_provider?: string | null
+          id?: string
+          primary_provider?: string
+          snapshot_len?: number
+          used_provider?: string
+          user_id?: string
+          was_truncated?: boolean
+        }
+        Relationships: []
+      }
       assistant_runs: {
         Row: {
           created_at: string
@@ -1218,6 +1263,7 @@ export type Database = {
           is_used: boolean
           label: string
           max_uses: number
+          require_byok: boolean
           token: string
           used_at: string | null
           used_by: string | null
@@ -1232,6 +1278,7 @@ export type Database = {
           is_used?: boolean
           label?: string
           max_uses?: number
+          require_byok?: boolean
           token?: string
           used_at?: string | null
           used_by?: string | null
@@ -1246,6 +1293,7 @@ export type Database = {
           is_used?: boolean
           label?: string
           max_uses?: number
+          require_byok?: boolean
           token?: string
           used_at?: string | null
           used_by?: string | null
@@ -2133,8 +2181,10 @@ export type Database = {
         Row: {
           created_at: string
           gemini_key_encrypted: string | null
+          gemini_key_last4: string | null
           id: string
           openai_key_encrypted: string | null
+          openai_key_last4: string | null
           updated_at: string
           use_own_keys: boolean
           user_id: string
@@ -2142,8 +2192,10 @@ export type Database = {
         Insert: {
           created_at?: string
           gemini_key_encrypted?: string | null
+          gemini_key_last4?: string | null
           id?: string
           openai_key_encrypted?: string | null
+          openai_key_last4?: string | null
           updated_at?: string
           use_own_keys?: boolean
           user_id: string
@@ -2151,8 +2203,10 @@ export type Database = {
         Update: {
           created_at?: string
           gemini_key_encrypted?: string | null
+          gemini_key_last4?: string | null
           id?: string
           openai_key_encrypted?: string | null
+          openai_key_last4?: string | null
           updated_at?: string
           use_own_keys?: boolean
           user_id?: string
