@@ -311,6 +311,105 @@ Welcome to the future of executive productivity.
 
 The VantoOS Team`,
   },
+  {
+    day: 11,
+    subject: "Day 11: Become Your Own CFO — Budgets, Bank Imports & AI Finance Mentor 📊",
+    page: "/finance",
+    pageLabel: "Finance Deep-Dive",
+    body: `Hi [First Name],
+
+On Day 5 you got a taste of VantoOS Finance. Today we go deeper — into the tools that turn you into your own CFO.
+
+👉 ${BASE}/finance
+
+THREE POWER FEATURES TO EXPLORE TODAY:
+
+1️⃣ BUDGET COMMAND CENTRE
+• Click the "Budget" tab
+• Add a recurring bill (rent, internet, insurance — anything you pay regularly)
+• Set the cadence (monthly, yearly, or custom) and the due day
+• VantoOS will auto-generate payment events AND warn you 7 days before each one is due
+• Toggle "Autopay" on items that debit automatically so you know what's manual vs automatic
+
+2️⃣ BANK STATEMENT IMPORT
+• Click the "Bank Import" tab
+• Upload a CSV bank statement from your bank
+• VantoOS will parse every transaction, detect merchants, and auto-categorise them (groceries, transport, subscriptions, etc.)
+• You can create custom merchant rules so future imports categorise perfectly
+
+3️⃣ AI FINANCE MENTOR
+• Click the 🤖 icon in the Finance section
+• Ask questions like:
+  - "Where am I overspending?"
+  - "Can I afford to hire someone next month?"
+  - "What's my savings rate?"
+• The mentor analyses YOUR actual data — income streams, expenses, debts, and budget — to give personalised advice
+
+💡 TIP: Log your debts too (Finance → Debts). The AI Mentor factors them into its advice, giving you a complete financial picture.
+
+Tomorrow: Managing government tenders like a pro with TenderOS.
+
+The VantoOS Team`,
+  },
+  {
+    day: 12,
+    subject: "Day 12: Win More Tenders with TenderOS — Your Bid Command Centre 🏛️",
+    page: "/projects",
+    pageLabel: "TenderOS",
+    body: `Hi [First Name],
+
+If you bid on government or corporate tenders, this is the feature you've been waiting for. TenderOS turns the chaos of tender management into a structured, AI-assisted process.
+
+👉 ${BASE}/projects (create a new project → select "TenderOS" as the solution type)
+
+HERE'S HOW TO GET STARTED:
+
+1️⃣ CREATE A TENDER PROJECT
+• Go to Projects → "+ New Project"
+• Give it the tender name (e.g., "DOH Medical Supplies RFQ 2026")
+• Select "TenderOS" as the solution type
+
+2️⃣ UPLOAD THE TENDER DOCUMENT
+• Open your new TenderOS project
+• Go to the "Tender Brief" tab and upload the actual tender PDF
+• The AI will read the document and extract:
+  - Key requirements (mandatory vs optional)
+  - Submission deadlines
+  - Compliance documents needed
+  - Evaluation criteria and weightings
+
+3️⃣ CHECK YOUR BID READINESS SCORE
+• VantoOS calculates a real-time Bid Readiness Score based on:
+  - 40% Requirements coverage — have you addressed every requirement?
+  - 40% Compliance — are your documents (BEE cert, tax clearance, CSD registration) uploaded and valid?
+  - 20% Pricing — is your pricing model complete?
+• Your score updates as you work, so you always know where you stand
+
+4️⃣ COMPLIANCE VAULT
+• Upload your compliance documents (BEE certificate, tax clearance, company registration, etc.)
+• VantoOS tracks expiry dates and warns you before anything lapses
+• No more losing bids because of an expired document!
+
+5️⃣ AI TENDER ASSISTANT
+• Ask the AI questions about the tender document:
+  - "What are the mandatory requirements?"
+  - "Summarise the evaluation criteria"
+  - "What compliance documents do I need?"
+• Every AI answer includes citations from the actual tender document — zero hallucination, fully grounded
+
+💡 TIP: Pin your active tenders to keep them at the top of your Projects list. Use the deadline reminders to never miss a submission date.
+
+🎉 That's the end of your onboarding journey! You now know every major feature in VantoOS.
+
+Remember:
+• ❓ Help button on every page for step-by-step guidance
+• 📖 User Manual: ${BASE}/manual
+• 🤖 Your AI Portfolio Partner gets smarter the more you use VantoOS
+
+Welcome to the future of executive productivity.
+
+The VantoOS Team`,
+  },
 ];
 
 function generateDownloadHTML() {
