@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileWizard from "@/components/settings/ProfileWizard";
+import AIKeysSettings from "@/components/settings/AIKeysSettings";
 
 const CONTEXT_CHAR_LIMIT = 500;
 
@@ -363,6 +364,9 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* BYOK Settings */}
+      <AIKeysSettings />
 
       {/* Data Export */}
       <Card>

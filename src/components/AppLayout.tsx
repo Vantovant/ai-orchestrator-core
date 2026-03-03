@@ -3,7 +3,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users
 } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -19,6 +19,7 @@ const navItems = [
   { to: "/investor-report", label: "Reports", icon: FileText },
   { to: "/travel", label: "Travel", icon: Plane },
   { to: "/shopping", label: "Shopping", icon: ShoppingCart },
+  { to: "/testers", label: "Testers", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

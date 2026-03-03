@@ -1208,6 +1208,51 @@ export type Database = {
         }
         Relationships: []
       }
+      invites: {
+        Row: {
+          cohort: string | null
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          is_used: boolean
+          label: string
+          max_uses: number
+          token: string
+          used_at: string | null
+          used_by: string | null
+          uses_count: number
+        }
+        Insert: {
+          cohort?: string | null
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          is_used?: boolean
+          label?: string
+          max_uses?: number
+          token?: string
+          used_at?: string | null
+          used_by?: string | null
+          uses_count?: number
+        }
+        Update: {
+          cohort?: string | null
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          is_used?: boolean
+          label?: string
+          max_uses?: number
+          token?: string
+          used_at?: string | null
+          used_by?: string | null
+          uses_count?: number
+        }
+        Relationships: []
+      }
       kb_files: {
         Row: {
           created_at: string
@@ -2060,6 +2105,60 @@ export type Database = {
           },
         ]
       }
+      user_activity: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_ai_keys: {
+        Row: {
+          created_at: string
+          gemini_key_encrypted: string | null
+          id: string
+          openai_key_encrypted: string | null
+          updated_at: string
+          use_own_keys: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          gemini_key_encrypted?: string | null
+          id?: string
+          openai_key_encrypted?: string | null
+          updated_at?: string
+          use_own_keys?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          gemini_key_encrypted?: string | null
+          id?: string
+          openai_key_encrypted?: string | null
+          updated_at?: string
+          use_own_keys?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_preferences: {
         Row: {
           created_at: string
@@ -2086,6 +2185,27 @@ export type Database = {
           preference_key?: string
           preference_value?: Json
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
         Relationships: []
@@ -2145,10 +2265,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2275,6 +2401,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+    },
   },
 } as const

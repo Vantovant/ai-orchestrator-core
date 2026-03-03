@@ -19,10 +19,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Redeem invite code after email confirmation
+      if (event === "SIGNED_IN" && session?.user) {
+        const inviteCode = localStorage.getItem("vanto_invite_code");
+        if (inviteCode) {
+          localStorage.removeItem("vanto_invite_code");
+          try {
+            await supabase.functions.invoke("invite-check", {
+              body: { action: "redeem", token: inviteCode, user_id: session.user.id },
+            });
+          } catch {
+            // Silent fail - invite may already be redeemed
+          }
+        }
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
