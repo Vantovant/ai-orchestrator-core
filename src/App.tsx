@@ -22,6 +22,7 @@ import PortfolioPartnerPage from "@/pages/PortfolioPartnerPage";
 import InvestorReportPage from "@/pages/InvestorReportPage";
 import KnowledgeBasePage from "@/pages/KnowledgeBasePage";
 import TeamPage from "@/pages/TeamPage";
+import UserManualPage from "@/pages/UserManualPage";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ function AppRoutes() {
         <Route path="/knowledge" element={<KnowledgeBasePage />} />
         <Route path="/investor-report" element={<InvestorReportPage />} />
         <Route path="/testers" element={<TeamPage />} />
+        <Route path="/manual" element={<UserManualPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
