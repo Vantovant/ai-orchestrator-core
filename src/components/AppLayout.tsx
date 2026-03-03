@@ -6,6 +6,7 @@ import {
   LayoutDashboard, ClipboardList, Mail,
   DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus
 } from "lucide-react";
+import vantoosLogo from "@/assets/vantoos-logo.png";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,11 +52,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
-        <div className="h-8 w-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-          <span className="text-sm font-bold text-sidebar-primary-foreground">V</span>
-        </div>
-        <span className="text-lg font-bold">VantoOS</span>
+      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
+        <img src={vantoosLogo} alt="VantoOS" className="h-9 w-auto" />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNav.map(({ to, label, icon: Icon }) => (
@@ -133,7 +131,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarNav onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
-          <span className="font-bold">VantoOS</span>
+          <img src={vantoosLogo} alt="VantoOS" className="h-7 w-auto" />
         </header>
         <main className="flex-1 overflow-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
         <PageGuide />

@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import vantoosLogo from "@/assets/vantoos-logo.png";
 
 export default function AuthPage() {
   const { signIn, signUp } = useAuth();
@@ -74,8 +75,8 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">VantoOS</CardTitle>
+        <CardHeader className="text-center space-y-3">
+          <img src={vantoosLogo} alt="VantoOS" className="h-12 w-auto mx-auto" />
           <CardDescription>Executive AI Command Center</CardDescription>
         </CardHeader>
         <CardContent>
