@@ -52,8 +52,8 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <>
-      <div className="flex items-center justify-center border-b border-sidebar-border px-1 py-5">
-        <img src={vantoosLogo} alt="VantoOS" className="w-full max-w-[15rem] h-auto" />
+      <div className="flex items-center justify-center border-b border-sidebar-border p-1">
+        <img src={vantoosLogo} alt="VantoOS" className="w-full h-auto scale-110" />
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNav.map(({ to, label, icon: Icon }) => (
