@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 import AuthPage from "@/pages/AuthPage";
 import AppLayout from "@/components/AppLayout";
 import DashboardPage from "@/pages/DashboardPage";
@@ -20,11 +21,13 @@ import AdminHealthPage from "@/pages/AdminHealthPage";
 import PortfolioPartnerPage from "@/pages/PortfolioPartnerPage";
 import InvestorReportPage from "@/pages/InvestorReportPage";
 import KnowledgeBasePage from "@/pages/KnowledgeBasePage";
+import TeamPage from "@/pages/TeamPage";
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  useActivityTracker();
 
   if (loading) {
     return (
@@ -57,6 +60,7 @@ function AppRoutes() {
         <Route path="/dashboard/partner" element={<PortfolioPartnerPage />} />
         <Route path="/knowledge" element={<KnowledgeBasePage />} />
         <Route path="/investor-report" element={<InvestorReportPage />} />
+        <Route path="/testers" element={<TeamPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
