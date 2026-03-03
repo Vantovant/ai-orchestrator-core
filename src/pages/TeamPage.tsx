@@ -126,18 +126,47 @@ export default function TeamPage() {
   };
 
   const copyToken = (token: string, label?: string) => {
-    const signupUrl = "https://vantoos-ai-core.lovable.app";
-    const message = `You've been invited to join VantoOS — an AI-powered executive operating system designed for founders, operators, and teams who want to manage projects, tasks, finances, and knowledge in one intelligent workspace.
+    const signupUrl = "https://executive.onlinecourseformlm.com/";
+    const message = `🚀 YOU'RE INVITED TO JOIN VANTOOS — BETA ACCESS
 
-📋 Purpose: ${label || "Tester access"} — You're being onboarded as an agent/tester to explore and validate the platform.
+Hi there,
 
-🔗 Sign up here: ${signupUrl}
+You've been personally selected to join the VantoOS Beta Programme — an AI-powered Executive Operating System built for founders, operators, and ambitious teams across South Africa and beyond.
 
-🔑 Your invite code: ${token}
+VantoOS brings together project management, task tracking, finance oversight, knowledge base, and AI-powered strategic guidance — all in one intelligent workspace. Think of it as your AI Chief of Staff.
 
-Enter this code during registration to activate your account. The code may have limited uses, so please sign up promptly.
+📋 Your Role: ${label || "Beta Tester"} — You're being onboarded to explore, test, and help shape the platform before public launch.
 
-Welcome aboard!`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📌 HOW TO GET STARTED:
+
+1️⃣  Click the link below to open the VantoOS sign-up page:
+    🔗 ${signupUrl}
+
+2️⃣  On the sign-up page, click "Need an account? Sign up" at the bottom.
+
+3️⃣  Enter your email address and choose a password (minimum 6 characters).
+
+4️⃣  You'll see an "Invite code" field — paste this code:
+    🔑 ${token}
+
+5️⃣  Click the "Verify" button next to the code to confirm it's valid. You should see a green "✓ Valid" badge.
+
+6️⃣  Click "Sign Up" to create your account.
+
+7️⃣  Check your email inbox for a confirmation link — click it to activate your account.
+
+8️⃣  Once confirmed, return to the link above and sign in with your credentials.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Important Notes:
+• This invite code has limited uses — please sign up promptly.
+• If you experience any issues, contact the person who sent you this invite.
+• Your feedback during the beta phase is invaluable — explore everything!
+
+Welcome aboard, and thank you for being part of the journey! 🙌`;
     navigator.clipboard.writeText(message);
     toast.success("Invite message with code copied to clipboard!");
   };
