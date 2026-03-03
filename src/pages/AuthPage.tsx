@@ -63,6 +63,23 @@ export default function AuthPage() {
         // Store invite code for post-confirmation redemption
         localStorage.setItem("vanto_invite_code", inviteCode);
 
+        // Auto-enroll in onboarding email sequence
+        try {
+          const firstName = email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+          await fetch("https://wwuenmmocxtwwgylngui.supabase.co/functions/v1/save-prospect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              first_name: firstName,
+              source: "vantoos_signup",
+              sequence_id: "0f23eef6-6c16-4f9f-9357-8a67e358abe2",
+            }),
+          });
+        } catch (seqErr) {
+          console.warn("Onboarding sequence enrollment failed:", seqErr);
+        }
+
         toast.success("Check your email to confirm your account");
       }
     } catch (err: any) {
