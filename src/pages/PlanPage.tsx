@@ -334,23 +334,22 @@ export default function PlanPage() {
   // Command bar
   const [commandBarOpen, setCommandBarOpen] = useState(false);
 
-  // ⌘K shortcut
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setCommandBarOpen(prev => !prev);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
+  // Highlight support from query params
+  const highlightParam = searchParams.get("highlight");
+  const sourceParam = searchParams.get("source");
+  const noteDateParam = searchParams.get("note_date");
+  const projectIdParam = searchParams.get("project_id");
+  const [highlightIds, setHighlightIds] = useState<Set<string>>(new Set());
 
-  // Search/filter state for lists
-  const [taskSearch, setTaskSearch] = useState("");
-  const [taskFilter, setTaskFilter] = useState<string>("all");
-  const [reminderFilter, setReminderFilter] = useState<string>("all");
-  const [meetingSearch, setMeetingSearch] = useState("");
+  useEffect(() => {
+    if (highlightParam) {
+      const ids = new Set(highlightParam.split(",").filter(Boolean));
+      setHighlightIds(ids);
+      // Auto-clear highlight after 4 seconds
+      const timer = setTimeout(() => setHighlightIds(new Set()), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightParam]);
 
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
