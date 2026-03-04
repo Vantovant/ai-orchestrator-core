@@ -619,16 +619,15 @@ document.getElementById("btn-apply-tasks").addEventListener("click", async () =>
   try {
     for (const action of selectedActions) {
       try {
-        // Use capture-web's existing task creation via extension-tasks or direct insert
-        // Create task via the tasks endpoint with dedupe
-        const result = await apiCall("extension-tasks", {
+        const result = await apiCall("extension-task-create", {
           method: "POST",
           body: {
             title: action.title,
             priority: action.priority || "medium",
             project_id: projectId || undefined,
             source: "smart-capture",
-            dedupe_key: `smart-${state.smartCaptureResult.source_context_id}-${action.title.toLowerCase().replace(/\s+/g, "-").slice(0, 50)}`,
+            source_context_id: state.smartCaptureResult.source_context_id || undefined,
+            dedupe_key: `smart-${state.smartCaptureResult.source_context_id || "none"}-${action.title.toLowerCase().replace(/\s+/g, "-").slice(0, 50)}`,
           },
         });
         if (result.action === "merged") {
@@ -637,9 +636,8 @@ document.getElementById("btn-apply-tasks").addEventListener("click", async () =>
           created++;
         }
       } catch (e) {
-        // If task creation fails, count as created (best effort)
         console.error("Task apply error:", e);
-        created++;
+        showToast(`❌ Failed: ${e.message}`, "error");
       }
     }
 

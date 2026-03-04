@@ -110,3 +110,6 @@ verify_jwt = false
 
 [functions.assistant-help]
 verify_jwt = false
+
+[functions.extension-task-create]
+verify_jwt = false
