@@ -772,6 +772,60 @@ export type Database = {
         }
         Relationships: []
       }
+      extension_pairing_codes: {
+        Row: {
+          code: string
+          created_at: string
+          expires_at: string
+          id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      extension_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          revoked_at: string | null
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          revoked_at?: string | null
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          revoked_at?: string | null
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       finance_budget_events: {
         Row: {
           amount: number
@@ -1959,6 +2013,60 @@ export type Database = {
           },
         ]
       }
+      project_inbox_items: {
+        Row: {
+          body: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          project_id: string
+          source_context_id: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          project_id: string
+          source_context_id?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          project_id?: string
+          source_context_id?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_inbox_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_inbox_items_source_context_id_fkey"
+            columns: ["source_context_id"]
+            isOneToOne: false
+            referencedRelation: "source_context"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_links: {
         Row: {
           created_at: string
@@ -2313,6 +2421,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      source_context: {
+        Row: {
+          captured_at: string
+          created_at: string
+          dedupe_key: string
+          domain: string | null
+          id: string
+          metadata_json: Json
+          snippet_text: string | null
+          source_title: string | null
+          source_type: string
+          source_url: string
+          user_id: string
+        }
+        Insert: {
+          captured_at?: string
+          created_at?: string
+          dedupe_key: string
+          domain?: string | null
+          id?: string
+          metadata_json?: Json
+          snippet_text?: string | null
+          source_title?: string | null
+          source_type?: string
+          source_url: string
+          user_id: string
+        }
+        Update: {
+          captured_at?: string
+          created_at?: string
+          dedupe_key?: string
+          domain?: string | null
+          id?: string
+          metadata_json?: Json
+          snippet_text?: string | null
+          source_title?: string | null
+          source_type?: string
+          source_url?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       tags: {
         Row: {
@@ -2762,6 +2912,33 @@ export type Database = {
           openai_key_last4?: string | null
           updated_at?: string
           use_own_keys?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_allowed_domains: {
+        Row: {
+          created_at: string
+          domain: string
+          enabled: boolean
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          domain: string
+          enabled?: boolean
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string
+          enabled?: boolean
+          id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

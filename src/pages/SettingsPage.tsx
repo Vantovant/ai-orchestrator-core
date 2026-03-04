@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contextService } from "@/services/contextService";
 import { financeEntryService, debtService } from "@/services/financeService";
@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag, Bot, Sparkles } from "lucide-react";
+import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag, Bot, Sparkles, Puzzle, Copy, Globe, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -86,6 +86,129 @@ function SecretarySettingsCard() {
             <p className="text-xs text-muted-foreground">AI summary when opening notes</p>
           </div>
           <Switch checked={settings.end_of_day_review} onCheckedChange={(v) => toggle("end_of_day_review", v)} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ExtensionSettings() {
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [domains, setDomains] = useState<{ id: string; domain: string; enabled: boolean }[]>([]);
+  const [newDomain, setNewDomain] = useState("");
+  const [loadingDomains, setLoadingDomains] = useState(true);
+
+  const loadDomains = useCallback(async () => {
+    setLoadingDomains(true);
+    const { data } = await supabase.from("user_allowed_domains").select("*").order("created_at", { ascending: true });
+    setDomains((data as any[]) ?? []);
+    setLoadingDomains(false);
+  }, []);
+
+  useEffect(() => { loadDomains(); }, [loadDomains]);
+
+  const generateCode = async () => {
+    setGenerating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not logged in");
+      const res = await supabase.functions.invoke("extension-pair", {
+        method: "POST",
+        body: {},
+      });
+      if (res.error) throw res.error;
+      setPairingCode(res.data.code);
+      setExpiresAt(res.data.expires_at);
+      toast.success("Pairing code generated");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to generate code");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyCode = () => {
+    if (pairingCode) {
+      navigator.clipboard.writeText(pairingCode);
+      toast.success("Code copied");
+    }
+  };
+
+  const addDomain = async () => {
+    const domain = newDomain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    if (!domain) return;
+    const { error } = await supabase.from("user_allowed_domains").insert({ user_id: (await supabase.auth.getUser()).data.user!.id, domain });
+    if (error) {
+      if (error.code === "23505") toast.error("Domain already exists");
+      else toast.error(error.message);
+      return;
+    }
+    setNewDomain("");
+    loadDomains();
+    toast.success(`Added ${domain}`);
+  };
+
+  const removeDomain = async (id: string) => {
+    await supabase.from("user_allowed_domains").delete().eq("id", id);
+    loadDomains();
+    toast.success("Domain removed");
+  };
+
+  const toggleDomain = async (id: string, enabled: boolean) => {
+    await supabase.from("user_allowed_domains").update({ enabled: !enabled }).eq("id", id);
+    loadDomains();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2"><Puzzle className="h-4 w-4" /> Chrome Extension</CardTitle>
+        <CardDescription>Pair the VantoOS Companion extension and manage allowed capture domains.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Pairing */}
+        <div>
+          <p className="text-sm font-medium mb-2">Pair Extension</p>
+          {pairingCode ? (
+            <div className="flex items-center gap-2">
+              <code className="bg-muted px-3 py-2 rounded-md text-lg font-mono tracking-widest">{pairingCode}</code>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyCode}><Copy className="h-3.5 w-3.5" /></Button>
+              <span className="text-xs text-muted-foreground">Expires {expiresAt ? new Date(expiresAt).toLocaleTimeString() : "soon"}</span>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={generateCode} disabled={generating}>
+              {generating ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Generating…</> : "Generate Pairing Code"}
+            </Button>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">Paste this code in the extension's Settings tab to connect.</p>
+        </div>
+
+        {/* Domains */}
+        <div>
+          <p className="text-sm font-medium mb-2 flex items-center gap-1"><Globe className="h-3.5 w-3.5" /> Allowed Capture Domains</p>
+          {loadingDomains ? (
+            <Skeleton className="h-16" />
+          ) : domains.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No domains configured. Add domains the extension can capture from.</p>
+          ) : (
+            <div className="space-y-1">
+              {domains.map(d => (
+                <div key={d.id} className="flex items-center justify-between rounded border border-border px-3 py-1.5">
+                  <span className="text-sm font-mono">{d.domain}</span>
+                  <div className="flex items-center gap-1">
+                    <Switch checked={d.enabled} onCheckedChange={() => toggleDomain(d.id, d.enabled)} />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => removeDomain(d.id)}><Trash2 className="h-3 w-3" /></Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2 mt-2">
+            <Input placeholder="e.g. app.example.com" value={newDomain} onChange={e => setNewDomain(e.target.value)} onKeyDown={e => e.key === "Enter" && addDomain()} className="flex-1" />
+            <Button variant="outline" size="sm" onClick={addDomain}><Plus className="h-3.5 w-3.5 mr-1" /> Add</Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -364,6 +487,9 @@ export default function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Chrome Extension */}
+      <ExtensionSettings />
 
       {/* BYOK Settings */}
       <AIKeysSettings />
