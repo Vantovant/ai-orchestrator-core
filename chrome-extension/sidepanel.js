@@ -232,6 +232,9 @@ async function loadDomains() {
     state.domains = await apiCall("extension-domains");
     await checkAllDomainPermissions();
     renderDomains();
+    // Sync allowed domains to storage for content script injection
+    const allowedDomains = state.domains.filter(d => d.enabled).map(d => d.domain);
+    chrome.storage.local.set({ vantoos_allowed_domains: allowedDomains });
   } catch (e) {
     console.error("Failed to load domains", e);
     state.domains = [];
