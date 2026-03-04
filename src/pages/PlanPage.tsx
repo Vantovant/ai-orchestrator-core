@@ -359,6 +359,7 @@ export default function PlanPage() {
   const [taskSearch, setTaskSearch] = useState("");
   const [taskFilter, setTaskFilter] = useState<string>("all");
   const [taskSort, setTaskSort] = useState<"latest" | "due_date" | "priority">("latest");
+  const [tasksView, setTasksView] = useState<"table" | "board" | "timeline">("table");
   const [reminderFilter, setReminderFilter] = useState<string>("all");
   const [meetingSearch, setMeetingSearch] = useState("");
 
