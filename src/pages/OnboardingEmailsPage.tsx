@@ -289,7 +289,7 @@ SETTINGS ⚙️
 👉 ${BASE}/settings
 
 • Complete your Profile Wizard — this helps the AI understand your industry, role, and preferences
-• You DON'T need your own AI keys — VantoOS includes AI access by default
+• To guarantee absolute data sovereignty for this private cohort, a personal OpenAI or Gemini key is required. Go to Settings → AI Keys to connect yours.
 
 REPORTS 📊
 👉 ${BASE}/investor-report

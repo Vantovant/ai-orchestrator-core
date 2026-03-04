@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import ProjectDetailPage from "@/pages/ProjectDetailPage";
+import DemoTenderWizard from "@/components/projects/DemoTenderWizard";
 
 const statusConfig: Record<string, { icon: any; color: string; label: string }> = {
   active: { icon: CircleDot, color: "text-success", label: "Active" },
@@ -31,6 +32,7 @@ export default function ProjectsPage() {
   const [filter, setFilter] = useState<string>("all");
   const [solutionFilter, setSolutionFilter] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
+  const [demoWizardOpen, setDemoWizardOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Form state
@@ -86,9 +88,14 @@ export default function ProjectsPage() {
           </h1>
           <p className="text-sm text-muted-foreground">Personal project command center</p>
         </div>
-        <Button className="gap-1" onClick={() => setAddOpen(true)}>
-          <Plus className="h-4 w-4" /> New Project
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-1" onClick={() => setDemoWizardOpen(true)}>
+            <Gavel className="h-4 w-4" /> Demo Tender
+          </Button>
+          <Button className="gap-1" onClick={() => setAddOpen(true)}>
+            <Plus className="h-4 w-4" /> New Project
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -186,6 +193,15 @@ export default function ProjectsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <DemoTenderWizard
+        open={demoWizardOpen}
+        onOpenChange={setDemoWizardOpen}
+        onProjectCreated={(id) => {
+          qc.invalidateQueries({ queryKey: ["projects"] });
+          setSelectedProjectId(id);
+        }}
+      />
     </div>
   );
 }

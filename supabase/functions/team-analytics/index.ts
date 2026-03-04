@@ -53,6 +53,9 @@ serve(async (req) => {
       // Get AI runs
       const { data: aiRuns } = await db.from("assistant_runs").select("user_id, result_json, created_at").order("created_at", { ascending: false }).limit(5000);
 
+      // Get AI call logs (for blocked events)
+      const { data: aiCallLogs } = await db.from("ai_call_log").select("user_id, used_provider, error_code").limit(10000);
+
       // Get user AI keys
       const { data: aiKeys } = await db.from("user_ai_keys").select("user_id, use_own_keys");
 
@@ -80,8 +83,12 @@ serve(async (req) => {
         const providersUsed = new Set<string>();
         userAiRuns.forEach(r => {
           const res = r.result_json as any;
-          if (res?.provider_used && res.provider_used !== "none") providersUsed.add(res.provider_used);
+          if (res?.provider_used && res.provider_used !== "none" && res.provider_used !== "lovable") providersUsed.add(res.provider_used);
         });
+
+        // Count blocked events from ai_call_log
+        const userCallLogs = (aiCallLogs ?? []).filter(l => l.user_id === uid);
+        const blockedCount = userCallLogs.filter(l => l.used_provider === "blocked_missing_byok").length;
 
         const lastActivity = userActivities.length > 0 ? userActivities[0].created_at : null;
 
@@ -101,6 +108,7 @@ serve(async (req) => {
           aiErrors,
           providersUsed: Array.from(providersUsed),
           hasOwnKey: userAiKey?.use_own_keys ?? false,
+          blockedCount,
         };
       });
 
