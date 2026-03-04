@@ -351,6 +351,12 @@ export default function PlanPage() {
     }
   }, [highlightParam]);
 
+  // Search/filter state for lists
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilter, setTaskFilter] = useState<string>("all");
+  const [reminderFilter, setReminderFilter] = useState<string>("all");
+  const [meetingSearch, setMeetingSearch] = useState("");
+
   const qc = useQueryClient();
   const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
