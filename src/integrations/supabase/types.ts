@@ -2348,11 +2348,13 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string
+          dedupe_key: string | null
           deleted_at: string | null
           description: string | null
           due_date: string | null
           estimated_minutes: number | null
           id: string
+          note_id: string | null
           order_index: number
           priority: string
           project_id: string | null
@@ -2366,11 +2368,13 @@ export type Database = {
         Insert: {
           completed_at?: string | null
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
           id?: string
+          note_id?: string | null
           order_index?: number
           priority?: string
           project_id?: string | null
@@ -2384,11 +2388,13 @@ export type Database = {
         Update: {
           completed_at?: string | null
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
           id?: string
+          note_id?: string | null
           order_index?: number
           priority?: string
           project_id?: string | null
