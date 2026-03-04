@@ -18,8 +18,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckSquare, Bell, Calendar as CalendarIcon, Clock, MapPin,
-  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search, FolderKanban
+  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search, FolderKanban,
+  LayoutList, Kanban, GanttChart
 } from "lucide-react";
+import TasksTableView from "@/components/projects/TasksTableView";
+import TasksBoardView from "@/components/projects/TasksBoardView";
+import TasksTimelineView from "@/components/projects/TasksTimelineView";
 import { toast } from "sonner";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
 import ClientTagPicker from "@/components/clients/ClientTagPicker";
