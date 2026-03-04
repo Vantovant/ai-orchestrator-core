@@ -365,6 +365,9 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Chrome Extension */}
+      <ExtensionSettings />
+
       {/* BYOK Settings */}
       <AIKeysSettings />
 
