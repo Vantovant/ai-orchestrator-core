@@ -38,6 +38,19 @@ Deno.serve(async (req) => {
 
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    if (sort === "priority") {
+      // Use RPC to get proper CASE-based priority ordering
+      const { data, error } = await sb.rpc("get_tasks_by_priority", {
+        p_user_id: userId,
+        p_project_id: projectId,
+        p_limit: limit,
+      });
+      if (error) throw error;
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     let query = sb
       .from("tasks")
       .select("id, title, status, priority, due_date, project_id, created_at, last_touched_at")
@@ -48,16 +61,6 @@ Deno.serve(async (req) => {
 
     if (sort === "due_date") {
       query = query.order("due_date", { ascending: true, nullsFirst: false });
-    } else if (sort === "priority") {
-      // priority stored as text: critical, high, medium, low
-      // ascending=true would put critical first alphabetically? No.
-      // We need critical > high > medium > low, so descending alpha doesn't work either.
-      // Use a raw order approach: just order descending so "medium" < "low" < "high" < "critical"
-      // Actually alpha desc: m > l > h > c — wrong.
-      // Best: fetch and sort client-side, or use order by priority asc (c,h,l,m) then fix.
-      // Since we can't use custom SQL order here, let's order ascending (c, h, l, m) which is close enough:
-      // critical first, high second — that's correct!
-      query = query.order("priority", { ascending: true }).order("last_touched_at", { ascending: false });
     } else {
       // "latest" — match VantoOS: last_touched_at DESC, created_at DESC
       query = query.order("last_touched_at", { ascending: false }).order("created_at", { ascending: false });

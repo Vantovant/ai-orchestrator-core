@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectService, type Project, type ProjectInsert } from "@/services/projectService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,15 @@ export default function ProjectsPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [demoWizardOpen, setDemoWizardOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // Deep link support: read ?id= from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const idParam = params.get("id");
+    if (idParam) {
+      setSelectedProjectId(idParam);
+    }
+  }, []);
 
   // Form state
   const [name, setName] = useState("");
