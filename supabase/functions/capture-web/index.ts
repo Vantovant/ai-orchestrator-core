@@ -166,8 +166,9 @@ Deno.serve(async (req) => {
     }
 
     // Build deep link
+    // Deep link matches VantoOS routing: /projects?id=:projectId&tab=inbox&highlight=:inboxItemId
     const deepLinkUrl = project_id
-      ? `${APP_URL}/projects/${project_id}`
+      ? `${APP_URL}/projects?id=${project_id}&tab=inbox${inboxItemId ? `&highlight=${inboxItemId}` : ""}`
       : `${APP_URL}/projects`;
 
     return new Response(JSON.stringify({
