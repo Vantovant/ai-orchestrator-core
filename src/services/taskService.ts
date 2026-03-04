@@ -14,12 +14,32 @@ export interface Task {
   source: string | null;
   estimated_minutes: number | null;
   project_id: string | null;
+  dedupe_key: string | null;
+  note_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
 }
 
-export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "start_date" | "completed_at" | "order_index" | "source" | "estimated_minutes" | "project_id">>;
+export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "start_date" | "completed_at" | "order_index" | "source" | "estimated_minutes" | "project_id" | "dedupe_key" | "note_id">>;
+
+export interface BulkUpsertResult {
+  created: string[];
+  merged: string[];
+  failed: { title: string; reason: string }[];
+}
+
+/** Generate a stable dedupe key from components */
+export function makeDedupe(userId: string, projectId: string | null, noteId: string | null, text: string): string {
+  const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+  const raw = `${userId}|${projectId ?? ""}|${noteId ?? ""}|${normalized}`;
+  // Simple hash – djb2
+  let hash = 5381;
+  for (let i = 0; i < raw.length; i++) {
+    hash = ((hash << 5) + hash + raw.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
 
 export const taskService = {
   async list() {
@@ -62,5 +82,61 @@ export const taskService = {
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id);
     if (error) throw error;
+  },
+
+  /**
+   * Bulk upsert tasks with dedupe_key. Returns created/merged/failed breakdown.
+   */
+  async bulkUpsert(tasks: TaskInsert[]): Promise<BulkUpsertResult> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const result: BulkUpsertResult = { created: [], merged: [], failed: [] };
+
+    for (const task of tasks) {
+      try {
+        if (task.dedupe_key) {
+          // Check if exists
+          const { data: existing } = await supabase
+            .from("tasks")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("dedupe_key", task.dedupe_key)
+            .is("deleted_at", null)
+            .maybeSingle();
+
+          if (existing) {
+            // Merge – update fields that may have changed
+            const { data, error } = await supabase
+              .from("tasks")
+              .update({
+                description: task.description,
+                priority: task.priority,
+                due_date: task.due_date,
+                source: task.source,
+              })
+              .eq("id", existing.id)
+              .select()
+              .single();
+            if (error) throw error;
+            result.merged.push(data.id);
+            continue;
+          }
+        }
+
+        // Create new
+        const { data, error } = await supabase
+          .from("tasks")
+          .insert({ ...task, user_id: user.id })
+          .select()
+          .single();
+        if (error) throw error;
+        result.created.push(data.id);
+      } catch (e: any) {
+        result.failed.push({ title: task.title, reason: e.message || "Unknown error" });
+      }
+    }
+
+    return result;
   },
 };
