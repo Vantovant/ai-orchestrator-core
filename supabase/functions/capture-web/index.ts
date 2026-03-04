@@ -5,6 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-extension-token",
 };
 
+const APP_URL = "https://vantoos-ai-core.lovable.app";
+
 async function hashString(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
@@ -32,7 +34,7 @@ async function resolveUser(req: Request): Promise<{ userId: string }> {
       .maybeSingle();
 
     if (data) return { userId: data.user_id };
-    throw new Error("Invalid extension token");
+    throw new Error("Unauthorized");
   }
 
   // Fall back to Supabase auth
@@ -83,7 +85,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Dedupe key
+    // Dedupe key for source_context
     const normalizedText = (selected_text || "").toLowerCase().replace(/\s+/g, " ").trim();
     const dedupeInput = `${userId}|${project_id || ""}|${url}|${normalizedText}`;
     const dedupeKey = await hashString(dedupeInput);
@@ -97,7 +99,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     let sourceContextId: string;
-    let action: "created" | "merged";
+    let action: "created" | "merged" = "created";
 
     if (existing) {
       sourceContextId = existing.id;
@@ -118,32 +120,62 @@ Deno.serve(async (req) => {
         .single();
       if (insErr) throw insErr;
       sourceContextId = inserted.id;
-      action = "created";
     }
 
-    // If project_id provided, create inbox item
+    // If project_id provided, upsert inbox item (dedupe on user_id+project_id+source_context_id)
     let inboxItemId: string | null = null;
+    let inboxAction: "created" | "merged" | null = null;
+
     if (project_id) {
-      const { data: inbox, error: inboxErr } = await supabaseAdmin
+      // Check existing
+      const { data: existingInbox } = await supabaseAdmin
         .from("project_inbox_items")
-        .insert({
-          user_id: userId,
-          project_id,
-          title: title || url,
-          body: selected_text || page_summary || null,
-          source_context_id: sourceContextId,
-        })
         .select("id")
-        .single();
-      if (inboxErr) throw inboxErr;
-      inboxItemId = inbox.id;
+        .eq("user_id", userId)
+        .eq("project_id", project_id)
+        .eq("source_context_id", sourceContextId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (existingInbox) {
+        inboxItemId = existingInbox.id;
+        inboxAction = "merged";
+        // Update title/body on merge
+        await supabaseAdmin
+          .from("project_inbox_items")
+          .update({ title: title || url, body: selected_text || page_summary || null })
+          .eq("id", existingInbox.id);
+      } else {
+        const { data: inbox, error: inboxErr } = await supabaseAdmin
+          .from("project_inbox_items")
+          .insert({
+            user_id: userId,
+            project_id,
+            title: title || url,
+            body: selected_text || page_summary || null,
+            source_context_id: sourceContextId,
+          })
+          .select("id")
+          .single();
+        if (inboxErr) throw inboxErr;
+        inboxItemId = inbox.id;
+        inboxAction = "created";
+      }
+      // If inbox merged but source_context was created, overall action is still "created"
+      if (action === "created" || inboxAction === "created") action = "created";
     }
+
+    // Build deep link
+    const deepLinkUrl = project_id
+      ? `${APP_URL}/projects/${project_id}`
+      : `${APP_URL}/projects`;
 
     return new Response(JSON.stringify({
       action,
       source_context_id: sourceContextId,
       inbox_item_id: inboxItemId,
       project_id: project_id || null,
+      deep_link_url: deepLinkUrl,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

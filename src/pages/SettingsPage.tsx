@@ -96,6 +96,7 @@ function ExtensionSettings() {
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [domains, setDomains] = useState<{ id: string; domain: string; enabled: boolean }[]>([]);
   const [newDomain, setNewDomain] = useState("");
   const [loadingDomains, setLoadingDomains] = useState(true);
@@ -133,6 +134,25 @@ function ExtensionSettings() {
     if (pairingCode) {
       navigator.clipboard.writeText(pairingCode);
       toast.success("Code copied");
+    }
+  };
+
+  const revokeTokens = async () => {
+    setRevoking(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not logged in");
+      const { error } = await supabase
+        .from("extension_tokens")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("user_id", user.id)
+        .is("revoked_at", null);
+      if (error) throw error;
+      toast.success("All extension tokens revoked");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to revoke tokens");
+    } finally {
+      setRevoking(false);
     }
   };
 
@@ -183,6 +203,15 @@ function ExtensionSettings() {
             </Button>
           )}
           <p className="text-xs text-muted-foreground mt-1">Paste this code in the extension's Settings tab to connect.</p>
+        </div>
+
+        {/* Revoke */}
+        <div>
+          <p className="text-sm font-medium mb-2">Security</p>
+          <Button variant="destructive" size="sm" onClick={revokeTokens} disabled={revoking}>
+            {revoking ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Revoking…</> : "Revoke All Extension Tokens"}
+          </Button>
+          <p className="text-xs text-muted-foreground mt-1">Disconnects all paired extensions immediately.</p>
         </div>
 
         {/* Domains */}

@@ -44,6 +44,11 @@
     .capture-preview .title { font-size: 13px; font-weight: 500; margin-top: 4px; }
     .capture-preview .snippet { font-size: 11px; color: #888; margin-top: 6px; font-style: italic; max-height: 80px; overflow-y: auto; }
     select { width: 100%; padding: 8px 10px; background: #111; border: 1px solid #333; border-radius: 6px; color: #e5e5e5; font-size: 12px; margin-bottom: 8px; }
+    .project-card { cursor: pointer; transition: border-color 0.2s; }
+    .project-card:hover { border-color: #333; }
+    .project-card.selected { border-color: #22c55e; background: #0f1f0f; }
+    .task-card { border-left: 3px solid transparent; }
+    .task-card .card-meta span { font-size: 10px; font-weight: 600; text-transform: uppercase; }
   </style>
 </head>
 <body>

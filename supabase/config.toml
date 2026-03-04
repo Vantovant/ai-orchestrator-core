@@ -86,3 +86,21 @@ verify_jwt = false
 
 [functions.capture-web]
 verify_jwt = false
+
+[functions.extension-projects]
+verify_jwt = false
+
+[functions.extension-tasks]
+verify_jwt = false
+
+[functions.extension-domains]
+verify_jwt = false
+
+[functions.solution-mentor]
+verify_jwt = false
+
+[functions.team-analytics]
+verify_jwt = false
+
+[functions.invite-check]
+verify_jwt = false
