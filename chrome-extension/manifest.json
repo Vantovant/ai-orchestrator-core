@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "VantoOS Companion",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Capture web pages and manage tasks from VantoOS",
   "permissions": ["sidePanel", "storage", "activeTab", "scripting"],
-  "optional_host_permissions": ["https://*/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
   "side_panel": {
     "default_path": "sidepanel.html"
   },

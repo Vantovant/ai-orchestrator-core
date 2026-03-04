@@ -16,8 +16,47 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 });
 
-// Listen for messages from side panel
+// Inject floating button on allowed domains when tab updates
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete" || !tab?.url) return;
+  try {
+    const hostname = new URL(tab.url).hostname;
+    // Check if we have permission for this domain
+    const hasPermission = await new Promise(resolve =>
+      chrome.permissions.contains({ origins: [`https://${hostname}/*`, `http://${hostname}/*`] }, resolve)
+    );
+    if (!hasPermission) return;
+
+    // Check stored allowed domains
+    const stored = await chrome.storage.local.get(["vantoos_allowed_domains"]);
+    const allowed = stored.vantoos_allowed_domains || [];
+    if (!allowed.includes(hostname)) return;
+
+    // Inject content script
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ["content-script.js"],
+    });
+  } catch (_) { /* ignore non-injectable tabs like chrome:// */ }
+});
+
+// Listen for messages from side panel and content scripts
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Open side panel from content script FAB
+  if (msg?.type === "OPEN_SIDE_PANEL") {
+    const tabId = sender.tab?.id;
+    if (!tabId) {
+      sendResponse({ error: "Pair extension in Settings first" });
+      return true;
+    }
+    chrome.sidePanel.open({ tabId }).then(() => {
+      sendResponse({ ok: true });
+    }).catch((err) => {
+      sendResponse({ error: err?.message || "Failed to open side panel" });
+    });
+    return true;
+  }
+
   // Quick capture: basic tab info + selection
   if (msg?.type === "CAPTURE_TAB") {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
