@@ -39,7 +39,6 @@ Deno.serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     if (sort === "priority") {
-      // Use RPC to get proper CASE-based priority ordering
       const { data, error } = await sb.rpc("get_tasks_by_priority", {
         p_user_id: userId,
         p_project_id: projectId,
@@ -62,7 +61,6 @@ Deno.serve(async (req) => {
     if (sort === "due_date") {
       query = query.order("due_date", { ascending: true, nullsFirst: false });
     } else {
-      // "latest" — match VantoOS: last_touched_at DESC, created_at DESC
       query = query.order("last_touched_at", { ascending: false }).order("created_at", { ascending: false });
     }
 
@@ -72,9 +70,10 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    const status = e.message === "Unauthorized" ? 401 : 400;
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const status = msg === "Unauthorized" ? 401 : 400;
+    return new Response(JSON.stringify({ error: msg }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
