@@ -104,3 +104,9 @@ verify_jwt = false
 
 [functions.invite-check]
 verify_jwt = false
+
+[functions.smart-capture-web]
+verify_jwt = false
+
+[functions.assistant-help]
+verify_jwt = false
