@@ -116,7 +116,7 @@ export const taskService = {
             .maybeSingle();
 
           if (existing) {
-            // Merge – update fields that may have changed
+            // Merge – update fields that may have changed + touch
             const { data, error } = await supabase
               .from("tasks")
               .update({
@@ -124,6 +124,7 @@ export const taskService = {
                 priority: task.priority,
                 due_date: task.due_date,
                 source: task.source,
+                last_touched_at: new Date().toISOString(),
               })
               .eq("id", existing.id)
               .select()
