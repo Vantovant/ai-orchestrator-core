@@ -18,12 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   CheckSquare, Bell, Calendar as CalendarIcon, Clock, MapPin,
-  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search, FolderKanban,
-  LayoutList, Kanban, GanttChart
+  Plus, Trash2, Target, ChevronLeft, ChevronRight, BookOpen, Sparkles, Search, FolderKanban
 } from "lucide-react";
-import TasksTableView from "@/components/projects/TasksTableView";
-import TasksBoardView from "@/components/projects/TasksBoardView";
-import TasksTimelineView from "@/components/projects/TasksTimelineView";
 import { toast } from "sonner";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
 import ClientTagPicker from "@/components/clients/ClientTagPicker";
@@ -359,7 +355,6 @@ export default function PlanPage() {
   const [taskSearch, setTaskSearch] = useState("");
   const [taskFilter, setTaskFilter] = useState<string>("all");
   const [taskSort, setTaskSort] = useState<"latest" | "due_date" | "priority">("latest");
-  const [tasksView, setTasksView] = useState<"table" | "board" | "timeline">("table");
   const [reminderFilter, setReminderFilter] = useState<string>("all");
   const [meetingSearch, setMeetingSearch] = useState("");
 
@@ -563,44 +558,33 @@ export default function PlanPage() {
                 </CardContent>
               </Card>
             )}
-
-            {/* View switcher + controls – same as Project Tasks */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex rounded-lg border overflow-hidden">
-                <Button variant={tasksView === "table" ? "default" : "ghost"} size="sm" className="gap-1 rounded-none text-xs" onClick={() => setTasksView("table")}>
-                  <LayoutList className="h-3.5 w-3.5" /> Table
-                </Button>
-                <Button variant={tasksView === "board" ? "default" : "ghost"} size="sm" className="gap-1 rounded-none text-xs" onClick={() => setTasksView("board")}>
-                  <Kanban className="h-3.5 w-3.5" /> Board
-                </Button>
-                <Button variant={tasksView === "timeline" ? "default" : "ghost"} size="sm" className="gap-1 rounded-none text-xs" onClick={() => setTasksView("timeline")}>
-                  <GanttChart className="h-3.5 w-3.5" /> Timeline
-                </Button>
-              </div>
-              <div className="flex gap-2 ml-auto flex-wrap">
-                <Input placeholder="Search tasks..." value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="max-w-[200px] h-8 text-xs" />
-                <Select value={taskFilter} onValueChange={setTaskFilter}>
-                  <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="done">Done</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={taskSort} onValueChange={(v) => setTaskSort(v as "latest" | "due_date" | "priority")}>
-                  <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="latest">Latest</SelectItem>
-                    <SelectItem value="due_date">Due date</SelectItem>
-                    <SelectItem value="priority">Priority</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h2 className="text-lg font-semibold">All Tasks</h2>
+              <Button size="sm" className="gap-1" onClick={() => openAdd("task")}><Plus className="h-4 w-4" /> Add Task</Button>
             </div>
-
-            {tasks.isLoading ? <Skeleton className="h-48" /> : (() => {
+            <div className="flex gap-2 flex-wrap">
+              <Input placeholder="Search tasks..." value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="max-w-[200px] h-8 text-xs" />
+              <Select value={taskFilter} onValueChange={setTaskFilter}>
+                <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={taskSort} onValueChange={(v) => setTaskSort(v as "latest" | "due_date" | "priority")}>
+                <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">Latest</SelectItem>
+                  <SelectItem value="due_date">Due date</SelectItem>
+                  <SelectItem value="priority">Priority</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {tasks.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
+            (() => {
               let filtered = (tasks.data ?? []).filter(t => {
                 if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
                 if (taskFilter === "pending") return t.status !== "done";
@@ -609,36 +593,43 @@ export default function PlanPage() {
                 if (taskFilter === "high") return t.priority === "high";
                 return true;
               });
+              // Filter by project_id from query params
               if (projectIdParam) {
                 filtered = filtered.filter(t => t.project_id === projectIdParam);
               }
-              return (
-                <>
-                  {tasksView === "table" && (
-                    <TasksTableView
-                      tasks={filtered}
-                      onUpdateTask={(id, updates) => updateTaskMut.mutate({ id, updates })}
-                      onCreateTask={(title) => createTaskMut.mutate({ title })}
-                      onClickTask={setSelectedTask}
-                      onReorder={() => {}}
-                    />
-                  )}
-                  {tasksView === "board" && (
-                    <TasksBoardView
-                      tasks={filtered}
-                      onUpdateTask={(id, updates) => updateTaskMut.mutate({ id, updates })}
-                      onClickTask={setSelectedTask}
-                    />
-                  )}
-                  {tasksView === "timeline" && (
-                    <TasksTimelineView
-                      tasks={filtered}
-                      onUpdateTask={(id, updates) => updateTaskMut.mutate({ id, updates })}
-                      onClickTask={setSelectedTask}
-                    />
-                  )}
-                </>
-              );
+              return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No tasks match</CardContent></Card> :
+              <div className="space-y-2">
+                {filtered.map((t) => (
+                  <Card
+                    key={t.id}
+                    className={`cursor-pointer hover:shadow-md transition-all ${
+                      highlightIds.has(t.id)
+                        ? "ring-2 ring-primary shadow-lg animate-pulse"
+                        : ""
+                    }`}
+                    onClick={() => setSelectedTask(t)}
+                  >
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input type="checkbox" checked={t.status === "done"}
+                          onChange={(e) => { e.stopPropagation(); updateTaskMut.mutate({ id: t.id, updates: { status: t.status === "done" ? "pending" : "done" } }); }}
+                          onClick={(e) => e.stopPropagation()} className="h-4 w-4 shrink-0 rounded border-border" />
+                        <div className="min-w-0">
+                          <span className={`text-sm font-medium ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>{t.title}</span>
+                          {t.description && <p className="text-xs text-muted-foreground truncate">{t.description}</p>}
+                          {t.project_id && projectNameMap[t.project_id] && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary mt-0.5"><FolderKanban className="h-2.5 w-2.5" />{projectNameMap[t.project_id]}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="secondary" className={priorityColor[t.priority] ?? ""}>{t.priority}</Badge>
+                        {t.due_date && <span className="text-xs text-muted-foreground hidden md:inline">{format(new Date(t.due_date), "MMM d")}</span>}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>;
             })()}
           </div>
         </TabsContent>
