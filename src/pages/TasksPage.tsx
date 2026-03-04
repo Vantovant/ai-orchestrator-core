@@ -21,6 +21,7 @@ const priorityColor: Record<string, string> = {
 };
 
 type SortOption = "latest" | "due_date" | "priority";
+type FilterOption = "all" | "pending" | "done" | "critical" | "high";
 
 export default function TasksPage() {
   const qc = useQueryClient();
