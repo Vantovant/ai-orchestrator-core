@@ -1,0 +1,1 @@
+ALTER TABLE public.tasks ADD COLUMN IF NOT EXISTS last_touched_at timestamptz NOT NULL DEFAULT now();
