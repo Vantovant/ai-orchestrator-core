@@ -31,8 +31,8 @@ interface Props {
 export default function TasksTableView({ tasks, onUpdateTask, onCreateTask, onClickTask, onReorder }: Props) {
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [sortField, setSortField] = useState<string>("order_index");
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortField, setSortField] = useState<string>("last_touched_at");
+  const [sortAsc, setSortAsc] = useState(false);
 
   const sorted = [...tasks].sort((a, b) => {
     const av = a[sortField] ?? "";
