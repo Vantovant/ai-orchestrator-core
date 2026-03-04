@@ -18,7 +18,6 @@ async function resolveUser(req: Request): Promise<{ userId: string }> {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Try extension token first
   const extToken = req.headers.get("x-extension-token");
   if (extToken) {
     const tokenHash = Array.from(
@@ -37,7 +36,6 @@ async function resolveUser(req: Request): Promise<{ userId: string }> {
     throw new Error("Unauthorized");
   }
 
-  // Fall back to Supabase auth
   const authHeader = req.headers.get("Authorization");
   if (authHeader) {
     const supabaseUser = createClient(
@@ -122,12 +120,11 @@ Deno.serve(async (req) => {
       sourceContextId = inserted.id;
     }
 
-    // If project_id provided, upsert inbox item (dedupe on user_id+project_id+source_context_id)
+    // If project_id provided, upsert inbox item
     let inboxItemId: string | null = null;
     let inboxAction: "created" | "merged" | null = null;
 
     if (project_id) {
-      // Check existing
       const { data: existingInbox } = await supabaseAdmin
         .from("project_inbox_items")
         .select("id")
@@ -140,7 +137,6 @@ Deno.serve(async (req) => {
       if (existingInbox) {
         inboxItemId = existingInbox.id;
         inboxAction = "merged";
-        // Update title/body on merge
         await supabaseAdmin
           .from("project_inbox_items")
           .update({ title: title || url, body: selected_text || page_summary || null })
@@ -161,12 +157,9 @@ Deno.serve(async (req) => {
         inboxItemId = inbox.id;
         inboxAction = "created";
       }
-      // If inbox merged but source_context was created, overall action is still "created"
       if (action === "created" || inboxAction === "created") action = "created";
     }
 
-    // Build deep link
-    // Deep link matches VantoOS routing: /projects?id=:projectId&tab=inbox&highlight=:inboxItemId
     const deepLinkUrl = project_id
       ? `${APP_URL}/projects?id=${project_id}&tab=inbox${inboxItemId ? `&highlight=${inboxItemId}` : ""}`
       : `${APP_URL}/projects`;
@@ -180,9 +173,10 @@ Deno.serve(async (req) => {
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: e.message === "Unauthorized" ? 401 : 400,
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: msg }), {
+      status: msg === "Unauthorized" ? 401 : 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

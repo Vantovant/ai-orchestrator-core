@@ -93,9 +93,10 @@ Deno.serve(async (req) => {
     }
 
     throw new Error("Method not allowed");
-  } catch (e) {
-    const status = e.message === "Unauthorized" ? 401 : 400;
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const status = msg === "Unauthorized" ? 401 : 400;
+    return new Response(JSON.stringify({ error: msg }), {
       status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

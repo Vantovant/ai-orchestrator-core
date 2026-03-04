@@ -26,7 +26,6 @@ Deno.serve(async (req) => {
       const action = url.searchParams.get("action") || "generate";
 
       if (action === "generate") {
-        // Generate a 6-char pairing code
         const code = Array.from(crypto.getRandomValues(new Uint8Array(3)))
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("")
@@ -45,7 +44,6 @@ Deno.serve(async (req) => {
       }
 
       if (action === "exchange") {
-        // Exchange pairing code for token (called by extension, no auth required — handled below)
         throw new Error("Use the exchange endpoint without auth");
       }
     }
@@ -54,8 +52,9 @@ Deno.serve(async (req) => {
       status: 405,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: msg }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
