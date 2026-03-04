@@ -16,7 +16,7 @@ import { startOfWeek, endOfWeek, isWithinInterval, format } from "date-fns";
 const fmt = (n: number) => `R ${n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function WeeklyReportPage() {
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
+  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const entries = useQuery({ queryKey: ["finance_entries"], queryFn: financeEntryService.list });

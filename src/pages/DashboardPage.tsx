@@ -81,7 +81,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
+  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const latestRun = useQuery({ queryKey: ["assistant_run_latest"], queryFn: assistantRunService.getLatest });
