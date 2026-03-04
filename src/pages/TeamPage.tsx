@@ -329,6 +329,7 @@ Welcome aboard, and thank you for being part of the journey! 🙌`;
                 <TableHead className="text-center">Errors</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead className="text-center">BYOK</TableHead>
+                <TableHead className="text-center">Blocked</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -342,12 +343,26 @@ Welcome aboard, and thank you for being part of the journey! 🙌`;
                   <TableCell className="text-center text-xs">{t.tasksDone}</TableCell>
                   <TableCell className="text-center text-xs">{t.aiCalls}</TableCell>
                   <TableCell className="text-center text-xs">{t.aiErrors > 0 ? <span className="text-destructive">{t.aiErrors}</span> : "0"}</TableCell>
-                  <TableCell className="text-xs">{t.providersUsed.length > 0 ? t.providersUsed.join(", ") : "—"}</TableCell>
-                  <TableCell className="text-center">{t.hasOwnKey ? <Key className="h-3.5 w-3.5 text-primary mx-auto" /> : "—"}</TableCell>
+                  <TableCell className="text-xs">
+                    {t.providersUsed.length > 0
+                      ? t.providersUsed.filter(p => p !== "lovable").join(", ") || "—"
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {t.hasOwnKey
+                      ? <Badge variant="outline" className="text-[10px] text-success border-success/30"><Key className="h-3 w-3 mr-1" />Connected</Badge>
+                      : <Badge variant="outline" className="text-[10px] text-warning border-warning/30">Missing</Badge>
+                    }
+                  </TableCell>
+                  <TableCell className="text-center text-xs">
+                    {(t as any).blockedCount > 0
+                      ? <span className="text-destructive font-medium">{(t as any).blockedCount}</span>
+                      : "0"}
+                  </TableCell>
                 </TableRow>
               ))}
               {testers.length === 0 && (
-                <TableRow><TableCell colSpan={10} className="text-center text-sm text-muted-foreground py-8">No testers yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center text-sm text-muted-foreground py-8">No testers yet</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
