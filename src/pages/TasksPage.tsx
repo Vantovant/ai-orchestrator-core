@@ -21,11 +21,13 @@ const priorityColor: Record<string, string> = {
 };
 
 type SortOption = "latest" | "due_date" | "priority";
+type FilterOption = "all" | "pending" | "done" | "critical" | "high";
 
 export default function TasksPage() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [sort, setSort] = useState<SortOption>("latest");
+  const [filter, setFilter] = useState<FilterOption>("all");
   const tasks = useQuery({ queryKey: ["tasks", sort], queryFn: () => taskService.list(sort) });
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -67,6 +69,10 @@ export default function TasksPage() {
   const filtered = (tasks.data ?? []).filter(t => {
     if (projectId && t.project_id !== projectId) return false;
     if (source && t.source !== source) return false;
+    if (filter === "pending" && t.status === "done") return false;
+    if (filter === "done" && t.status !== "done") return false;
+    if (filter === "critical" && t.priority !== "critical") return false;
+    if (filter === "high" && t.priority !== "high") return false;
     return true;
   });
 
@@ -83,6 +89,18 @@ export default function TasksPage() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">Tasks</h1>
         <div className="flex items-center gap-2">
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterOption)}>
+            <SelectTrigger className="h-8 w-[110px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="done">Done</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
             <SelectTrigger className="h-8 w-[130px] text-xs">
               <SelectValue />
