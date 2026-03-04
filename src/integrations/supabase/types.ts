@@ -3056,6 +3056,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      priority_rank: { Args: { p: string }; Returns: number }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"

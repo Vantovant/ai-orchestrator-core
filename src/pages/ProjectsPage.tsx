@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { projectService, type Project, type ProjectInsert } from "@/services/projectService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
