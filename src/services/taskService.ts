@@ -138,7 +138,7 @@ export const taskService = {
         // Create new
         const { data, error } = await supabase
           .from("tasks")
-          .insert({ ...task, user_id: user.id })
+          .insert({ ...task, user_id: user.id, last_touched_at: new Date().toISOString() })
           .select()
           .single();
         if (error) throw error;
