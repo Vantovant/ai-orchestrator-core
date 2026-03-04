@@ -537,6 +537,20 @@ export default function PlanPage() {
         {/* TASKS */}
         <TabsContent value="tasks">
           <div className="space-y-3">
+            {/* Import banner from note extract */}
+            {sourceParam === "note_extract" && noteDateParam && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="p-3 flex items-center gap-2 text-sm">
+                  <BookOpen className="h-4 w-4 text-primary shrink-0" />
+                  <span>Imported from Note: <strong>{noteDateParam}</strong></span>
+                  <Button variant="ghost" size="sm" className="ml-auto h-6 text-xs" onClick={() => {
+                    const p = new URLSearchParams(searchParams);
+                    p.delete("highlight"); p.delete("source"); p.delete("note_date"); p.delete("project_id");
+                    setSearchParams(p);
+                  }}>Dismiss</Button>
+                </CardContent>
+              </Card>
+            )}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold">All Tasks</h2>
               <Button size="sm" className="gap-1" onClick={() => openAdd("task")}><Plus className="h-4 w-4" /> Add Task</Button>
@@ -556,7 +570,7 @@ export default function PlanPage() {
             </div>
             {tasks.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
             (() => {
-              const filtered = (tasks.data ?? []).filter(t => {
+              let filtered = (tasks.data ?? []).filter(t => {
                 if (taskSearch && !t.title.toLowerCase().includes(taskSearch.toLowerCase())) return false;
                 if (taskFilter === "pending") return t.status !== "done";
                 if (taskFilter === "done") return t.status === "done";
@@ -564,10 +578,22 @@ export default function PlanPage() {
                 if (taskFilter === "high") return t.priority === "high";
                 return true;
               });
+              // Filter by project_id from query params
+              if (projectIdParam) {
+                filtered = filtered.filter(t => t.project_id === projectIdParam);
+              }
               return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No tasks match</CardContent></Card> :
               <div className="space-y-2">
                 {filtered.map((t) => (
-                  <Card key={t.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedTask(t)}>
+                  <Card
+                    key={t.id}
+                    className={`cursor-pointer hover:shadow-md transition-all ${
+                      highlightIds.has(t.id)
+                        ? "ring-2 ring-primary shadow-lg animate-pulse"
+                        : ""
+                    }`}
+                    onClick={() => setSelectedTask(t)}
+                  >
                     <CardContent className="flex items-center justify-between p-4">
                       <div className="flex items-center gap-3 min-w-0">
                         <input type="checkbox" checked={t.status === "done"}
