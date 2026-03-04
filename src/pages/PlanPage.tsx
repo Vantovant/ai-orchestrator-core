@@ -351,14 +351,15 @@ export default function PlanPage() {
     }
   }, [highlightParam]);
 
-  // Search/filter state for lists
+  // Search/filter/sort state for lists
   const [taskSearch, setTaskSearch] = useState("");
   const [taskFilter, setTaskFilter] = useState<string>("all");
+  const [taskSort, setTaskSort] = useState<"latest" | "due_date" | "priority">("latest");
   const [reminderFilter, setReminderFilter] = useState<string>("all");
   const [meetingSearch, setMeetingSearch] = useState("");
 
   const qc = useQueryClient();
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
+  const tasks = useQuery({ queryKey: ["tasks", taskSort], queryFn: () => taskService.list(taskSort) });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectService.list });
