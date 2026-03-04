@@ -77,3 +77,12 @@ verify_jwt = false
 
 [functions.budget-generate-events]
 verify_jwt = false
+
+[functions.extension-pair]
+verify_jwt = false
+
+[functions.extension-exchange]
+verify_jwt = false
+
+[functions.capture-web]
+verify_jwt = false

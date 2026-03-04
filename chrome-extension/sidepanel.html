@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VantoOS Companion</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0a; color: #e5e5e5; width: 100%; min-height: 100vh; }
+    .tabs { display: flex; border-bottom: 1px solid #262626; background: #111; }
+    .tab { flex: 1; padding: 10px 4px; text-align: center; font-size: 11px; font-weight: 500; cursor: pointer; color: #888; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab.active { color: #22c55e; border-bottom-color: #22c55e; }
+    .tab:hover { color: #ccc; }
+    .panel { padding: 16px; display: none; }
+    .panel.active { display: block; }
+    .card { background: #1a1a1a; border: 1px solid #262626; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    .card-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .card-meta { font-size: 11px; color: #666; }
+    h2 { font-size: 14px; margin-bottom: 12px; color: #ccc; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.2s; }
+    .btn-primary { background: #22c55e; color: #000; }
+    .btn-primary:hover { background: #16a34a; }
+    .btn-secondary { background: #262626; color: #e5e5e5; border: 1px solid #333; }
+    .btn-secondary:hover { background: #333; }
+    .btn-sm { padding: 5px 10px; font-size: 11px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    input, textarea { width: 100%; padding: 8px 10px; background: #111; border: 1px solid #333; border-radius: 6px; color: #e5e5e5; font-size: 12px; margin-bottom: 8px; }
+    input:focus, textarea:focus { outline: none; border-color: #22c55e; }
+    .toast { position: fixed; top: 12px; left: 12px; right: 12px; padding: 10px 14px; border-radius: 8px; font-size: 12px; z-index: 100; animation: slideIn 0.3s ease; }
+    .toast-success { background: #052e16; border: 1px solid #166534; color: #86efac; }
+    .toast-error { background: #350a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
+    @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .status-connected { background: #22c55e; }
+    .status-disconnected { background: #ef4444; }
+    .empty { text-align: center; padding: 32px 16px; color: #555; font-size: 12px; }
+    .domain-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1a1a1a; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #333; border-top-color: #22c55e; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .link { color: #22c55e; text-decoration: none; font-size: 11px; }
+    .link:hover { text-decoration: underline; }
+    .capture-preview { background: #111; border: 1px solid #262626; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+    .capture-preview .url { font-size: 11px; color: #22c55e; word-break: break-all; }
+    .capture-preview .title { font-size: 13px; font-weight: 500; margin-top: 4px; }
+    .capture-preview .snippet { font-size: 11px; color: #888; margin-top: 6px; font-style: italic; max-height: 80px; overflow-y: auto; }
+    select { width: 100%; padding: 8px 10px; background: #111; border: 1px solid #333; border-radius: 6px; color: #e5e5e5; font-size: 12px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="tabs">
+    <div class="tab active" data-tab="capture">📷 Capture</div>
+    <div class="tab" data-tab="projects">📁 Projects</div>
+    <div class="tab" data-tab="tasks">✓ Tasks</div>
+    <div class="tab" data-tab="settings">⚙ Settings</div>
+  </div>
+
+  <!-- CAPTURE TAB -->
+  <div class="panel active" id="panel-capture">
+    <h2>Web Capture</h2>
+    <div id="capture-status"></div>
+    <div id="capture-content">
+      <button class="btn btn-secondary" id="btn-refresh-capture" style="margin-bottom:12px">🔄 Capture Current Tab</button>
+      <div id="capture-preview" style="display:none" class="capture-preview">
+        <div class="url" id="capture-url"></div>
+        <div class="title" id="capture-title"></div>
+        <div class="snippet" id="capture-snippet"></div>
+      </div>
+      <select id="capture-project"><option value="">Select project…</option></select>
+      <button class="btn btn-primary" id="btn-send-capture" disabled style="width:100%">Send to Project</button>
+    </div>
+  </div>
+
+  <!-- PROJECTS TAB -->
+  <div class="panel" id="panel-projects">
+    <h2>Projects</h2>
+    <div id="projects-list" class="empty">Loading…</div>
+  </div>
+
+  <!-- TASKS TAB -->
+  <div class="panel" id="panel-tasks">
+    <h2>Tasks</h2>
+    <div id="tasks-list" class="empty">Loading…</div>
+  </div>
+
+  <!-- SETTINGS TAB -->
+  <div class="panel" id="panel-settings">
+    <h2>Account</h2>
+    <div id="auth-status" class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span class="status-dot status-disconnected" id="status-dot"></span>
+        <span id="status-text" style="font-size:12px">Not connected</span>
+      </div>
+      <input id="pairing-code-input" placeholder="Enter pairing code from VantoOS…" />
+      <button class="btn btn-primary btn-sm" id="btn-pair">Pair</button>
+      <button class="btn btn-secondary btn-sm" id="btn-disconnect" style="display:none;margin-left:6px">Disconnect</button>
+    </div>
+
+    <h2 style="margin-top:16px">Allowed Domains</h2>
+    <div id="domains-list"></div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="new-domain-input" placeholder="e.g. app.example.com" style="margin:0;flex:1" />
+      <button class="btn btn-primary btn-sm" id="btn-add-domain">Add</button>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>
