@@ -22,6 +22,8 @@
     .btn-primary:hover { background: #16a34a; }
     .btn-secondary { background: #262626; color: #e5e5e5; border: 1px solid #333; }
     .btn-secondary:hover { background: #333; }
+    .btn-ai { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; }
+    .btn-ai:hover { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
     .btn-sm { padding: 5px 10px; font-size: 11px; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     input, textarea { width: 100%; padding: 8px 10px; background: #111; border: 1px solid #333; border-radius: 6px; color: #e5e5e5; font-size: 12px; margin-bottom: 8px; }
@@ -29,6 +31,7 @@
     .toast { position: fixed; top: 12px; left: 12px; right: 12px; padding: 10px 14px; border-radius: 8px; font-size: 12px; z-index: 100; animation: slideIn 0.3s ease; }
     .toast-success { background: #052e16; border: 1px solid #166534; color: #86efac; }
     .toast-error { background: #350a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
+    .toast-info { background: #1e1b4b; border: 1px solid #3730a3; color: #a5b4fc; }
     @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     .status-connected { background: #22c55e; }
@@ -49,6 +52,24 @@
     .project-card.selected { border-color: #22c55e; background: #0f1f0f; }
     .task-card { border-left: 3px solid transparent; }
     .task-card .card-meta span { font-size: 10px; font-weight: 600; text-transform: uppercase; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .badge-warning { background: #422006; color: #fbbf24; border: 1px solid #854d0e; }
+    .badge-info { background: #1e1b4b; color: #a5b4fc; border: 1px solid #3730a3; }
+    .summary-card { background: #111; border: 1px solid #262626; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+    .summary-card .summary-text { font-size: 12px; line-height: 1.5; color: #d4d4d4; }
+    .action-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
+    .action-item:last-child { border-bottom: none; }
+    .action-item input[type="checkbox"] { margin-top: 2px; width: auto; }
+    .action-item label { font-size: 12px; flex: 1; cursor: pointer; }
+    .action-item .action-priority { font-size: 10px; font-weight: 600; text-transform: uppercase; }
+    .help-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; padding: 16px; overflow-y: auto; }
+    .help-modal.active { display: block; }
+    .help-content { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 16px; max-width: 360px; margin: 0 auto; }
+    .help-content h3 { font-size: 14px; margin-bottom: 12px; color: #e5e5e5; }
+    .help-guide { font-size: 11px; color: #999; margin-bottom: 12px; line-height: 1.6; }
+    .help-answer { font-size: 12px; color: #d4d4d4; line-height: 1.6; margin-top: 10px; padding: 10px; background: #111; border-radius: 6px; white-space: pre-wrap; }
+    .btn-help { position: fixed; bottom: 16px; right: 16px; width: 36px; height: 36px; border-radius: 50%; background: #262626; color: #e5e5e5; border: 1px solid #444; font-size: 16px; cursor: pointer; z-index: 150; display: flex; align-items: center; justify-content: center; }
+    .btn-help:hover { background: #333; }
   </style>
 </head>
 <body>
@@ -64,14 +85,43 @@
     <h2>Web Capture</h2>
     <div id="capture-status"></div>
     <div id="capture-content">
-      <button class="btn btn-secondary" id="btn-refresh-capture" style="margin-bottom:12px">🔄 Capture Current Tab</button>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="btn btn-secondary" id="btn-quick-capture" style="flex:1">📷 Quick Capture</button>
+        <button class="btn btn-ai" id="btn-smart-capture" style="flex:1">✨ Smart Capture</button>
+      </div>
       <div id="capture-preview" style="display:none" class="capture-preview">
         <div class="url" id="capture-url"></div>
         <div class="title" id="capture-title"></div>
         <div class="snippet" id="capture-snippet"></div>
       </div>
+
+      <!-- Smart Capture Results -->
+      <div id="smart-capture-results" style="display:none">
+        <div class="summary-card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:600;color:#8b5cf6">✨ AI Summary</span>
+            <span id="smart-verification-badge"></span>
+          </div>
+          <div class="summary-text" id="smart-summary"></div>
+        </div>
+        <div id="smart-actions-container" style="display:none">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:600;color:#ccc">Extracted Tasks</span>
+            <span id="smart-actions-count" style="font-size:10px;color:#888"></span>
+          </div>
+          <div id="smart-actions-list" class="card" style="padding:8px"></div>
+          <button class="btn btn-primary btn-sm" id="btn-apply-tasks" style="width:100%;margin-top:6px">Apply Selected Tasks</button>
+        </div>
+        <div id="smart-apply-receipt" style="display:none;margin-top:8px" class="card">
+          <span id="smart-receipt-text" style="font-size:12px;color:#86efac"></span>
+        </div>
+      </div>
+
       <select id="capture-project"><option value="">Select project…</option></select>
-      <button class="btn btn-primary" id="btn-send-capture" disabled style="width:100%">Send to Project</button>
+      <div id="smart-suggested-project" style="display:none;margin-bottom:8px">
+        <span class="badge badge-info" id="smart-suggested-label"></span>
+      </div>
+      <button class="btn btn-primary" id="btn-send-capture" disabled style="width:100%;display:none">Send to Project</button>
       <div id="capture-deep-link" style="display:none;margin-top:8px;text-align:center">
         <button class="btn btn-primary btn-sm" id="btn-view-vantoos" style="width:100%">🔗 View in VantoOS →</button>
       </div>
@@ -111,6 +161,34 @@
       <button class="btn btn-primary btn-sm" id="btn-add-domain">Add</button>
     </div>
   </div>
+
+  <!-- HELP MODAL -->
+  <div class="help-modal" id="help-modal">
+    <div class="help-content">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3>❓ Help</h3>
+        <button class="btn btn-sm btn-secondary" id="btn-close-help">✕</button>
+      </div>
+      <div class="help-guide" id="help-guide-text"></div>
+      <div style="border-top:1px solid #333;padding-top:12px;margin-top:8px">
+        <span style="font-size:11px;font-weight:600;color:#8b5cf6">Ask Assistant</span>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <input id="help-question-input" placeholder="e.g. How does capture work?" style="margin:0;flex:1" />
+          <button class="btn btn-ai btn-sm" id="btn-ask-assistant">Ask</button>
+        </div>
+        <div id="help-answer-container" style="display:none">
+          <div class="help-answer" id="help-answer-text"></div>
+          <div id="help-safety-note" style="display:none;margin-top:6px;font-size:10px;color:#fbbf24"></div>
+        </div>
+        <div id="help-ai-gate" style="display:none;margin-top:8px" class="card">
+          <span style="font-size:11px;color:#fca5a5">🔒 Connect AI in VantoOS → Settings → AI Keys to unlock</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HELP BUTTON -->
+  <button class="btn-help" id="btn-help">?</button>
 
   <script src="sidepanel.js"></script>
 </body>
