@@ -152,13 +152,13 @@ export const pageGuides: Record<string, GuideSection> = {
     steps: [
       "This is where you configure your VantoOS experience.",
       "👤 Profile: Set up your personal details, role, and preferences using the Profile Wizard.",
-      "🔑 AI Keys: Configure your own API keys for AI providers if you want to use your own (optional — VantoOS provides AI by default).",
+      "🔑 AI Keys: To guarantee absolute data sovereignty for this private cohort, a personal OpenAI or Gemini key is required. Connect yours in Settings → AI Keys.",
       "📧 Email: Connect and manage your email accounts.",
       "⚙️ Preferences: Adjust notification settings, currency, and other preferences.",
     ],
     tips: [
       "Complete the Profile Wizard for the best AI experience — it helps the AI understand your context.",
-      "You don't need to bring your own AI keys — VantoOS includes AI access by default.",
+      "A personal OpenAI or Gemini key is required to use AI features. Go to Settings → AI Keys to connect yours.",
     ],
   },
   "/testers": {
