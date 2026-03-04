@@ -27,6 +27,7 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [sort, setSort] = useState<SortOption>("latest");
+  const [filter, setFilter] = useState<FilterOption>("all");
   const tasks = useQuery({ queryKey: ["tasks", sort], queryFn: () => taskService.list(sort) });
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
