@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-extension-token",
 };
 
-const APP_URL = "https://vantoos-ai-core.lovable.app";
+const APP_URL = Deno.env.get("APP_URL") || "https://vantoos-ai-core.lovable.app";
 
 async function hashString(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
