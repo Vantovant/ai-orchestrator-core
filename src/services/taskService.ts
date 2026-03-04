@@ -16,6 +16,7 @@ export interface Task {
   project_id: string | null;
   dedupe_key: string | null;
   note_id: string | null;
+  last_touched_at: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -42,12 +43,21 @@ export function makeDedupe(userId: string, projectId: string | null, noteId: str
 }
 
 export const taskService = {
-  async list() {
-    const { data, error } = await supabase
+  async list(sort: "latest" | "due_date" | "priority" = "latest") {
+    let query = supabase
       .from("tasks")
       .select("*")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+      .is("deleted_at", null);
+
+    if (sort === "due_date") {
+      query = query.order("due_date", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
+    } else if (sort === "priority") {
+      query = query.order("priority", { ascending: true }).order("created_at", { ascending: false });
+    } else {
+      query = query.order("last_touched_at", { ascending: false }).order("created_at", { ascending: false });
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data as Task[];
   },
@@ -106,7 +116,7 @@ export const taskService = {
             .maybeSingle();
 
           if (existing) {
-            // Merge – update fields that may have changed
+            // Merge – update fields that may have changed + touch
             const { data, error } = await supabase
               .from("tasks")
               .update({
@@ -114,6 +124,7 @@ export const taskService = {
                 priority: task.priority,
                 due_date: task.due_date,
                 source: task.source,
+                last_touched_at: new Date().toISOString(),
               })
               .eq("id", existing.id)
               .select()
@@ -127,7 +138,7 @@ export const taskService = {
         // Create new
         const { data, error } = await supabase
           .from("tasks")
-          .insert({ ...task, user_id: user.id })
+          .insert({ ...task, user_id: user.id, last_touched_at: new Date().toISOString() })
           .select()
           .single();
         if (error) throw error;

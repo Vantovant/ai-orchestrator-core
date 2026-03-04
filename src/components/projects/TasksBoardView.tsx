@@ -32,7 +32,7 @@ export default function TasksBoardView({ tasks, onUpdateTask, onClickTask }: Pro
       map[status].push(t);
     });
     // Sort each column by order_index
-    Object.values(map).forEach(arr => arr.sort((a, b) => (a.order_index || 0) - (b.order_index || 0)));
+    Object.values(map).forEach(arr => arr.sort((a, b) => new Date(b.last_touched_at || b.created_at).getTime() - new Date(a.last_touched_at || a.created_at).getTime()));
     return map;
   }, [tasks]);
 

@@ -43,7 +43,7 @@ function MetricCard({ label, value, sub }: { label: string; value: string | numb
 
 /* ─── Main ─── */
 export default function InvestorReportPage() {
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
+  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectService.list });

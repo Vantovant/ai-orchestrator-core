@@ -358,7 +358,7 @@ export default function PlanPage() {
   const [meetingSearch, setMeetingSearch] = useState("");
 
   const qc = useQueryClient();
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: taskService.list });
+  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectService.list });

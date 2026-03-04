@@ -2354,6 +2354,7 @@ export type Database = {
           due_date: string | null
           estimated_minutes: number | null
           id: string
+          last_touched_at: string
           note_id: string | null
           order_index: number
           priority: string
@@ -2374,6 +2375,7 @@ export type Database = {
           due_date?: string | null
           estimated_minutes?: number | null
           id?: string
+          last_touched_at?: string
           note_id?: string | null
           order_index?: number
           priority?: string
@@ -2394,6 +2396,7 @@ export type Database = {
           due_date?: string | null
           estimated_minutes?: number | null
           id?: string
+          last_touched_at?: string
           note_id?: string | null
           order_index?: number
           priority?: string
