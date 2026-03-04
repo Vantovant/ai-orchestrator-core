@@ -16,6 +16,7 @@ export interface Task {
   project_id: string | null;
   dedupe_key: string | null;
   note_id: string | null;
+  last_touched_at: string;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
