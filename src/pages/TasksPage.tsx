@@ -89,6 +89,18 @@ export default function TasksPage() {
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">Tasks</h1>
         <div className="flex items-center gap-2">
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterOption)}>
+            <SelectTrigger className="h-8 w-[110px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="done">Done</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={sort} onValueChange={(v) => setSort(v as SortOption)}>
             <SelectTrigger className="h-8 w-[130px] text-xs">
               <SelectValue />
