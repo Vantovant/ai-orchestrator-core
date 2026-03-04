@@ -35,6 +35,15 @@ export default function ProjectsPage() {
   const [demoWizardOpen, setDemoWizardOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
+  // Deep link support: read ?id= from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const idParam = params.get("id");
+    if (idParam) {
+      setSelectedProjectId(idParam);
+    }
+  }, []);
+
   // Form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");

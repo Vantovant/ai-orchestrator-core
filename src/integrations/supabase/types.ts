@@ -3049,6 +3049,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_tasks_by_priority: {
+        Args: { p_limit?: number; p_project_id?: string; p_user_id: string }
+        Returns: {
+          created_at: string
+          due_date: string
+          id: string
+          last_touched_at: string
+          priority: string
+          project_id: string
+          status: string
+          title: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
