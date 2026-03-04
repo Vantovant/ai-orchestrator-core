@@ -5,7 +5,7 @@ const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const APP_URL = "https://vantoos-ai-core.lovable.app";
 
 // ── State ─────────────────────────────────────────────
-let state = { token: null, userId: null, projects: [], tasks: [], domains: [], captureData: null, selectedProjectId: null };
+let state = { token: null, userId: null, projects: [], tasks: [], domains: [], captureData: null, selectedProjectId: null, domainPermissions: {} };
 
 // ── Helpers ───────────────────────────────────────────
 function showToast(msg, type = "success") {
@@ -47,7 +47,6 @@ function handleTokenExpired() {
   chrome.storage.local.remove(["vantoos_token", "vantoos_user_id"]);
   updateAuthUI();
   showToast("Session expired — generate a new pairing code in VantoOS Settings", "error");
-  // Switch to settings tab
   document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
   document.querySelector('[data-tab="settings"]').classList.add("active");
@@ -119,6 +118,7 @@ document.getElementById("btn-disconnect").addEventListener("click", async () => 
   state.projects = [];
   state.tasks = [];
   state.domains = [];
+  state.domainPermissions = {};
   await chrome.storage.local.remove(["vantoos_token", "vantoos_user_id"]);
   updateAuthUI();
   renderProjects();
@@ -164,7 +164,6 @@ function renderProjects() {
 window.selectProject = (id) => {
   state.selectedProjectId = id;
   loadTasks(id);
-  // Highlight
   document.querySelectorAll(".project-card").forEach(c => c.classList.remove("selected"));
   const card = document.querySelector(`.project-card[data-id="${id}"]`);
   if (card) card.classList.add("selected");
@@ -193,13 +192,13 @@ function renderTasks() {
   }
 
   const statusIcon = (s) => s === "done" ? "✅" : s === "in_progress" ? "🔄" : "⬜";
-  const prioColor = (p) => p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
+  const prioColor = (p) => p === "critical" ? "#dc2626" : p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
 
   list.innerHTML = state.tasks.map(t => `
     <div class="card task-card">
       <div class="card-title">${statusIcon(t.status)} ${escapeHtml(t.title)}</div>
       <div class="card-meta">
-        <span style="color:${prioColor(t.priority)}">${t.priority}</span>
+        <span style="color:${prioColor(t.priority)}">${t.priority || "medium"}</span>
         ${t.due_date ? ` · Due ${t.due_date}` : ""}
       </div>
     </div>
@@ -211,10 +210,9 @@ async function loadDomains() {
   if (!state.token) return;
   try {
     state.domains = await apiCall("extension-domains");
+    // Check permissions for each domain
+    await checkAllDomainPermissions();
     renderDomains();
-    // Request permissions for enabled domains
-    const enabledDomains = state.domains.filter(d => d.enabled).map(d => d.domain);
-    requestDomainPermissions(enabledDomains);
   } catch (e) {
     console.error("Failed to load domains", e);
     state.domains = [];
@@ -222,13 +220,16 @@ async function loadDomains() {
   }
 }
 
-function requestDomainPermissions(domains) {
-  if (!domains.length) return;
-  const origins = domains.flatMap(d => [`https://${d}/*`, `http://${d}/*`]);
-  chrome.permissions.contains({ origins }, (has) => {
-    if (!has) {
-      // Can't auto-request without user gesture — will request on add
-    }
+async function checkAllDomainPermissions() {
+  for (const d of state.domains) {
+    const granted = await checkDomainPermission(d.domain);
+    state.domainPermissions[d.domain] = granted;
+  }
+}
+
+function checkDomainPermission(domain) {
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [`https://${domain}/*`, `http://${domain}/*`] }, resolve);
   });
 }
 
@@ -238,16 +239,61 @@ function renderDomains() {
     list.innerHTML = '<div class="empty">No domains configured. Add domains in VantoOS Settings or below.</div>';
     return;
   }
-  list.innerHTML = state.domains.map(d => `
-    <div class="domain-row">
-      <span style="font-size:12px">${escapeHtml(d.domain)}</span>
-      <div>
-        <button class="btn btn-sm btn-secondary" onclick="toggleDomain('${d.id}', ${d.enabled})">${d.enabled ? "✅" : "❌"}</button>
-        <button class="btn btn-sm btn-secondary" onclick="removeDomain('${d.id}')">🗑</button>
+  list.innerHTML = state.domains.map(d => {
+    const hasPermission = state.domainPermissions[d.domain];
+    const permBadge = d.enabled
+      ? (hasPermission
+        ? '<span style="color:#22c55e;font-size:11px">✓ Granted</span>'
+        : `<button class="btn btn-sm btn-primary" onclick="grantDomainAccess('${escapeHtml(d.domain)}')">Grant Access</button>`)
+      : '';
+    return `
+      <div class="domain-row">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:12px">${escapeHtml(d.domain)}</span>
+          ${permBadge}
+        </div>
+        <div>
+          <button class="btn btn-sm btn-secondary" onclick="toggleDomain('${d.id}', ${d.enabled})">${d.enabled ? "✅" : "❌"}</button>
+          <button class="btn btn-sm btn-secondary" onclick="removeDomain('${d.id}')">🗑</button>
+        </div>
       </div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
+
+  // Show "Grant all" button if any enabled domain lacks permission
+  const needsGrant = state.domains.some(d => d.enabled && !state.domainPermissions[d.domain]);
+  const grantAllBtn = document.getElementById("btn-grant-all");
+  if (grantAllBtn) grantAllBtn.style.display = needsGrant ? "" : "none";
 }
+
+window.grantDomainAccess = (domain) => {
+  chrome.permissions.request({
+    origins: [`https://${domain}/*`, `http://${domain}/*`]
+  }, (granted) => {
+    if (granted) {
+      state.domainPermissions[domain] = true;
+      renderDomains();
+      showToast(`Permission granted for ${domain}`);
+    } else {
+      showToast("Permission denied", "error");
+    }
+  });
+};
+
+window.grantAllDomains = () => {
+  const enabledDomains = state.domains.filter(d => d.enabled && !state.domainPermissions[d.domain]);
+  if (!enabledDomains.length) return;
+  const origins = enabledDomains.flatMap(d => [`https://${d.domain}/*`, `http://${d.domain}/*`]);
+  chrome.permissions.request({ origins }, (granted) => {
+    if (granted) {
+      enabledDomains.forEach(d => { state.domainPermissions[d.domain] = true; });
+      renderDomains();
+      showToast(`Granted access to ${enabledDomains.length} domain(s)`);
+    } else {
+      showToast("Permission denied", "error");
+    }
+  });
+};
 
 window.toggleDomain = async (id, currentEnabled) => {
   try {
@@ -279,20 +325,28 @@ document.getElementById("btn-add-domain").addEventListener("click", async () => 
     showToast(`Added ${domain}`);
     loadDomains();
 
-    // Request permission for the new domain
+    // Immediately offer to grant permission
     chrome.permissions.request({
       origins: [`https://${domain}/*`, `http://${domain}/*`]
     }, (granted) => {
-      if (granted) showToast(`Permission granted for ${domain}`);
+      if (granted) {
+        state.domainPermissions[domain] = true;
+        renderDomains();
+        showToast(`Permission granted for ${domain}`);
+      }
     });
   } catch (e) {
     showToast(e.message, "error");
   }
 });
 
+document.getElementById("btn-grant-all").addEventListener("click", () => {
+  window.grantAllDomains();
+});
+
 // ── Capture ───────────────────────────────────────────
 document.getElementById("btn-refresh-capture").addEventListener("click", () => {
-  chrome.runtime.sendMessage({ type: "CAPTURE_TAB" }, (res) => {
+  chrome.runtime.sendMessage({ type: "CAPTURE_TAB" }, async (res) => {
     if (res?.error) {
       showToast(res.error, "error");
       return;
@@ -304,19 +358,27 @@ document.getElementById("btn-refresh-capture").addEventListener("click", () => {
     document.getElementById("capture-title").textContent = res.data.title;
     document.getElementById("capture-snippet").textContent = res.data.selectedText || "(no text selected)";
 
-    // Check if domain is allowed
+    // Check if domain is allowed AND permission is granted
     const domain = new URL(res.data.url).hostname;
-    const allowed = state.domains.some(d => d.domain === domain && d.enabled);
+    const domainEntry = state.domains.find(d => d.domain === domain && d.enabled);
+    const hasPermission = state.domainPermissions[domain];
     const btn = document.getElementById("btn-send-capture");
-    if (!allowed) {
+    const statusEl = document.getElementById("capture-status");
+
+    if (!domainEntry) {
       btn.disabled = true;
       btn.textContent = `⚠ "${domain}" not in allowlist`;
-      document.getElementById("capture-status").innerHTML =
+      statusEl.innerHTML =
         `<div class="card" style="border-color:#7f1d1d;margin-bottom:12px"><span style="font-size:12px;color:#fca5a5">Domain not allowed. Add it in Settings → Allowed Domains.</span></div>`;
+    } else if (!hasPermission) {
+      btn.disabled = true;
+      btn.textContent = `⚠ Access not granted`;
+      statusEl.innerHTML =
+        `<div class="card" style="border-color:#92400e;margin-bottom:12px"><span style="font-size:12px;color:#fcd34d">Domain enabled but access not granted yet. Go to Settings and press "Grant Access" for ${escapeHtml(domain)}.</span></div>`;
     } else {
       btn.disabled = false;
       btn.textContent = "Send to Project";
-      document.getElementById("capture-status").innerHTML = "";
+      statusEl.innerHTML = "";
     }
   });
 });
@@ -328,6 +390,10 @@ document.getElementById("btn-send-capture").addEventListener("click", async () =
   const btn = document.getElementById("btn-send-capture");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Sending…';
+
+  // Hide any previous deep link
+  const deepLinkContainer = document.getElementById("capture-deep-link");
+  deepLinkContainer.style.display = "none";
 
   try {
     const result = await apiCall("capture-web", {
@@ -344,21 +410,17 @@ document.getElementById("btn-send-capture").addEventListener("click", async () =
     const actionText = result.action === "merged" ? "Merged" : "Captured";
     showToast(`✅ ${actionText}${projectId ? " to project" : ""}!`);
 
+    btn.textContent = `✅ ${actionText}!`;
+
+    // Show deep link button
     if (result.deep_link_url) {
-      btn.innerHTML = `✅ Done — <a href="#" class="link" id="deep-link-btn">View in VantoOS →</a>`;
-      // Use event listener to open in new tab
-      setTimeout(() => {
-        const link = document.getElementById("deep-link-btn");
-        if (link) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            chrome.tabs.create({ url: result.deep_link_url });
-          });
-        }
-      }, 0);
-    } else {
-      btn.textContent = "✅ Captured!";
+      deepLinkContainer.style.display = "block";
+      const deepLinkBtn = document.getElementById("btn-view-vantoos");
+      deepLinkBtn.onclick = () => {
+        chrome.tabs.create({ url: result.deep_link_url });
+      };
     }
+
     setTimeout(() => { btn.disabled = false; btn.textContent = "Send to Project"; }, 5000);
   } catch (e) {
     showToast(`❌ ${e.message}`, "error");

@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-extension-token",
 };
 
-const APP_URL = "https://vantoos-ai-core.lovable.app";
+const APP_URL = Deno.env.get("APP_URL") || "https://vantoos-ai-core.lovable.app";
 
 async function hashString(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
@@ -166,8 +166,9 @@ Deno.serve(async (req) => {
     }
 
     // Build deep link
+    // Deep link matches VantoOS routing: /projects?id=:projectId&tab=inbox&highlight=:inboxItemId
     const deepLinkUrl = project_id
-      ? `${APP_URL}/projects/${project_id}`
+      ? `${APP_URL}/projects?id=${project_id}&tab=inbox${inboxItemId ? `&highlight=${inboxItemId}` : ""}`
       : `${APP_URL}/projects`;
 
     return new Response(JSON.stringify({

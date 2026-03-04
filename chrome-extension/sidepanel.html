@@ -72,6 +72,9 @@
       </div>
       <select id="capture-project"><option value="">Select project…</option></select>
       <button class="btn btn-primary" id="btn-send-capture" disabled style="width:100%">Send to Project</button>
+      <div id="capture-deep-link" style="display:none;margin-top:8px;text-align:center">
+        <button class="btn btn-primary btn-sm" id="btn-view-vantoos" style="width:100%">🔗 View in VantoOS →</button>
+      </div>
     </div>
   </div>
 
@@ -102,6 +105,7 @@
 
     <h2 style="margin-top:16px">Allowed Domains</h2>
     <div id="domains-list"></div>
+    <button class="btn btn-secondary btn-sm" id="btn-grant-all" style="display:none;margin-top:8px;width:100%">🔓 Grant All Enabled Domains</button>
     <div style="display:flex;gap:6px;margin-top:8px">
       <input id="new-domain-input" placeholder="e.g. app.example.com" style="margin:0;flex:1" />
       <button class="btn btn-primary btn-sm" id="btn-add-domain">Add</button>
