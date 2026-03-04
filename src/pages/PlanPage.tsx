@@ -351,14 +351,15 @@ export default function PlanPage() {
     }
   }, [highlightParam]);
 
-  // Search/filter state for lists
+  // Search/filter/sort state for lists
   const [taskSearch, setTaskSearch] = useState("");
   const [taskFilter, setTaskFilter] = useState<string>("all");
+  const [taskSort, setTaskSort] = useState<"latest" | "due_date" | "priority">("latest");
   const [reminderFilter, setReminderFilter] = useState<string>("all");
   const [meetingSearch, setMeetingSearch] = useState("");
 
   const qc = useQueryClient();
-  const tasks = useQuery({ queryKey: ["tasks"], queryFn: () => taskService.list() });
+  const tasks = useQuery({ queryKey: ["tasks", taskSort], queryFn: () => taskService.list(taskSort) });
   const reminders = useQuery({ queryKey: ["reminders"], queryFn: reminderService.list });
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectService.list });
@@ -564,13 +565,21 @@ export default function PlanPage() {
             <div className="flex gap-2 flex-wrap">
               <Input placeholder="Search tasks..." value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="max-w-[200px] h-8 text-xs" />
               <Select value={taskFilter} onValueChange={setTaskFilter}>
-                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="done">Done</SelectItem>
                   <SelectItem value="critical">Critical</SelectItem>
                   <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={taskSort} onValueChange={(v) => setTaskSort(v as "latest" | "due_date" | "priority")}>
+                <SelectTrigger className="w-[130px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">Latest</SelectItem>
+                  <SelectItem value="due_date">Due date</SelectItem>
+                  <SelectItem value="priority">Priority</SelectItem>
                 </SelectContent>
               </Select>
             </div>
