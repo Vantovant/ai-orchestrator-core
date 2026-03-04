@@ -42,12 +42,21 @@ export function makeDedupe(userId: string, projectId: string | null, noteId: str
 }
 
 export const taskService = {
-  async list() {
-    const { data, error } = await supabase
+  async list(sort: "latest" | "due_date" | "priority" = "latest") {
+    let query = supabase
       .from("tasks")
       .select("*")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+      .is("deleted_at", null);
+
+    if (sort === "due_date") {
+      query = query.order("due_date", { ascending: true, nullsFirst: false }).order("created_at", { ascending: false });
+    } else if (sort === "priority") {
+      query = query.order("priority", { ascending: true }).order("created_at", { ascending: false });
+    } else {
+      query = query.order("last_touched_at", { ascending: false }).order("created_at", { ascending: false });
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data as Task[];
   },
