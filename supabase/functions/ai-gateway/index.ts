@@ -194,15 +194,22 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const db = createClient(supabaseUrl, serviceKey);
 
-    // Resolve user from auth header
+    // Resolve user from auth header — NEVER use service role for user identity
     const authHeader = req.headers.get("Authorization") ?? "";
     let userId = "anonymous";
     try {
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? serviceKey;
       const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
       const { data: { user } } = await userClient.auth.getUser();
-      if (user) userId = user.id;
-    } catch {}
+      if (user) {
+        userId = user.id;
+        console.log("[ai-gateway] Authenticated user:", userId);
+      } else {
+        console.warn("[ai-gateway] No user resolved from auth header — proceeding as anonymous");
+      }
+    } catch (authErr) {
+      console.warn("[ai-gateway] Auth resolution failed:", authErr);
+    }
 
     const startTime = Date.now();
     const snapshotLen = JSON.stringify(body.messages).length;

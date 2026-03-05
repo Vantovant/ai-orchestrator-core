@@ -143,7 +143,7 @@ ${JSON.stringify(snapshot, null, 2)}`;
 
     const gatewayRes = await fetch(`${supabaseUrl}/functions/v1/ai-gateway`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: authHeader ?? `Bearer ${serviceKey}` },
+      headers: { "Content-Type": "application/json", apikey: anonKey, Authorization: authHeader! },
       body: JSON.stringify({
         messages: [
           { role: "system", content: systemPrompt },
