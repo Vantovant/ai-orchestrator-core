@@ -728,18 +728,22 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
   };
 
   const handleApply = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast.error("Not authenticated"); return; }
+    let user: any;
+    try {
+      const { data: { user: u }, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !u) { toast.error("Not authenticated – please sign in"); return; }
+      user = u;
+    } catch { toast.error("Auth check failed"); return; }
 
     const toApply = [...selected].filter(i => {
       const s = suggestions[i];
       return s && s.applyStatus !== "created" && s.applyStatus !== "merged";
     });
-    if (toApply.length === 0) { toast.info("No items selected"); return; }
+    if (toApply.length === 0) { toast.info("Nothing to apply"); return; }
 
     setApplying(true);
     // Mark queued
-    setSuggestions(prev => prev.map((s, i) => selected.has(i) && s.applyStatus === "idle" ? { ...s, applyStatus: "queued" } : s));
+    setSuggestions(prev => prev.map((s, i) => toApply.includes(i) ? { ...s, applyStatus: "queued" } : s));
 
     const priorityMap: Record<string, string> = { P1: "high", P2: "medium", P3: "low" };
     let created = 0, merged = 0, failed = 0;
@@ -747,9 +751,10 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
     const updatedSuggestions = [...suggestions];
     for (const idx of toApply) {
       const s = updatedSuggestions[idx];
-      if (!s || s.applyStatus === "created" || s.applyStatus === "merged") continue;
+      if (!s) continue;
       try {
-        if (s.type === "task") {
+        if (s.type === "task" || s.type === "meeting") {
+          // Treat meeting suggestions as tasks too (meetings lack enough info)
           const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
           // Check existing
           const { data: existing, error: lookupErr } = await supabase
@@ -783,7 +788,7 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
               dedupe_key: dedupeKey,
               status: "todo",
               last_touched_at: new Date().toISOString(),
-            }).select().single();
+            });
             if (insertErr) throw insertErr;
             updatedSuggestions[idx] = { ...s, applyStatus: "created" };
             created++;
@@ -794,14 +799,29 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
             user_id: user.id,
             reminder_time: s.remind_at || new Date().toISOString(),
             project_id: projectId,
-          }).select().single();
+          });
           if (remErr) throw remErr;
+          updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+          created++;
+        } else {
+          // Unknown type – still create as task
+          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
+          const { error: insertErr } = await supabase.from("tasks").insert({
+            title: s.title,
+            user_id: user.id,
+            source: "note_extract",
+            project_id: projectId,
+            dedupe_key: dedupeKey,
+            status: "todo",
+            last_touched_at: new Date().toISOString(),
+          });
+          if (insertErr) throw insertErr;
           updatedSuggestions[idx] = { ...s, applyStatus: "created" };
           created++;
         }
       } catch (e: any) {
-        console.error("Apply action failed:", e);
-        updatedSuggestions[idx] = { ...s, applyStatus: "failed", failReason: e.message };
+        console.error("Apply action failed:", idx, s.title, e);
+        updatedSuggestions[idx] = { ...s, applyStatus: "failed", failReason: e.message || "Insert failed" };
         failed++;
       }
     }
@@ -823,13 +843,19 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
       });
     } catch { /* non-critical */ }
 
+    // Always show receipt toast
+    const parts: string[] = [];
+    if (created > 0) parts.push(`${created} created`);
+    if (merged > 0) parts.push(`${merged} merged`);
+    if (failed > 0) parts.push(`${failed} failed`);
+    const receipt = parts.join(", ") || "No changes";
+
     if (failed > 0) {
-      toast.error(`Applied: ${created} created, ${merged} merged, ${failed} failed`);
+      toast.error(`Applied: ${receipt}`);
     } else {
-      toast.success(`Applied: ${created} created, ${merged} merged`);
-      // Auto-navigate to Tasks tab after successful apply
-      if (created > 0 && onApplied) {
-        setTimeout(() => onApplied(), 500);
+      toast.success(`Applied: ${receipt}`);
+      if ((created > 0 || merged > 0) && onApplied) {
+        setTimeout(() => onApplied(), 400);
       }
     }
   };
