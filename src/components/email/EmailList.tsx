@@ -27,10 +27,12 @@ interface Props {
   onSelect: (index: number) => void;
   onOpen: (id: string) => void;
   accountLabels: Record<string, string>;
+  accountEmails?: Record<string, string>;
   showAccountBadge: boolean;
+  compact?: boolean;
 }
 
-export default function EmailList({ emails, selectedIndex, onSelect, onOpen, accountLabels, showAccountBadge }: Props) {
+export default function EmailList({ emails, selectedIndex, onSelect, onOpen, accountLabels, accountEmails, showAccountBadge, compact }: Props) {
   if (emails.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
@@ -49,7 +51,8 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, acc
           data-email-index={idx}
           onClick={() => { onSelect(idx); onOpen(email.id); }}
           className={cn(
-            "w-full text-left px-4 py-3 transition-colors flex gap-3 group",
+            "w-full text-left px-4 transition-colors flex gap-3 group",
+            compact ? "py-2" : "py-3",
             idx === selectedIndex ? "bg-primary/8 border-l-2 border-l-primary" : "border-l-2 border-l-transparent hover:bg-muted/40",
             !email.is_read && "font-medium"
           )}
@@ -65,9 +68,10 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, acc
               <span className={cn("text-sm truncate", !email.is_read ? "text-foreground" : "text-muted-foreground")}>
                 {email.sender.split("@")[0].split("<").pop()}
               </span>
-              {showAccountBadge && accountLabels[email.account_id] && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-                  {accountLabels[email.account_id]}
+              {/* Account badge: show email address in unified mode */}
+              {showAccountBadge && accountEmails?.[email.account_id] && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0 max-w-[180px] truncate">
+                  {accountEmails[email.account_id]}
                 </span>
               )}
               <span className="ml-auto text-[11px] text-muted-foreground shrink-0">
@@ -79,12 +83,14 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, acc
               {email.subject}
             </div>
 
-            <div className="text-xs text-muted-foreground/70 truncate mt-0.5">
-              {email.snippet}
-            </div>
+            {!compact && (
+              <div className="text-xs text-muted-foreground/70 truncate mt-0.5">
+                {email.snippet}
+              </div>
+            )}
 
             {/* Badges row */}
-            <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
               {email.category && (
                 <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0">
                   {CATEGORY_LABELS[email.category] || email.category}
