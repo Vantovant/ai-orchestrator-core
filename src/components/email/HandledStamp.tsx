@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { emailActionLogService, type EmailActionLogEntry, type EmailActionType } from "@/services/emailActionLogService";
-import { CheckCircle2, DollarSign, TrendingUp, CheckSquare, Bell, CalendarPlus, FileText, Archive, Clock, Star } from "lucide-react";
+import { CheckCircle2, DollarSign, TrendingUp, CheckSquare, Bell, CalendarPlus, FileText, Archive, Clock, Star, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 const ACTION_CONFIG: Record<EmailActionType, { label: string; icon: typeof CheckCircle2; className: string }> = {
