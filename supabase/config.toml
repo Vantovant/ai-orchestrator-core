@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.extension-task-create]
 verify_jwt = false
+
+[functions.ai-status]
+verify_jwt = false
