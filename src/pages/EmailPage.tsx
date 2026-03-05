@@ -118,6 +118,20 @@ export default function EmailPage() {
 
   useEffect(() => { loadEmails(); }, [loadEmails]);
 
+  // Check if current email already has a finance entry
+  useEffect(() => {
+    if (!openEmailId || createdEmailIds.has(openEmailId)) return;
+    supabase
+      .from("finance_entries")
+      .select("id")
+      .eq("source_email_id", openEmailId)
+      .is("deleted_at", null)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setCreatedEmailIds(prev => new Set(prev).add(openEmailId));
+      });
+  }, [openEmailId]);
+
   // Unread counts
   const unreadCounts: Record<string, number> = {};
   accounts.forEach(a => {
