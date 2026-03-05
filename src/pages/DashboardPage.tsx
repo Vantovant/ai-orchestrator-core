@@ -56,7 +56,7 @@ function getUserName(user: any): string {
   return "there";
 }
 
-// ── AI Status Banner (unified via ai-status edge function) ──
+// ── AI Status Banner (unified via ai-status edge function — single source of truth) ──
 function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
   const { data: aiStatus, isLoading, refetch } = useAiStatus();
   const navigate = useNavigate();
@@ -97,6 +97,12 @@ function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retr
 
   // c) Blocked — no key, no assisted remaining
   if (aiStatus.status === "blocked") {
+    const reasonText = aiStatus.reason_code === "ASSIST_EXHAUSTED"
+      ? "Assisted mode is now finished. Add your API key to continue using Smart Capture & Assistant."
+      : aiStatus.reason_code === "POLICY_BLOCKED"
+        ? "This workspace requires a personal API key or approved bridge. Managed AI is not available."
+        : "To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.";
+
     return (
       <Card className="border-destructive/50 bg-destructive/5">
         <CardContent className="flex items-center justify-between gap-3 p-4">
@@ -104,13 +110,9 @@ function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retr
             <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
             <div>
               <p className="text-sm font-medium text-destructive">AI Key Required</p>
-              <p className="text-xs text-muted-foreground">
-                To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.
-              </p>
-              {aiStatus.is_beta_tester && aiStatus.assisted_ai_remaining === 0 && (
-                <p className="text-xs text-destructive mt-1 font-medium">
-                  Assisted mode is now finished. Add your API key to continue using Smart Capture & Assistant.
-                </p>
+              <p className="text-xs text-muted-foreground">{reasonText}</p>
+              {aiStatus.reason_code && aiStatus.reason_code !== "OK" && (
+                <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">{aiStatus.reason_code}</p>
               )}
             </div>
           </div>
@@ -138,6 +140,7 @@ function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retr
             <div>
               <p className="text-sm font-medium">AI Provider Issue</p>
               <p className="text-xs text-muted-foreground">{errorMsg}</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">{aiStatus.reason_code}</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={() => { refetch(); onRetry(); }} disabled={retrying} className="gap-1">
