@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface AiStatusData {
   status: "ready" | "assisted" | "blocked" | "degraded";
+  reason_code: "OK" | "AUTH_MISSING" | "NO_KEY" | "ASSIST_EXHAUSTED" | "POLICY_BLOCKED" | "PROVIDER_ERROR" | "DECRYPT_FAIL";
   hasOpenAIKey: boolean;
   hasGeminiKey: boolean;
   is_beta_tester: boolean;

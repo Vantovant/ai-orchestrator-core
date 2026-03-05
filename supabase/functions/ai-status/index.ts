@@ -15,19 +15,53 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const authHeader = req.headers.get("Authorization") ?? "";
 
+    // ── AUTH VALIDATION (in-code JWT check) ──
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.log("[ai-status] No Authorization header");
+      return new Response(JSON.stringify({
+        status: "blocked",
+        reason_code: "AUTH_MISSING",
+        hasOpenAIKey: false,
+        hasGeminiKey: false,
+        is_beta_tester: false,
+        assisted_ai_remaining: 0,
+        assisted_expired: false,
+        mode_allowed: false,
+        workspace_type: "unknown",
+        last_error: null,
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Authenticate user via their token
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
     if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+      console.log("[ai-status] Invalid token:", authErr?.message);
+      return new Response(JSON.stringify({
+        status: "blocked",
+        reason_code: "AUTH_MISSING",
+        hasOpenAIKey: false,
+        hasGeminiKey: false,
+        is_beta_tester: false,
+        assisted_ai_remaining: 0,
+        assisted_expired: false,
+        mode_allowed: false,
+        workspace_type: "unknown",
+        last_error: null,
+      }), {
+        status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const userId = user.id;
+    console.log("[ai-status] Authenticated user:", userId);
+
     const db = createClient(supabaseUrl, serviceKey);
 
     // Fetch BYOK keys, beta tester status, and last error in parallel
@@ -72,7 +106,6 @@ serve(async (req) => {
     // Sanitize last error
     let lastError: string | null = null;
     if (lastErr?.error_code) {
-      // Don't expose internal details, just the category
       const code = lastErr.error_code;
       if (code.includes("timeout")) lastError = "timeout";
       else if (code.includes("429") || code.includes("rate")) lastError = "rate_limited";
@@ -81,18 +114,42 @@ serve(async (req) => {
       else lastError = "provider_error";
     }
 
-    // Compute overall status
+    // ── AI ROUTER: Single decision tree ──
     let status: string;
+    let reasonCode: string;
+
     if (hasOpenAIKey || hasGeminiKey) {
-      status = lastError && lastError !== "missing_key" ? "degraded" : "ready";
-    } else if (isBetaTester && assistedRemaining > 0 && !assistedExpired && modeAllowed) {
-      status = "assisted";
-    } else {
+      // BYOK path
+      if (lastError && lastError !== "missing_key") {
+        status = "degraded";
+        reasonCode = "PROVIDER_ERROR";
+      } else {
+        status = "ready";
+        reasonCode = "OK";
+      }
+    } else if (!modeAllowed) {
+      // GOV/NDA without BYOK — hard block
       status = "blocked";
+      reasonCode = "POLICY_BLOCKED";
+    } else if (isBetaTester && assistedRemaining > 0 && !assistedExpired) {
+      // Beta assist available
+      status = "assisted";
+      reasonCode = "OK";
+    } else if (isBetaTester && assistedRemaining === 0) {
+      // Beta tester exhausted
+      status = "blocked";
+      reasonCode = "ASSIST_EXHAUSTED";
+    } else {
+      // No key, not beta
+      status = "blocked";
+      reasonCode = "NO_KEY";
     }
+
+    console.log("[ai-status] Result:", { userId, status, reasonCode, hasOpenAIKey, hasGeminiKey, isBetaTester, assistedRemaining });
 
     return new Response(JSON.stringify({
       status,
+      reason_code: reasonCode,
       hasOpenAIKey,
       hasGeminiKey,
       is_beta_tester: isBetaTester,
@@ -106,8 +163,19 @@ serve(async (req) => {
     });
   } catch (e: unknown) {
     console.error("[ai-status] error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
-      status: 500,
+    return new Response(JSON.stringify({
+      status: "blocked",
+      reason_code: "AUTH_MISSING",
+      hasOpenAIKey: false,
+      hasGeminiKey: false,
+      is_beta_tester: false,
+      assisted_ai_remaining: 0,
+      assisted_expired: false,
+      mode_allowed: false,
+      workspace_type: "unknown",
+      last_error: e instanceof Error ? e.message : String(e),
+    }), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
