@@ -535,7 +535,7 @@ export default function EmailPage() {
             />
           ) : (
             <EmailList
-              emails={emails}
+              emails={displayEmails}
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
               onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); }}
