@@ -67,6 +67,10 @@ export default function EmailPage() {
   // Add account state
   const [addingAccount, setAddingAccount] = useState(false);
 
+  // Bank accounts for Smart Extract context
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; last4: string | null; account_name: string }[]>([]);
+  const [selectedBankAccount, setSelectedBankAccount] = useState<{ last4: string; account_type?: string; account_id?: string } | null>(null);
+
   // Load accounts on mount
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
