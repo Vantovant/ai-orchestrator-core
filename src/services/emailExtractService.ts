@@ -12,10 +12,24 @@ export interface EmailExtractEntities {
   vendor_email: string | null;
   subscription_hint: string | null;
   line_items: Array<{ description: string; quantity?: number; unit_price?: number; total?: number }>;
+  counterparty?: string | null;
+  money_direction?: {
+    transaction_type: "income" | "expense" | "transfer" | "bank_fee" | "unknown";
+    direction: "in" | "out" | "neutral";
+    amount: number | null;
+    currency: string | null;
+    datetime: string | null;
+    reference: string | null;
+    counterparty: string | null;
+    category: string | null;
+    confidence: number;
+    reason: string | null;
+    ui_action: "create_income" | "create_expense" | "none";
+  };
 }
 
 export interface SuggestedRoute {
-  target: "finance_expense" | "task" | "meeting" | "reminder" | "notes" | "project";
+  target: "finance_expense" | "finance_income" | "task" | "meeting" | "reminder" | "notes" | "project";
   account_id: string | null;
   project_id: string | null;
   category: string | null;
@@ -38,9 +52,9 @@ export interface EmailExtract {
 }
 
 export const emailExtractService = {
-  async extract(emailId: string, forceRerun = false): Promise<{ extract: EmailExtract | null; cached: boolean; error?: string; message?: string }> {
+  async extract(emailId: string, forceRerun = false, selectedAccount?: { last4: string; account_type?: string; account_id?: string }): Promise<{ extract: EmailExtract | null; cached: boolean; error?: string; message?: string }> {
     const { data, error } = await supabase.functions.invoke("email-smart-extract", {
-      body: { email_id: emailId, force_rerun: forceRerun },
+      body: { email_id: emailId, force_rerun: forceRerun, selected_account: selectedAccount || null },
     });
 
     if (error) {
