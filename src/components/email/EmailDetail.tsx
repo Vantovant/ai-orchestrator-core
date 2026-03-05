@@ -9,6 +9,7 @@ import { format } from "date-fns";
 interface Props {
   email: EmailMessage;
   selectedAccount?: { last4: string; account_type?: string; account_id?: string } | null;
+  financeCreated?: boolean;
   onBack: () => void;
   onArchive: () => void;
   onSnooze: () => void;
@@ -20,7 +21,7 @@ interface Props {
   onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
 }
 
-export default function EmailDetail({ email, selectedAccount, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
+export default function EmailDetail({ email, selectedAccount, financeCreated, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -62,6 +63,7 @@ export default function EmailDetail({ email, selectedAccount, onBack, onArchive,
           emailSender={email.sender}
           emailSnippet={email.snippet}
           selectedAccount={selectedAccount}
+          financeCreated={financeCreated}
           onCreateExpense={onCreateExpense || (() => {})}
           onCreateIncome={onCreateIncome}
           onCreateTask={onCreateTask}

@@ -71,6 +71,9 @@ export default function EmailPage() {
   const [bankAccounts, setBankAccounts] = useState<{ id: string; last4: string | null; account_name: string }[]>([]);
   const [selectedBankAccount, setSelectedBankAccount] = useState<{ last4: string; account_type?: string; account_id?: string } | null>(null);
 
+  // Track emails that already have finance entries created
+  const [createdEmailIds, setCreatedEmailIds] = useState<Set<string>>(new Set());
+
   // Load accounts on mount
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
@@ -114,6 +117,20 @@ export default function EmailPage() {
   }, [selectedAccount, unified, view]);
 
   useEffect(() => { loadEmails(); }, [loadEmails]);
+
+  // Check if current email already has a finance entry
+  useEffect(() => {
+    if (!openEmailId || createdEmailIds.has(openEmailId)) return;
+    supabase
+      .from("finance_entries")
+      .select("id")
+      .eq("source_email_id", openEmailId)
+      .is("deleted_at", null)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setCreatedEmailIds(prev => new Set(prev).add(openEmailId));
+      });
+  }, [openEmailId]);
 
   // Unread counts
   const unreadCounts: Record<string, number> = {};
@@ -397,7 +414,21 @@ export default function EmailPage() {
   const handleCreateExpense = async (entities: any, route: SuggestedRoute) => {
     if (!entities) return;
     const moneyDir = entities?.money_direction;
+    const emailId = currentEmailForAction?.id;
     try {
+      if (emailId) {
+        const { data: existing } = await supabase
+          .from("finance_entries")
+          .select("id, type, amount, category")
+          .eq("source_email_id", emailId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (existing) {
+          sonnerToast.info(`Already created from this email (${existing.type} – ${existing.category})`);
+          setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          return;
+        }
+      }
       await financeEntryService.create({
         type: "expense",
         category: route.category || moneyDir?.category || entities.category_suggestion || "general",
@@ -405,18 +436,38 @@ export default function EmailPage() {
         entry_date: (moneyDir?.datetime || entities.date) ? new Date(moneyDir?.datetime || entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         notes: `${entities.merchant || moneyDir?.counterparty || ""} – ${entities.reference || moneyDir?.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
         source: "email",
-        source_email_id: currentEmailForAction?.id || undefined,
+        source_email_id: emailId || undefined,
       });
       sonnerToast.success("Expense created ✅");
+      if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
     } catch (err: any) {
-      toast({ title: "Failed to create expense", description: err.message, variant: "destructive" });
+      if (err.message?.includes("duplicate") || err.code === "23505") {
+        sonnerToast.info("Already created from this email");
+        if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+      } else {
+        toast({ title: "Failed to create expense", description: err.message, variant: "destructive" });
+      }
     }
   };
 
   const handleCreateIncome = async (entities: any, route: SuggestedRoute) => {
     if (!entities) return;
     const moneyDir = entities?.money_direction;
+    const emailId = currentEmailForAction?.id;
     try {
+      if (emailId) {
+        const { data: existing } = await supabase
+          .from("finance_entries")
+          .select("id, type, amount, category")
+          .eq("source_email_id", emailId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (existing) {
+          sonnerToast.info(`Already created from this email (${existing.type} – ${existing.category})`);
+          setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          return;
+        }
+      }
       await financeEntryService.create({
         type: "income",
         category: route.category || moneyDir?.category || "Sales/Revenue",
@@ -424,11 +475,17 @@ export default function EmailPage() {
         entry_date: (moneyDir?.datetime || entities.date) ? new Date(moneyDir?.datetime || entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         notes: `${moneyDir?.counterparty || entities.merchant || ""} – ${moneyDir?.reference || entities.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
         source: "email",
-        source_email_id: currentEmailForAction?.id || undefined,
+        source_email_id: emailId || undefined,
       });
       sonnerToast.success("Income created ✅");
+      if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
     } catch (err: any) {
-      toast({ title: "Failed to create income", description: err.message, variant: "destructive" });
+      if (err.message?.includes("duplicate") || err.code === "23505") {
+        sonnerToast.info("Already created from this email");
+        if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+      } else {
+        toast({ title: "Failed to create income", description: err.message, variant: "destructive" });
+      }
     }
   };
 
@@ -580,6 +637,7 @@ export default function EmailPage() {
             <EmailDetail
               email={openEmail}
               selectedAccount={selectedBankAccount}
+              financeCreated={createdEmailIds.has(openEmail.id)}
               onBack={() => setOpenEmailId(null)}
               onArchive={() => handleArchive()}
               onSnooze={() => handleSnooze()}
