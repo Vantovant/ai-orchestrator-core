@@ -426,6 +426,28 @@ export default function EmailPage() {
               </label>
             </div>
 
+            {/* Focus & Unread filters (visible in triage) */}
+            {triageMode && (
+              <div className="flex items-center gap-2 border-l border-border/50 pl-2">
+                <Button
+                  variant={focusMode ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setFocusMode(f => !f)}
+                >
+                  Focus
+                </Button>
+                <Button
+                  variant={unreadOnly ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setUnreadOnly(u => !u)}
+                >
+                  Unread
+                </Button>
+              </div>
+            )}
+
             {/* Sync button */}
             {accounts.length > 0 && (
               <TooltipProvider>
