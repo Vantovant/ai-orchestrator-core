@@ -684,6 +684,7 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
   const [extracting, setExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [applying, setApplying] = useState(false);
   const freeformRef = useRef<HTMLTextAreaElement>(null);
   const lastDictationRef = useRef<string | null>(null);
   const qc = useQueryClient();
@@ -717,10 +718,97 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
         body: { content: content.slice(0, 3000), note_date: selectedDate, project_id: projectId },
       });
       if (error) throw error;
-      setSuggestions(data?.suggestions ?? []);
-      setSelected(new Set((data?.suggestions ?? []).map((_: any, i: number) => i)));
+      if (data?.error) throw new Error(data.error);
+      const items = data?.suggestions ?? [];
+      setSuggestions(items.map((s: any) => ({ ...s, applyStatus: "idle" })));
+      setSelected(new Set(items.map((_: any, i: number) => i)));
+      toast.success(items.length > 0 ? `Extracted ${items.length} action(s)` : "No actionable items found");
     } catch (e: any) { toast.error(e.message || "Extraction failed"); }
     setExtracting(false);
+  };
+
+  const handleApply = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast.error("Not authenticated"); return; }
+
+    const toApply = [...selected].map(i => suggestions[i]).filter(s => s && s.applyStatus !== "created" && s.applyStatus !== "merged");
+    if (toApply.length === 0) { toast.info("No items selected"); return; }
+
+    setApplying(true);
+    // Mark queued
+    setSuggestions(prev => prev.map((s, i) => selected.has(i) && s.applyStatus === "idle" ? { ...s, applyStatus: "queued" } : s));
+
+    const { makeDedupe } = await import("@/services/taskService");
+    const { taskService } = await import("@/services/taskService");
+    const { reminderService } = await import("@/services/reminderService");
+
+    const priorityMap: Record<string, string> = { P1: "high", P2: "medium", P3: "low" };
+    let created = 0, merged = 0, failed = 0;
+
+    const updatedSuggestions = [...suggestions];
+    for (const idx of selected) {
+      const s = updatedSuggestions[idx];
+      if (!s || s.applyStatus === "created" || s.applyStatus === "merged") continue;
+      try {
+        if (s.type === "task") {
+          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
+          // Check existing
+          const { data: existing } = await supabase
+            .from("tasks")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("dedupe_key", dedupeKey)
+            .is("deleted_at", null)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from("tasks").update({
+              description: s.description || null,
+              priority: priorityMap[s.priority || "P2"] || "medium",
+              due_date: s.due_at || null,
+              source: "note_extract",
+              last_touched_at: new Date().toISOString(),
+            }).eq("id", existing.id);
+            updatedSuggestions[idx] = { ...s, applyStatus: "merged" };
+            merged++;
+          } else {
+            await taskService.create({
+              title: s.title,
+              priority: priorityMap[s.priority || "P2"] || "medium",
+              due_date: s.due_at || null,
+              source: "note_extract",
+              project_id: projectId,
+              dedupe_key: dedupeKey,
+            });
+            updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+            created++;
+          }
+        } else if (s.type === "reminder") {
+          await reminderService.create({
+            title: s.title,
+            reminder_time: s.remind_at || new Date().toISOString(),
+          });
+          updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+          created++;
+        }
+      } catch (e: any) {
+        updatedSuggestions[idx] = { ...s, applyStatus: "failed", failReason: e.message };
+        failed++;
+      }
+    }
+
+    setSuggestions(updatedSuggestions);
+    setApplying(false);
+
+    // Invalidate project tasks so Tasks tab reflects immediately
+    qc.invalidateQueries({ queryKey: ["project_tasks", projectId] });
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+
+    if (failed > 0) {
+      toast.error(`Applied: ${created} created, ${merged} merged, ${failed} failed`);
+    } else {
+      toast.success(`Applied: ${created} created, ${merged} merged`);
+    }
   };
 
   return (
@@ -762,16 +850,41 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">Extracted Actions</CardTitle></CardHeader>
               <CardContent className="space-y-2">
-                {suggestions.map((s: any, i: number) => (
-                  <label key={i} className="flex items-start gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer">
-                    <input type="checkbox" checked={selected.has(i)} onChange={() => { const n = new Set(selected); n.has(i) ? n.delete(i) : n.add(i); setSelected(n); }} className="mt-0.5 h-4 w-4" />
-                    <div>
-                      <Badge variant="outline" className="text-[10px] mr-1">{s.type}</Badge>
-                      <span className="text-sm">{s.title}</span>
-                    </div>
-                  </label>
-                ))}
-                <Button size="sm" disabled={selected.size === 0}>Apply {selected.size} Selected</Button>
+                {suggestions.map((s: any, i: number) => {
+                  const isDone = s.applyStatus === "created" || s.applyStatus === "merged";
+                  const isFailed = s.applyStatus === "failed";
+                  return (
+                    <label key={i} className={`flex items-start gap-2 p-2 rounded cursor-pointer border ${
+                      isFailed ? "bg-destructive/5 border-destructive/30" :
+                      isDone ? "bg-primary/5 border-primary/30" :
+                      s.applyStatus === "queued" ? "bg-muted/50 border-muted" :
+                      "hover:bg-muted/50 border-transparent"
+                    }`}>
+                      {s.applyStatus === "queued" ? <Loader2 className="h-4 w-4 animate-spin mt-0.5" /> :
+                       isDone ? <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" /> :
+                       isFailed ? <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" /> :
+                       <input type="checkbox" checked={selected.has(i)} onChange={() => { const n = new Set(selected); n.has(i) ? n.delete(i) : n.add(i); setSelected(n); }} className="mt-0.5 h-4 w-4" disabled={applying} />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant="outline" className="text-[10px]">{s.type}</Badge>
+                          {s.priority && <Badge variant={s.priority === "P1" ? "destructive" : "secondary"} className="text-[10px]">{s.priority}</Badge>}
+                          <span className={`text-sm ${isDone ? "line-through text-muted-foreground" : ""}`}>{s.title}</span>
+                        </div>
+                        {isDone && <span className="text-[10px] text-primary">{s.applyStatus === "created" ? "✓ Created" : "↻ Merged"}</span>}
+                        {isFailed && <span className="text-[10px] text-destructive">✗ {s.failReason || "Failed"}</span>}
+                      </div>
+                    </label>
+                  );
+                })}
+                {(() => {
+                  const actionable = [...selected].filter(i => suggestions[i]?.applyStatus === "idle").length;
+                  return actionable > 0 ? (
+                    <Button size="sm" className="w-full gap-1" onClick={handleApply} disabled={applying}>
+                      {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      {applying ? "Applying…" : `Apply ${actionable} Selected`}
+                    </Button>
+                  ) : null;
+                })()}
               </CardContent>
             </Card>
           )}
