@@ -7,7 +7,7 @@ import { emailExtractService, type EmailExtract, type SuggestedRoute } from "@/s
 import VerificationBadge from "@/components/ai/VerificationBadge";
 import {
   Zap, RefreshCw, DollarSign, CheckSquare, CalendarPlus, Bell, FileText, AlertTriangle,
-  CreditCard, Receipt, Plane, MessageSquare, Info, ShoppingBag
+  CreditCard, Receipt, Plane, MessageSquare, Info, ShoppingBag, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, HelpCircle, TrendingUp,
 } from "lucide-react";
 
 const TYPE_ICONS: Record<string, typeof DollarSign> = {
@@ -32,14 +32,34 @@ const TYPE_COLORS: Record<string, string> = {
   other: "bg-muted text-muted-foreground border-border/50",
 };
 
-const ROUTE_LABELS: Record<string, { label: string; icon: typeof DollarSign }> = {
-  finance_expense: { label: "Create Expense", icon: DollarSign },
-  task: { label: "Create Task", icon: CheckSquare },
-  meeting: { label: "Create Meeting", icon: CalendarPlus },
-  reminder: { label: "Create Reminder", icon: Bell },
-  notes: { label: "Send to Notes", icon: FileText },
-  project: { label: "Link to Project", icon: ShoppingBag },
+// Direction badge config
+const DIRECTION_BADGE: Record<string, { label: string; icon: typeof ArrowDownLeft; className: string }> = {
+  in: { label: "IN", icon: ArrowDownLeft, className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" },
+  out: { label: "OUT", icon: ArrowUpRight, className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" },
+  neutral: { label: "TRANSFER", icon: ArrowLeftRight, className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" },
 };
+
+// Dynamic route labels based on money direction
+function getRouteLabel(route: SuggestedRoute, moneyDirection: any): { label: string; icon: typeof DollarSign } {
+  if (route.target === "finance_income") {
+    return { label: "Create Income", icon: TrendingUp };
+  }
+  if (route.target === "finance_expense") {
+    // Check money_direction to potentially override
+    if (moneyDirection?.ui_action === "create_income") {
+      return { label: "Create Income", icon: TrendingUp };
+    }
+    return { label: "Create Expense", icon: DollarSign };
+  }
+  const defaults: Record<string, { label: string; icon: typeof DollarSign }> = {
+    task: { label: "Create Task", icon: CheckSquare },
+    meeting: { label: "Create Meeting", icon: CalendarPlus },
+    reminder: { label: "Create Reminder", icon: Bell },
+    notes: { label: "Send to Notes", icon: FileText },
+    project: { label: "Link to Project", icon: ShoppingBag },
+  };
+  return defaults[route.target] || { label: route.target, icon: FileText };
+}
 
 interface Props {
   emailId: string;
@@ -47,6 +67,7 @@ interface Props {
   emailSender: string;
   emailSnippet: string;
   onCreateExpense: (entities: any, route: SuggestedRoute) => void;
+  onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
   onCreateTask: () => void;
   onCreateMeeting: () => void;
   onCreateReminder: () => void;
@@ -58,6 +79,7 @@ export default function SmartExtractPanel({
   emailSender,
   emailSnippet,
   onCreateExpense,
+  onCreateIncome,
   onCreateTask,
   onCreateMeeting,
   onCreateReminder,
@@ -94,9 +116,20 @@ export default function SmartExtractPanel({
   }, [emailId]);
 
   const handleRouteAction = (route: SuggestedRoute) => {
+    const moneyDir = (extract?.entities_json as any)?.money_direction;
+    const isIncome = route.target === "finance_income" || moneyDir?.ui_action === "create_income";
+
     switch (route.target) {
+      case "finance_income":
+        if (onCreateIncome) onCreateIncome(extract?.entities_json, route);
+        else onCreateExpense(extract?.entities_json, { ...route, target: "finance_expense" });
+        break;
       case "finance_expense":
-        onCreateExpense(extract?.entities_json, route);
+        if (isIncome && onCreateIncome) {
+          onCreateIncome(extract?.entities_json, route);
+        } else {
+          onCreateExpense(extract?.entities_json, route);
+        }
         break;
       case "task":
         onCreateTask();
@@ -142,22 +175,34 @@ export default function SmartExtractPanel({
 
   if (!extract) return null;
 
-  const entities = extract.entities_json;
-  const routes = extract.suggested_routes_json || [];
+  const entities = extract.entities_json as any;
+  const routes = (extract.suggested_routes_json || []) as SuggestedRoute[];
+  const moneyDir = entities?.money_direction;
   const TypeIcon = TYPE_ICONS[extract.detected_type] || MessageSquare;
   const needsVerification = extract.requires_user_confirmation || extract.confidence < 0.75;
+
+  // Direction badge
+  const dirBadge = moneyDir?.direction ? DIRECTION_BADGE[moneyDir.direction] : null;
+  const DirIcon = dirBadge?.icon || HelpCircle;
 
   return (
     <Card className="border-border/50 bg-muted/10 p-3 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Zap className="h-3.5 w-3.5 text-primary" />
           <span className="text-xs font-semibold">Smart Extract</span>
           <Badge variant="outline" className={`text-[10px] h-4 px-1.5 py-0 ${TYPE_COLORS[extract.detected_type] || ""}`}>
             <TypeIcon className="h-2.5 w-2.5 mr-0.5" />
             {extract.detected_type}
           </Badge>
+          {/* Money direction badge */}
+          {dirBadge && (
+            <Badge variant="outline" className={`text-[10px] h-4 px-1.5 py-0 gap-0.5 ${dirBadge.className}`}>
+              <DirIcon className="h-2.5 w-2.5" />
+              {dirBadge.label}
+            </Badge>
+          )}
           <span className="text-[10px] text-muted-foreground">{Math.round(extract.confidence * 100)}%</span>
           {needsVerification && <VerificationBadge grounded={false} />}
         </div>
@@ -176,48 +221,47 @@ export default function SmartExtractPanel({
       {/* Summary */}
       <p className="text-xs text-foreground leading-relaxed">{extract.summary}</p>
 
+      {/* Money direction reason */}
+      {moneyDir?.reason && moneyDir.transaction_type !== "unknown" && (
+        <p className="text-[10px] text-muted-foreground italic">{moneyDir.reason}</p>
+      )}
+
       {/* Extracted entities */}
-      {(entities.merchant || entities.amount != null) && (
+      {(entities?.merchant || entities?.amount != null || moneyDir?.counterparty) && (
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-          {entities.merchant && (
+          {(entities?.merchant || moneyDir?.counterparty) && (
             <>
-              <span className="text-muted-foreground">Merchant</span>
-              <span className="font-medium text-foreground">{entities.merchant}</span>
+              <span className="text-muted-foreground">{moneyDir?.direction === "in" ? "From" : "Merchant"}</span>
+              <span className="font-medium text-foreground">{entities?.merchant || moneyDir?.counterparty}</span>
             </>
           )}
-          {entities.amount != null && (
+          {(entities?.amount != null || moneyDir?.amount != null) && (
             <>
               <span className="text-muted-foreground">Amount</span>
               <span className="font-medium text-foreground">
-                {entities.currency || "ZAR"} {Number(entities.amount).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}
+                {(entities?.currency || moneyDir?.currency || "ZAR")} {Number(entities?.amount ?? moneyDir?.amount ?? 0).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}
               </span>
             </>
           )}
-          {entities.transaction_type && (
-            <>
-              <span className="text-muted-foreground">Type</span>
-              <span className="font-medium text-foreground capitalize">{entities.transaction_type}</span>
-            </>
-          )}
-          {entities.category_suggestion && (
+          {moneyDir?.category && (
             <>
               <span className="text-muted-foreground">Category</span>
-              <span className="font-medium text-foreground">{entities.category_suggestion}</span>
+              <span className="font-medium text-foreground">{moneyDir.category}</span>
             </>
           )}
-          {entities.reference && (
+          {(entities?.reference || moneyDir?.reference) && (
             <>
               <span className="text-muted-foreground">Reference</span>
-              <span className="font-medium text-foreground font-mono text-[10px]">{entities.reference}</span>
+              <span className="font-medium text-foreground font-mono text-[10px]">{entities?.reference || moneyDir?.reference}</span>
             </>
           )}
-          {entities.account_hint && (
+          {entities?.account_hint && (
             <>
               <span className="text-muted-foreground">Account</span>
               <span className="font-medium text-foreground">{entities.account_hint}</span>
             </>
           )}
-          {entities.subscription_hint && (
+          {entities?.subscription_hint && (
             <>
               <span className="text-muted-foreground">Subscription</span>
               <span className="font-medium text-foreground">{entities.subscription_hint}</span>
@@ -226,12 +270,11 @@ export default function SmartExtractPanel({
         </div>
       )}
 
-      {/* Action buttons */}
+      {/* Action buttons – dynamic based on money direction */}
       {routes.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-1">
           {routes.map((route, i) => {
-            const routeInfo = ROUTE_LABELS[route.target];
-            if (!routeInfo) return null;
+            const routeInfo = getRouteLabel(route, moneyDir);
             const RouteIcon = routeInfo.icon;
             return (
               <Button
