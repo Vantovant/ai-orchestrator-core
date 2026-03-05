@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Settings, Pencil, Download, User, Keyboard, Users, Tag, Bot, Sparkles, Puzzle, Copy, Globe, Loader2 } from "lucide-react";
+import GmailIntegrationCard from "@/components/settings/GmailIntegrationCard";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
