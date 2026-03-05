@@ -9,7 +9,9 @@ import { emailService, type EmailMessage, type EmailAccount } from "@/services/e
 import { taskService } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { meetingService } from "@/services/meetingService";
+import { financeEntryService } from "@/services/financeService";
 import { supabase } from "@/integrations/supabase/client";
+import type { SuggestedRoute } from "@/services/emailExtractService";
 import AccountSwitcher from "@/components/email/AccountSwitcher";
 import EmailList from "@/components/email/EmailList";
 import EmailDetail from "@/components/email/EmailDetail";
@@ -378,6 +380,23 @@ export default function EmailPage() {
     }
   };
 
+  const handleCreateExpense = async (entities: any, route: SuggestedRoute) => {
+    if (!entities) return;
+    try {
+      await financeEntryService.create({
+        type: "expense",
+        category: route.category || entities.category_suggestion || "general",
+        amount: Math.abs(Number(entities.amount) || 0),
+        entry_date: entities.date ? new Date(entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        notes: `${entities.merchant || ""} – ${entities.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
+        source: "email",
+      });
+      sonnerToast.success("Expense created ✅");
+    } catch (err: any) {
+      toast({ title: "Failed to create expense", description: err.message, variant: "destructive" });
+    }
+  };
+
   // Command bar dispatcher
   const handleCommand = (action: string, payload?: any) => {
     switch (action) {
@@ -532,6 +551,7 @@ export default function EmailPage() {
               onCreateTask={handleCreateTask}
               onCreateMeeting={handleCreateMeeting}
               onCreateReminder={handleCreateReminder}
+              onCreateExpense={handleCreateExpense}
             />
           ) : (
             <EmailList

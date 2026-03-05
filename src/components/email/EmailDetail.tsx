@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { EmailMessage } from "@/services/emailService";
+import type { SuggestedRoute } from "@/services/emailExtractService";
+import SmartExtractPanel from "@/components/email/SmartExtractPanel";
 import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 
@@ -13,9 +15,10 @@ interface Props {
   onCreateTask: () => void;
   onCreateMeeting: () => void;
   onCreateReminder: () => void;
+  onCreateExpense?: (entities: any, route: SuggestedRoute) => void;
 }
 
-export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder }: Props) {
+export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -49,7 +52,19 @@ export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar
       </div>
 
       {/* Email content */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        {/* Smart Extract Panel */}
+        <SmartExtractPanel
+          emailId={email.id}
+          emailSubject={email.subject}
+          emailSender={email.sender}
+          emailSnippet={email.snippet}
+          onCreateExpense={onCreateExpense || (() => {})}
+          onCreateTask={onCreateTask}
+          onCreateMeeting={onCreateMeeting}
+          onCreateReminder={onCreateReminder}
+        />
+
         <h2 className="text-lg font-semibold text-foreground mb-2">{email.subject}</h2>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
           <span className="font-medium text-foreground">{email.sender}</span>

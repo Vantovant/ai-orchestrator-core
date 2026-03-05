@@ -587,6 +587,59 @@ export type Database = {
         }
         Relationships: []
       }
+      email_extracts: {
+        Row: {
+          confidence: number
+          created_at: string
+          deleted_at: string | null
+          detected_type: string
+          email_id: string
+          entities_json: Json
+          id: string
+          requires_user_confirmation: boolean
+          suggested_routes_json: Json
+          summary: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          deleted_at?: string | null
+          detected_type?: string
+          email_id: string
+          entities_json?: Json
+          id?: string
+          requires_user_confirmation?: boolean
+          suggested_routes_json?: Json
+          summary?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          deleted_at?: string | null
+          detected_type?: string
+          email_id?: string
+          entities_json?: Json
+          id?: string
+          requires_user_confirmation?: boolean
+          suggested_routes_json?: Json
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_extracts_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_inbox_items: {
         Row: {
           account_id: string | null

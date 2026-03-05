@@ -116,3 +116,9 @@ verify_jwt = false
 
 [functions.ai-status]
 verify_jwt = false
+
+[functions.email-smart-extract]
+verify_jwt = false
+
+[functions.gmail-get]
+verify_jwt = false
