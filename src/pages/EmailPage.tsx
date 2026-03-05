@@ -671,24 +671,24 @@ export default function EmailPage() {
           </div>
         )}
 
-        {/* View tabs */}
+      {/* View tabs */}
         <Tabs value={view} onValueChange={(v) => setView(v as any)}>
-          <TabsList className="h-8">
-            <TabsTrigger value="inbox" className="text-xs gap-1 h-6 px-3">
-              <Inbox className="h-3 w-3" /> Inbox
+          <TabsList className="h-9 sm:h-8 w-full sm:w-auto">
+            <TabsTrigger value="inbox" className="text-xs gap-1.5 h-7 sm:h-6 px-4 sm:px-3 flex-1 sm:flex-none">
+              <Inbox className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Inbox
             </TabsTrigger>
-            <TabsTrigger value="snoozed" className="text-xs gap-1 h-6 px-3">
-              <Clock className="h-3 w-3" /> Snoozed
+            <TabsTrigger value="snoozed" className="text-xs gap-1.5 h-7 sm:h-6 px-4 sm:px-3 flex-1 sm:flex-none">
+              <Clock className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Snoozed
             </TabsTrigger>
-            <TabsTrigger value="waiting" className="text-xs gap-1 h-6 px-3">
-              <Eye className="h-3 w-3" /> Waiting On
+            <TabsTrigger value="waiting" className="text-xs gap-1.5 h-7 sm:h-6 px-4 sm:px-3 flex-1 sm:flex-none">
+              <Eye className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> Waiting On
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       {/* Content */}
-      <Card className="flex-1 mx-3 sm:mx-4 mb-0 overflow-hidden rounded-b-none border-b-0">
+      <Card className="flex-1 mx-0 sm:mx-4 mb-0 overflow-hidden rounded-none sm:rounded-t-lg border-x-0 sm:border-x border-b-0">
         <CardContent className="p-0 h-full overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">

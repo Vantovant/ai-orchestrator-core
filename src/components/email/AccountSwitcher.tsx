@@ -46,9 +46,9 @@ export default function AccountSwitcher({
         <span className="font-medium text-foreground">{currentLabel}</span>
       </p>
 
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
         {/* Unified toggle */}
-        <div className="flex items-center gap-1.5 mr-2 shrink-0">
+        <div className="flex items-center gap-1.5 mr-1 sm:mr-2 shrink-0">
           <Switch
             checked={unified}
             onCheckedChange={onToggleUnified}
@@ -68,7 +68,7 @@ export default function AccountSwitcher({
           <DropdownMenuTrigger asChild>
             <button
               className={cn(
-                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all shrink-0",
+                "flex items-center gap-1.5 rounded-lg border px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-all shrink-0 min-h-[32px]",
                 "border-primary/40 bg-primary/10 text-foreground shadow-sm"
               )}
             >
@@ -136,11 +136,11 @@ export default function AccountSwitcher({
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 gap-1 text-xs text-muted-foreground shrink-0"
+          className="h-8 sm:h-7 gap-1 text-xs text-muted-foreground shrink-0"
           onClick={onAddAccount}
           disabled={addingAccount || !onAddAccount}
         >
-          <Plus className="h-3 w-3" /> Add Account
+          <Plus className="h-3.5 w-3.5 sm:h-3 sm:w-3" /> <span className="hidden sm:inline">Add Account</span><span className="sm:hidden">Add</span>
         </Button>
       </div>
     </div>
