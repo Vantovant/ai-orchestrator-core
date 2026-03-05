@@ -24,7 +24,7 @@ export default function EmailPage() {
   // Accounts
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState("");
-  const [unified, setUnified] = useState(false);
+  const [unified, setUnified] = useState(true);
 
   // Emails
   const [emails, setEmails] = useState<EmailMessage[]>([]);
