@@ -157,7 +157,7 @@ export default function SmartExtractPanel({
             {extract.detected_type}
           </Badge>
           <span className="text-[10px] text-muted-foreground">{Math.round(extract.confidence * 100)}%</span>
-          {needsVerification && <VerificationBadge />}
+          {needsVerification && <VerificationBadge grounded={false} />}
         </div>
         <Button
           variant="ghost"
