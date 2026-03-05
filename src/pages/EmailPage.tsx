@@ -219,8 +219,15 @@ export default function EmailPage() {
 
     if (e.key === "?") { e.preventDefault(); setCheatSheetOpen(true); return; }
 
+    // U = toggle unread-only
+    if (e.key === "u" || e.key === "U") {
+      e.preventDefault();
+      setUnreadOnly(prev => !prev);
+      return;
+    }
+
     if (openEmailId) {
-      const idx = emails.findIndex(em => em.id === openEmailId);
+      const idx = displayEmails.findIndex(em => em.id === openEmailId);
       if (e.key === "Escape") { e.preventDefault(); setOpenEmailId(null); return; }
       if (e.key === "e" || e.key === "E") { e.preventDefault(); handleArchive(idx); return; }
       if (e.key === "s" || e.key === "S") { e.preventDefault(); handleSnooze(undefined, idx); return; }
@@ -229,16 +236,16 @@ export default function EmailPage() {
       if (e.key === "m" || e.key === "M") { e.preventDefault(); handleCreateMeeting(); return; }
       if (e.key === "x" || e.key === "X") {
         e.preventDefault();
-        const em = emails.find(em => em.id === openEmailId);
+        const em = displayEmails.find(em => em.id === openEmailId);
         if (em) emailService.toggleStar(em.id, em.is_starred).then(() => loadEmails());
         return;
       }
     } else {
-      if (e.key === "j" || e.key === "J") { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, emails.length - 1)); return; }
+      if (e.key === "j" || e.key === "J") { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, displayEmails.length - 1)); return; }
       if (e.key === "k" || e.key === "K") { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); return; }
       if (e.key === "Enter") {
         e.preventDefault();
-        const email = emails[selectedIndex];
+        const email = displayEmails[selectedIndex];
         if (email) { emailService.markRead(email.id); setOpenEmailId(email.id); loadEmails(); }
         return;
       }
@@ -259,7 +266,7 @@ export default function EmailPage() {
       }
       if (e.key === "x" || e.key === "X") {
         e.preventDefault();
-        const email = emails[selectedIndex];
+        const email = displayEmails[selectedIndex];
         if (email) emailService.toggleStar(email.id, email.is_starred).then(() => loadEmails());
         return;
       }
