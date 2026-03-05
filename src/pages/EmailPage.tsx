@@ -133,18 +133,32 @@ export default function EmailPage() {
 
   useEffect(() => { loadEmails(); }, [loadEmails]);
 
-  // Check if current email already has a finance entry
+  // Check if current email already has a finance entry + backfill action log
   useEffect(() => {
-    if (!openEmailId || createdEmailIds.has(openEmailId)) return;
-    supabase
-      .from("finance_entries")
-      .select("id")
-      .eq("source_email_id", openEmailId)
-      .is("deleted_at", null)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setCreatedEmailIds(prev => new Set(prev).add(openEmailId));
-      });
+    if (!openEmailId) return;
+    (async () => {
+      // Check for existing finance entry
+      const { data: finEntry } = await supabase
+        .from("finance_entries")
+        .select("id, type")
+        .eq("source_email_id", openEmailId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (finEntry) {
+        setCreatedEmailIds(prev => new Set(prev).add(openEmailId));
+
+        // Backfill: if action log has no finance action for this email, insert one
+        const actions = await emailActionLogService.getForEmail(openEmailId);
+        const hasFinanceLog = actions.some(a =>
+          a.action_type === "finance_income" || a.action_type === "finance_expense"
+        );
+        if (!hasFinanceLog) {
+          const actionType: EmailActionType = finEntry.type === "income" ? "finance_income" : "finance_expense";
+          await logAction(openEmailId, actionType, finEntry.id);
+        }
+      }
+    })();
   }, [openEmailId]);
 
   // Unread counts
@@ -364,6 +378,7 @@ export default function EmailPage() {
     if (!target) return;
     const d = new Date(); d.setDate(d.getDate() + 3);
     await emailService.setWaitingOn(target.id, d.toISOString().slice(0, 10));
+    await logAction(target.id, "waiting_on" as EmailActionType);
     toast({ title: "Marked as Waiting On" });
     autoAdvance(targetIdx);
     loadEmails();
@@ -435,6 +450,7 @@ export default function EmailPage() {
         if (existing) {
           sonnerToast.info(`Already created from this email (${existing.type} – ${existing.category})`);
           setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          await logAction(emailId, existing.type === "income" ? "finance_income" : "finance_expense", existing.id);
           return;
         }
       }
@@ -455,7 +471,16 @@ export default function EmailPage() {
     } catch (err: any) {
       if (err.message?.includes("duplicate") || err.code === "23505") {
         sonnerToast.info("Already created from this email");
-        if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+        if (emailId) {
+          setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          const { data: dup } = await supabase
+            .from("finance_entries")
+            .select("id, type")
+            .eq("source_email_id", emailId)
+            .is("deleted_at", null)
+            .maybeSingle();
+          if (dup) await logAction(emailId, dup.type === "income" ? "finance_income" : "finance_expense", dup.id);
+        }
       } else {
         toast({ title: "Failed to create expense", description: err.message, variant: "destructive" });
       }
@@ -477,6 +502,7 @@ export default function EmailPage() {
         if (existing) {
           sonnerToast.info(`Already created from this email (${existing.type} – ${existing.category})`);
           setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          await logAction(emailId, existing.type === "income" ? "finance_income" : "finance_expense", existing.id);
           return;
         }
       }
@@ -497,7 +523,16 @@ export default function EmailPage() {
     } catch (err: any) {
       if (err.message?.includes("duplicate") || err.code === "23505") {
         sonnerToast.info("Already created from this email");
-        if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+        if (emailId) {
+          setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          const { data: dup } = await supabase
+            .from("finance_entries")
+            .select("id, type")
+            .eq("source_email_id", emailId)
+            .is("deleted_at", null)
+            .maybeSingle();
+          if (dup) await logAction(emailId, dup.type === "income" ? "finance_income" : "finance_expense", dup.id);
+        }
       } else {
         toast({ title: "Failed to create income", description: err.message, variant: "destructive" });
       }
