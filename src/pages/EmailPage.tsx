@@ -91,6 +91,16 @@ export default function EmailPage() {
         setSelectedAccount(accs[0].id);
       }
     });
+
+    // Load bank accounts for Smart Extract context
+    supabase.from("bank_accounts").select("id, account_name, last4").is("deleted_at", null).then(({ data }) => {
+      const accs = data || [];
+      setBankAccounts(accs as any);
+      if (accs.length > 0) {
+        const first = accs[0] as any;
+        setSelectedBankAccount({ last4: first.last4 || "", account_type: first.account_name || "", account_id: first.id });
+      }
+    });
   }, []);
 
   // Load emails when account/view changes
