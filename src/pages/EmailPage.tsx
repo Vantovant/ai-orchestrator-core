@@ -11,6 +11,7 @@ import { reminderService } from "@/services/reminderService";
 import { meetingService } from "@/services/meetingService";
 import { financeEntryService } from "@/services/financeService";
 import { supabase } from "@/integrations/supabase/client";
+import { emailActionLogService, type EmailActionType } from "@/services/emailActionLogService";
 import type { SuggestedRoute } from "@/services/emailExtractService";
 import AccountSwitcher from "@/components/email/AccountSwitcher";
 import EmailList from "@/components/email/EmailList";
@@ -52,6 +53,7 @@ export default function EmailPage() {
   const [triageMode, setTriageMode] = useState(false);
   const [focusMode, setFocusMode] = useState(true);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [unhandledOnly, setUnhandledOnly] = useState(false);
 
   // Sync
   const [syncing, setSyncing] = useState(false);
@@ -74,11 +76,21 @@ export default function EmailPage() {
   // Track emails that already have finance entries created
   const [createdEmailIds, setCreatedEmailIds] = useState<Set<string>>(new Set());
 
+  // Handled email IDs (any action logged)
+  const [handledEmailIds, setHandledEmailIds] = useState<Set<string>>(new Set());
+  const [handledRefreshKey, setHandledRefreshKey] = useState(0);
+
+  // Helper to log action + refresh handled state
+  const logAction = async (emailId: string, actionType: EmailActionType, relatedId?: string) => {
+    await emailActionLogService.log(emailId, actionType, relatedId);
+    setHandledEmailIds(prev => new Set(prev).add(emailId));
+    setHandledRefreshKey(k => k + 1);
+  };
+
   // Load accounts on mount
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
       setAccounts(accs);
-      // Build last sync times
       const syncTimes: Record<string, string | null> = {};
       accs.forEach(a => { syncTimes[a.id] = (a as any).last_sync_at || null; });
       setLastSyncTimes(syncTimes);
@@ -104,6 +116,9 @@ export default function EmailPage() {
         setSelectedBankAccount({ last4: first.last4 || "", account_type: first.account_name || "", account_id: first.id });
       }
     });
+
+    // Load handled email IDs
+    emailActionLogService.getHandledEmailIds().then(setHandledEmailIds);
   }, []);
 
   // Load emails when account/view changes
@@ -141,15 +156,15 @@ export default function EmailPage() {
   // Triage sorting & filtering
   const displayEmails = (() => {
     let list = [...emails];
-    // Focus filter: hide low-priority/newsletter/spam/fyi
     if (triageMode && focusMode) {
       list = list.filter(e => !["fyi", "spam"].includes(e.category || ""));
     }
-    // Unread-only filter
     if (unreadOnly) {
       list = list.filter(e => !e.is_read);
     }
-    // Triage sort: unread first, starred first, newest first
+    if (unhandledOnly) {
+      list = list.filter(e => !handledEmailIds.has(e.id));
+    }
     if (triageMode) {
       list.sort((a, b) => {
         if (a.is_read !== b.is_read) return a.is_read ? 1 : -1;
@@ -231,7 +246,6 @@ export default function EmailPage() {
   // ─── Auto-advance helper ───────────────────────────────────────
   const autoAdvance = useCallback((removedIndex: number) => {
     setOpenEmailId(null);
-    // Keep same index (next email slides into position), clamp to bounds
     setSelectedIndex(i => {
       const nextLen = emails.length - 1;
       if (nextLen <= 0) return 0;
@@ -252,7 +266,6 @@ export default function EmailPage() {
 
     if (e.key === "?") { e.preventDefault(); setCheatSheetOpen(true); return; }
 
-    // U = toggle unread-only
     if (e.key === "u" || e.key === "U") {
       e.preventDefault();
       setUnreadOnly(prev => !prev);
@@ -270,7 +283,10 @@ export default function EmailPage() {
       if (e.key === "x" || e.key === "X") {
         e.preventDefault();
         const em = displayEmails.find(em => em.id === openEmailId);
-        if (em) emailService.toggleStar(em.id, em.is_starred).then(() => loadEmails());
+        if (em) {
+          emailService.toggleStar(em.id, em.is_starred).then(() => loadEmails());
+          logAction(em.id, "starred");
+        }
         return;
       }
     } else {
@@ -282,25 +298,16 @@ export default function EmailPage() {
         if (email) { emailService.markRead(email.id); setOpenEmailId(email.id); loadEmails(); }
         return;
       }
-      if (e.key === "e" || e.key === "E") {
-        e.preventDefault();
-        handleArchive(selectedIndex);
-        return;
-      }
-      if (e.key === "s" || e.key === "S") {
-        e.preventDefault();
-        handleSnooze(undefined, selectedIndex);
-        return;
-      }
-      if (e.key === "w" || e.key === "W") {
-        e.preventDefault();
-        handleWaitingOn(selectedIndex);
-        return;
-      }
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); handleArchive(selectedIndex); return; }
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); handleSnooze(undefined, selectedIndex); return; }
+      if (e.key === "w" || e.key === "W") { e.preventDefault(); handleWaitingOn(selectedIndex); return; }
       if (e.key === "x" || e.key === "X") {
         e.preventDefault();
         const email = displayEmails[selectedIndex];
-        if (email) emailService.toggleStar(email.id, email.is_starred).then(() => loadEmails());
+        if (email) {
+          emailService.toggleStar(email.id, email.is_starred).then(() => loadEmails());
+          logAction(email.id, "starred");
+        }
         return;
       }
     }
@@ -311,23 +318,20 @@ export default function EmailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // Reset index on view/account change
   useEffect(() => { setSelectedIndex(0); setOpenEmailId(null); }, [view, selectedAccount, unified]);
 
-  // Auto-select first email in triage mode
   useEffect(() => {
     if (triageMode && emails.length > 0 && !openEmailId) {
       setSelectedIndex(0);
     }
   }, [triageMode, emails.length]);
 
-  // Close tutorial
   const closeTutorial = () => {
     setTutorialOpen(false);
     try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch {}
   };
 
-  // ─── Action handlers with auto-advance ─────────────────────────
+  // ─── Action handlers with auto-advance + action logging ────────
   const currentEmailForAction = openEmail || displayEmails[selectedIndex];
 
   const handleArchive = async (idx?: number) => {
@@ -335,6 +339,7 @@ export default function EmailPage() {
     const target = displayEmails[targetIdx];
     if (!target) return;
     await emailService.archive(target.id);
+    await logAction(target.id, "archived");
     toast({ title: "Archived" });
     autoAdvance(targetIdx);
     loadEmails();
@@ -347,6 +352,7 @@ export default function EmailPage() {
     const d = new Date();
     if (!until) { d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); until = d.toISOString(); }
     await emailService.snooze(target.id, until);
+    await logAction(target.id, "snoozed");
     toast({ title: "Snoozed until tomorrow 8 AM" });
     autoAdvance(targetIdx);
     loadEmails();
@@ -366,11 +372,12 @@ export default function EmailPage() {
   const handleCreateTask = async () => {
     if (!currentEmailForAction) return;
     try {
-      await taskService.create({
+      const result = await taskService.create({
         title: currentEmailForAction.subject,
         description: `From: ${currentEmailForAction.sender}\n\n${currentEmailForAction.snippet}`,
         source: "email",
       });
+      await logAction(currentEmailForAction.id, "task", result?.id);
       toast({ title: "Task created", description: currentEmailForAction.subject });
     } catch (err: any) {
       toast({ title: "Failed to create task", description: err.message, variant: "destructive" });
@@ -384,12 +391,13 @@ export default function EmailPage() {
       start.setDate(start.getDate() + 1);
       start.setHours(10, 0, 0, 0);
       const end = new Date(start); end.setHours(11);
-      await meetingService.create({
+      const result = await meetingService.create({
         title: currentEmailForAction.subject,
         description: `From: ${currentEmailForAction.sender}\n\n${currentEmailForAction.snippet}`,
         start_time: start.toISOString(),
         end_time: end.toISOString(),
       });
+      await logAction(currentEmailForAction.id, "meeting", result?.id);
       toast({ title: "Meeting created", description: currentEmailForAction.subject });
     } catch (err: any) {
       toast({ title: "Failed to create meeting", description: err.message, variant: "destructive" });
@@ -400,11 +408,12 @@ export default function EmailPage() {
     if (!currentEmailForAction) return;
     try {
       const time = new Date(); time.setDate(time.getDate() + 1); time.setHours(9, 0, 0, 0);
-      await reminderService.create({
+      const result = await reminderService.create({
         title: `Follow up: ${currentEmailForAction.subject}`,
         description: `From: ${currentEmailForAction.sender}`,
         reminder_time: time.toISOString(),
       });
+      await logAction(currentEmailForAction.id, "reminder", result?.id);
       toast({ title: "Reminder created" });
     } catch (err: any) {
       toast({ title: "Failed to create reminder", description: err.message, variant: "destructive" });
@@ -429,7 +438,7 @@ export default function EmailPage() {
           return;
         }
       }
-      await financeEntryService.create({
+      const result = await financeEntryService.create({
         type: "expense",
         category: route.category || moneyDir?.category || entities.category_suggestion || "general",
         amount: Math.abs(Number(moneyDir?.amount ?? entities.amount) || 0),
@@ -439,7 +448,10 @@ export default function EmailPage() {
         source_email_id: emailId || undefined,
       });
       sonnerToast.success("Expense created ✅");
-      if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+      if (emailId) {
+        setCreatedEmailIds(prev => new Set(prev).add(emailId));
+        await logAction(emailId, "finance_expense", result?.id);
+      }
     } catch (err: any) {
       if (err.message?.includes("duplicate") || err.code === "23505") {
         sonnerToast.info("Already created from this email");
@@ -468,7 +480,7 @@ export default function EmailPage() {
           return;
         }
       }
-      await financeEntryService.create({
+      const result = await financeEntryService.create({
         type: "income",
         category: route.category || moneyDir?.category || "Sales/Revenue",
         amount: Math.abs(Number(moneyDir?.amount ?? entities.amount) || 0),
@@ -478,7 +490,10 @@ export default function EmailPage() {
         source_email_id: emailId || undefined,
       });
       sonnerToast.success("Income created ✅");
-      if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+      if (emailId) {
+        setCreatedEmailIds(prev => new Set(prev).add(emailId));
+        await logAction(emailId, "finance_income", result?.id);
+      }
     } catch (err: any) {
       if (err.message?.includes("duplicate") || err.code === "23505") {
         sonnerToast.info("Already created from this email");
@@ -502,7 +517,6 @@ export default function EmailPage() {
     }
   };
 
-  // Last synced label for tooltip
   const lastSyncedLabel = () => {
     if (unified) {
       return accounts.map(a => {
@@ -537,7 +551,7 @@ export default function EmailPage() {
               </label>
             </div>
 
-            {/* Focus & Unread filters (visible in triage) */}
+            {/* Focus & Unread & Unhandled filters */}
             {triageMode && (
               <div className="flex items-center gap-2 border-l border-border/50 pl-2">
                 <Button
@@ -555,6 +569,14 @@ export default function EmailPage() {
                   onClick={() => setUnreadOnly(u => !u)}
                 >
                   Unread
+                </Button>
+                <Button
+                  variant={unhandledOnly ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setUnhandledOnly(u => !u)}
+                >
+                  Unhandled
                 </Button>
               </div>
             )}
@@ -638,10 +660,14 @@ export default function EmailPage() {
               email={openEmail}
               selectedAccount={selectedBankAccount}
               financeCreated={createdEmailIds.has(openEmail.id)}
+              handledRefreshKey={handledRefreshKey}
               onBack={() => setOpenEmailId(null)}
               onArchive={() => handleArchive()}
               onSnooze={() => handleSnooze()}
-              onStar={() => { emailService.toggleStar(openEmail.id, openEmail.is_starred).then(() => loadEmails()); }}
+              onStar={() => {
+                emailService.toggleStar(openEmail.id, openEmail.is_starred).then(() => loadEmails());
+                logAction(openEmail.id, "starred");
+              }}
               onCreateTask={handleCreateTask}
               onCreateMeeting={handleCreateMeeting}
               onCreateReminder={handleCreateReminder}
@@ -654,11 +680,15 @@ export default function EmailPage() {
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
               onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); }}
-              onStar={(id, current) => { emailService.toggleStar(id, current).then(() => loadEmails()); }}
+              onStar={(id, current) => {
+                emailService.toggleStar(id, current).then(() => loadEmails());
+                logAction(id, "starred");
+              }}
               accountLabels={accountLabels}
               accountEmails={accountEmails}
               showAccountBadge={unified}
               compact={triageMode}
+              handledEmailIds={handledEmailIds}
             />
           )}
         </CardContent>
