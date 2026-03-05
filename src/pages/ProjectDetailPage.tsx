@@ -827,6 +827,10 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
       toast.error(`Applied: ${created} created, ${merged} merged, ${failed} failed`);
     } else {
       toast.success(`Applied: ${created} created, ${merged} merged`);
+      // Auto-navigate to Tasks tab after successful apply
+      if (created > 0 && onApplied) {
+        setTimeout(() => onApplied(), 500);
+      }
     }
   };
 
