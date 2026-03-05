@@ -518,6 +518,9 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Gmail Integration */}
+      <GmailIntegrationCard />
+
       {/* Chrome Extension */}
       <ExtensionSettings />
 
