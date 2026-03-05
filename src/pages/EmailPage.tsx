@@ -67,6 +67,10 @@ export default function EmailPage() {
   // Add account state
   const [addingAccount, setAddingAccount] = useState(false);
 
+  // Bank accounts for Smart Extract context
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; last4: string | null; account_name: string }[]>([]);
+  const [selectedBankAccount, setSelectedBankAccount] = useState<{ last4: string; account_type?: string; account_id?: string } | null>(null);
+
   // Load accounts on mount
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
@@ -85,6 +89,16 @@ export default function EmailPage() {
         sonnerToast.success("Gmail connected ✅");
       } else if (accs.length > 0 && !selectedAccount) {
         setSelectedAccount(accs[0].id);
+      }
+    });
+
+    // Load bank accounts for Smart Extract context
+    supabase.from("bank_accounts").select("id, account_name, last4").is("deleted_at", null).then(({ data }) => {
+      const accs = data || [];
+      setBankAccounts(accs as any);
+      if (accs.length > 0) {
+        const first = accs[0] as any;
+        setSelectedBankAccount({ last4: first.last4 || "", account_type: first.account_name || "", account_id: first.id });
       }
     });
   }, []);
@@ -565,6 +579,7 @@ export default function EmailPage() {
           ) : openEmail ? (
             <EmailDetail
               email={openEmail}
+              selectedAccount={selectedBankAccount}
               onBack={() => setOpenEmailId(null)}
               onArchive={() => handleArchive()}
               onSnooze={() => handleSnooze()}

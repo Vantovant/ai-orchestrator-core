@@ -6,8 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Versioned prompt V2 – money direction classifier
-const SYSTEM_PROMPT_V2 = `You are VantoOS "Smart Extract" for Email. Your job is to read an email (metadata + snippet + optional capped body) and output ONE strict JSON object. Do not write explanations. Do not wrap in markdown. Do not add extra keys. If a field is unknown, use null or an empty string/array as appropriate.
+const PROMPT_VERSION = "v2.1";
+
+// Versioned prompt V2.1 – money direction classifier with strict account matching
+const SYSTEM_PROMPT = `You are VantoOS "Smart Extract" for Email. Your job is to read an email (metadata + snippet + optional capped body) and output ONE strict JSON object. Do not write explanations. Do not wrap in markdown. Do not add extra keys. If a field is unknown, use null or an empty string/array as appropriate.
 
 PII SAFETY RULES (MANDATORY):
 - Never output full card numbers, full ID numbers, or any secret tokens.
@@ -19,6 +21,7 @@ TASK:
 
 2) MONEY DIRECTION CLASSIFICATION (CRITICAL – follow these rules exactly):
 You will receive user_context.selected_account with the user's bank account details (last4, account_type).
+You will also receive user_context.known_accounts with all the user's bank accounts.
 Based on the email text, determine the money direction:
 
 RULE 1 – INCOME: If text indicates money credited/received/paid INTO the user's selected account (e.g., "paid to Current a/c..XXXX" where XXXX matches selected_account.last4, or "credit", "deposit", "received"), classify as:
@@ -67,9 +70,11 @@ RULE 5 – UNKNOWN: If direction is unclear, use:
 - counterparty: the other party in the transaction (person/company name)
 
 4) Recommend routing destinations:
-- suggested_routes must include at least one route with target: finance_expense | finance_income | task | meeting | reminder | notes | project
-- For finance_expense: provide category and short reason.
-- For finance_income: provide category and short reason.
+- suggested_routes must include at least one route.
+- CRITICAL ROUTING CONSISTENCY:
+  - If money_direction.ui_action == "create_income", you MUST include a route with target = "finance_income"
+  - If money_direction.ui_action == "create_expense", you MUST include a route with target = "finance_expense"
+  - The first route should always be the finance route matching the money direction.
 
 OUTPUT JSON (RETURN EXACTLY THIS SHAPE, NO EXTRA KEYS):
 {
@@ -167,14 +172,12 @@ function sanitizeExtract(raw: any): any {
     for (const k of ALLOWED_MONEY_DIR_KEYS) {
       md[k] = raw.money_direction[k] ?? null;
     }
-    // Enforce defaults
     md.transaction_type = md.transaction_type || "unknown";
     md.direction = md.direction || "neutral";
     md.ui_action = md.ui_action || "none";
     md.confidence = typeof md.confidence === "number" ? md.confidence : 0;
     out.money_direction = md;
   } else {
-    // Infer from legacy entities if money_direction not present
     out.money_direction = {
       transaction_type: "unknown",
       direction: "neutral",
@@ -205,6 +208,49 @@ function sanitizeExtract(raw: any): any {
   }
 
   out.requires_user_confirmation = raw.requires_user_confirmation ?? true;
+
+  // ── ENFORCE ROUTING CONSISTENCY ──
+  // If money_direction says create_income, ensure finance_income route exists (and vice versa)
+  const uiAction = out.money_direction?.ui_action;
+  if (uiAction === "create_income") {
+    const hasIncomeRoute = out.suggested_routes.some((r: any) => r.target === "finance_income");
+    if (!hasIncomeRoute) {
+      // Replace first finance_expense route or prepend
+      const expIdx = out.suggested_routes.findIndex((r: any) => r.target === "finance_expense");
+      const incomeRoute = {
+        target: "finance_income",
+        account_id: null,
+        project_id: null,
+        category: out.money_direction.category || "Sales/Revenue",
+        confidence: out.money_direction.confidence || 0.7,
+        reason: out.money_direction.reason || "Income detected",
+      };
+      if (expIdx >= 0) {
+        out.suggested_routes[expIdx] = incomeRoute;
+      } else {
+        out.suggested_routes.unshift(incomeRoute);
+      }
+    }
+  } else if (uiAction === "create_expense") {
+    const hasExpenseRoute = out.suggested_routes.some((r: any) => r.target === "finance_expense");
+    if (!hasExpenseRoute) {
+      const incIdx = out.suggested_routes.findIndex((r: any) => r.target === "finance_income");
+      const expenseRoute = {
+        target: "finance_expense",
+        account_id: null,
+        project_id: null,
+        category: out.money_direction.category || "Other",
+        confidence: out.money_direction.confidence || 0.7,
+        reason: out.money_direction.reason || "Expense detected",
+      };
+      if (incIdx >= 0) {
+        out.suggested_routes[incIdx] = expenseRoute;
+      } else {
+        out.suggested_routes.unshift(expenseRoute);
+      }
+    }
+  }
+
   return out;
 }
 
@@ -231,12 +277,14 @@ serve(async (req) => {
     const emailId = body.email_id;
     const forceRerun = body.force_rerun ?? false;
     const selectedAccount = body.selected_account ?? null; // { last4, account_type, account_id }
+    const requestLast4 = selectedAccount?.last4 || null;
 
     if (!emailId) {
       return new Response(JSON.stringify({ error: "email_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Check cache first (skip on force rerun)
+    // Only use cache if prompt_version AND selected_account_last4 match
     if (!forceRerun) {
       const { data: cached } = await userClient
         .from("email_extracts")
@@ -247,9 +295,18 @@ serve(async (req) => {
         .maybeSingle();
 
       if (cached) {
-        return new Response(JSON.stringify({ extract: cached, cached: true }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const cachedVersion = (cached as any).prompt_version || "v2";
+        const cachedLast4 = (cached as any).selected_account_last4 || null;
+        const versionMatch = cachedVersion === PROMPT_VERSION;
+        const accountMatch = cachedLast4 === requestLast4;
+
+        if (versionMatch && accountMatch) {
+          return new Response(JSON.stringify({ extract: cached, cached: true }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Cache stale – fall through to rerun AI
+        console.log(`[email-smart-extract] Cache miss: version=${cachedVersion}!=${PROMPT_VERSION} or last4=${cachedLast4}!=${requestLast4}`);
       }
     }
 
@@ -310,7 +367,7 @@ serve(async (req) => {
       headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: [
-          { role: "system", content: SYSTEM_PROMPT_V2 },
+          { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
         calling_function: "email-smart-extract",
@@ -353,7 +410,7 @@ serve(async (req) => {
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Sanitize: strip extra keys
+    // Sanitize: strip extra keys + enforce routing consistency
     const sanitized = sanitizeExtract(extractResult);
 
     // Match bank account hints to actual account IDs
@@ -374,7 +431,7 @@ serve(async (req) => {
       }
     }
 
-    // ── Upsert into DB (no delete+insert race) ──
+    // ── Upsert into DB with prompt_version + selected_account_last4 ──
     const db = createClient(supabaseUrl, serviceKey);
     const extractRow = {
       user_id: user.id,
@@ -385,7 +442,9 @@ serve(async (req) => {
       entities_json: { ...entities, money_direction: sanitized.money_direction },
       suggested_routes_json: routes,
       requires_user_confirmation: sanitized.requires_user_confirmation ?? true,
-      deleted_at: null, // clear soft-delete on re-run
+      deleted_at: null,
+      prompt_version: PROMPT_VERSION,
+      selected_account_last4: requestLast4,
     };
 
     const { data: saved, error: saveErr } = await db

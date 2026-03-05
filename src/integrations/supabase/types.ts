@@ -596,7 +596,9 @@ export type Database = {
           email_id: string
           entities_json: Json
           id: string
+          prompt_version: string
           requires_user_confirmation: boolean
+          selected_account_last4: string | null
           suggested_routes_json: Json
           summary: string
           updated_at: string
@@ -610,7 +612,9 @@ export type Database = {
           email_id: string
           entities_json?: Json
           id?: string
+          prompt_version?: string
           requires_user_confirmation?: boolean
+          selected_account_last4?: string | null
           suggested_routes_json?: Json
           summary?: string
           updated_at?: string
@@ -624,7 +628,9 @@ export type Database = {
           email_id?: string
           entities_json?: Json
           id?: string
+          prompt_version?: string
           requires_user_confirmation?: boolean
+          selected_account_last4?: string | null
           suggested_routes_json?: Json
           summary?: string
           updated_at?: string
