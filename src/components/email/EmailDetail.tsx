@@ -16,9 +16,10 @@ interface Props {
   onCreateMeeting: () => void;
   onCreateReminder: () => void;
   onCreateExpense?: (entities: any, route: SuggestedRoute) => void;
+  onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
 }
 
-export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense }: Props) {
+export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
