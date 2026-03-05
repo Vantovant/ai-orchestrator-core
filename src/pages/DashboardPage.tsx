@@ -63,13 +63,25 @@ function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retr
 
   if (isLoading || !aiStatus) return null;
 
+  const isAdminMode = aiStatus.is_super_admin && (
+    aiStatus.managed_mode_hint === "platform_admin" ||
+    aiStatus.managed_mode_hint === "platform_admin_fallback"
+  );
+
   // a) BYOK available → "AI Ready"
   if (aiStatus.status === "ready") {
     return (
       <Card className="border-success/50 bg-success/5">
         <CardContent className="flex items-center gap-3 p-3">
           <ShieldCheck className="h-5 w-5 text-success shrink-0" />
-          <p className="text-sm font-medium text-success">AI Ready — Your keys are connected</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-success">
+              {aiStatus.hasOpenAIKey || aiStatus.hasGeminiKey ? "AI Ready — Your keys are connected" : "AI Ready"}
+            </p>
+            {isAdminMode && (
+              <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">Admin Platform Assist active</Badge>
+            )}
+          </div>
         </CardContent>
       </Card>
     );
@@ -98,7 +110,7 @@ function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retr
   // c) Blocked — no key, no assisted remaining
   if (aiStatus.status === "blocked") {
     const reasonText = aiStatus.reason_code === "ASSIST_EXHAUSTED"
-      ? "Assisted mode is now finished. Add your API key to continue using Smart Capture & Assistant."
+      ? "Assisted mode is now finished. Add your API key in Settings → AI Keys to continue using Smart Capture & Assistant."
       : aiStatus.reason_code === "POLICY_BLOCKED"
         ? "This workspace requires a personal API key or approved bridge. Managed AI is not available."
         : "To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.";
@@ -140,6 +152,9 @@ function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retr
             <div>
               <p className="text-sm font-medium">AI Provider Issue</p>
               <p className="text-xs text-muted-foreground">{errorMsg}</p>
+              {aiStatus.managed_mode_hint === "platform_admin_fallback" && aiStatus.is_super_admin && (
+                <p className="text-[10px] text-primary mt-1">Admin fallback available on retry</p>
+              )}
               <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">{aiStatus.reason_code}</p>
             </div>
           </div>

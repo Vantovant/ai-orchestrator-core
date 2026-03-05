@@ -7,11 +7,13 @@ export interface AiStatusData {
   hasOpenAIKey: boolean;
   hasGeminiKey: boolean;
   is_beta_tester: boolean;
+  is_super_admin: boolean;
   assisted_ai_remaining: number;
   assisted_expired: boolean;
   mode_allowed: boolean;
   workspace_type: string;
   last_error: string | null;
+  managed_mode_hint: "none" | "assisted_beta" | "platform_admin" | "platform_admin_fallback";
 }
 
 export function useAiStatus(enabled = true) {
