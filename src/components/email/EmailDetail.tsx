@@ -8,6 +8,7 @@ import { format } from "date-fns";
 
 interface Props {
   email: EmailMessage;
+  selectedAccount?: { last4: string; account_type?: string; account_id?: string } | null;
   onBack: () => void;
   onArchive: () => void;
   onSnooze: () => void;
@@ -19,7 +20,7 @@ interface Props {
   onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
 }
 
-export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
+export default function EmailDetail({ email, selectedAccount, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
