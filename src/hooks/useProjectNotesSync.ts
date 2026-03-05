@@ -138,6 +138,7 @@ export function useProjectNotesSync(projectId: string, selectedDate: string) {
 
   return {
     isLoading: noteQuery.isLoading,
+    noteId: noteQuery.data?.id ?? null,
     content,
     setContent,
     dirty,

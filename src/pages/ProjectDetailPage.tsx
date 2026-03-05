@@ -689,7 +689,7 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
   const lastDictationRef = useRef<string | null>(null);
   const qc = useQueryClient();
 
-  const { isLoading: noteLoading, content, setContent, dirty, saveStatus, lastSavedAt, save } = useProjectNotesSync(projectId, selectedDate);
+  const { isLoading: noteLoading, noteId, content, setContent, dirty, saveStatus, lastSavedAt, save } = useProjectNotesSync(projectId, selectedDate);
   const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
 
   const handleDictationAppend = useCallback((text: string) => {
@@ -754,9 +754,7 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
       if (!s) continue;
       try {
         if (s.type === "task" || s.type === "meeting") {
-          // Treat meeting suggestions as tasks too (meetings lack enough info)
-          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
-          // Check existing
+          const dedupeKey = makeDedupe(user.id, projectId, noteId, s.title);
           const { data: existing, error: lookupErr } = await supabase
             .from("tasks")
             .select("id")
@@ -780,10 +778,12 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
           } else {
             const { error: insertErr } = await supabase.from("tasks").insert({
               title: s.title,
+              description: s.description || null,
               user_id: user.id,
               priority: priorityMap[s.priority || "P2"] || "medium",
               due_date: s.due_at || null,
               source: "note_extract",
+              note_id: noteId,
               project_id: projectId,
               dedupe_key: dedupeKey,
               status: "todo",
@@ -804,20 +804,29 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
           updatedSuggestions[idx] = { ...s, applyStatus: "created" };
           created++;
         } else {
-          // Unknown type – still create as task
-          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
-          const { error: insertErr } = await supabase.from("tasks").insert({
-            title: s.title,
-            user_id: user.id,
-            source: "note_extract",
-            project_id: projectId,
-            dedupe_key: dedupeKey,
-            status: "todo",
-            last_touched_at: new Date().toISOString(),
-          });
-          if (insertErr) throw insertErr;
-          updatedSuggestions[idx] = { ...s, applyStatus: "created" };
-          created++;
+          const dedupeKey = makeDedupe(user.id, projectId, noteId, s.title);
+          const { data: existing } = await supabase
+            .from("tasks").select("id").eq("user_id", user.id).eq("dedupe_key", dedupeKey).is("deleted_at", null).maybeSingle();
+          if (existing) {
+            await supabase.from("tasks").update({ source: "note_extract", last_touched_at: new Date().toISOString() }).eq("id", existing.id);
+            updatedSuggestions[idx] = { ...s, applyStatus: "merged" };
+            merged++;
+          } else {
+            const { error: insertErr } = await supabase.from("tasks").insert({
+              title: s.title,
+              description: s.description || null,
+              user_id: user.id,
+              source: "note_extract",
+              note_id: noteId,
+              project_id: projectId,
+              dedupe_key: dedupeKey,
+              status: "todo",
+              last_touched_at: new Date().toISOString(),
+            });
+            if (insertErr) throw insertErr;
+            updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+            created++;
+          }
         }
       } catch (e: any) {
         console.error("Apply action failed:", idx, s.title, e);
@@ -850,13 +859,15 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
     if (failed > 0) parts.push(`${failed} failed`);
     const receipt = parts.join(", ") || "No changes";
 
-    if (failed > 0) {
-      toast.error(`Applied: ${receipt}`);
+    if (failed > 0 && created === 0 && merged === 0) {
+      toast.error(`Apply failed: ${receipt}`);
+    } else if (failed > 0) {
+      toast.warning(`Applied: ${receipt}`);
     } else {
       toast.success(`Applied: ${receipt}`);
-      if ((created > 0 || merged > 0) && onApplied) {
-        setTimeout(() => onApplied(), 400);
-      }
+    }
+    if ((created > 0 || merged > 0) && onApplied) {
+      setTimeout(() => onApplied(), 300);
     }
   };
 
