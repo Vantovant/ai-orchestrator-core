@@ -27,33 +27,38 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, ha
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 px-4 py-2 border-b border-border/50">
-        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 text-xs">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back <kbd className="ml-1 text-[10px] px-1 py-0.5 rounded bg-muted">Esc</kbd>
-        </Button>
-        <div className="flex-1" />
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onStar} title="Star">
-          <Star className={email.is_starred ? "h-3.5 w-3.5 fill-amber-400 text-amber-400" : "h-3.5 w-3.5"} />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onArchive} title="Archive (E)">
-          <Archive className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onSnooze} title="Snooze (S)">
-          <Clock className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7" disabled title="Reply (R) – Coming soon">
-          <Reply className="h-3.5 w-3.5" />
-        </Button>
-        <div className="w-px h-4 bg-border mx-1" />
-        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={onCreateTask}>
-          <CheckSquare className="h-3 w-3" /> Task <kbd className="text-[10px] px-1 py-0.5 rounded bg-muted">T</kbd>
-        </Button>
-        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={onCreateMeeting}>
-          <CalendarPlus className="h-3 w-3" /> Meeting <kbd className="text-[10px] px-1 py-0.5 rounded bg-muted">M</kbd>
-        </Button>
-        <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={onCreateReminder}>
-          <Bell className="h-3 w-3" /> Reminder
-        </Button>
+      <div className="border-b border-border/50 px-3 py-2 space-y-1.5">
+        {/* Row 1: Back + quick actions */}
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={onBack} className="gap-1 text-xs shrink-0">
+            <ArrowLeft className="h-3.5 w-3.5" /> Back <kbd className="ml-1 text-[10px] px-1 py-0.5 rounded bg-muted hidden sm:inline">Esc</kbd>
+          </Button>
+          <div className="flex-1" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-7 sm:w-7" onClick={onStar} title="Star">
+            <Star className={email.is_starred ? "h-4 w-4 sm:h-3.5 sm:w-3.5 fill-amber-400 text-amber-400" : "h-4 w-4 sm:h-3.5 sm:w-3.5"} />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-7 sm:w-7" onClick={onArchive} title="Archive (E)">
+            <Archive className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-7 sm:w-7" onClick={onSnooze} title="Snooze (S)">
+            <Clock className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8 sm:h-7 sm:w-7" disabled title="Reply (R) – Coming soon">
+            <Reply className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+          </Button>
+        </div>
+        {/* Row 2: Create actions */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs shrink-0" onClick={onCreateTask}>
+            <CheckSquare className="h-3 w-3" /> Task <kbd className="text-[10px] px-1 py-0.5 rounded bg-muted hidden sm:inline">T</kbd>
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs shrink-0" onClick={onCreateMeeting}>
+            <CalendarPlus className="h-3 w-3" /> Meeting <kbd className="text-[10px] px-1 py-0.5 rounded bg-muted hidden sm:inline">M</kbd>
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs shrink-0" onClick={onCreateReminder}>
+            <Bell className="h-3 w-3" /> Reminder
+          </Button>
+        </div>
       </div>
 
       {/* Email content */}
