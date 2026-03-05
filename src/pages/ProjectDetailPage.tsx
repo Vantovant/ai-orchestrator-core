@@ -689,7 +689,7 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
   const lastDictationRef = useRef<string | null>(null);
   const qc = useQueryClient();
 
-  const { isLoading: noteLoading, content, setContent, dirty, saveStatus, lastSavedAt, save } = useProjectNotesSync(projectId, selectedDate);
+  const { isLoading: noteLoading, noteId, content, setContent, dirty, saveStatus, lastSavedAt, save } = useProjectNotesSync(projectId, selectedDate);
   const isToday = selectedDate === format(new Date(), "yyyy-MM-dd");
 
   const handleDictationAppend = useCallback((text: string) => {
