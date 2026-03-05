@@ -859,13 +859,15 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
     if (failed > 0) parts.push(`${failed} failed`);
     const receipt = parts.join(", ") || "No changes";
 
-    if (failed > 0) {
-      toast.error(`Applied: ${receipt}`);
+    if (failed > 0 && created === 0 && merged === 0) {
+      toast.error(`Apply failed: ${receipt}`);
+    } else if (failed > 0) {
+      toast.warning(`Applied: ${receipt}`);
     } else {
       toast.success(`Applied: ${receipt}`);
-      if ((created > 0 || merged > 0) && onApplied) {
-        setTimeout(() => onApplied(), 400);
-      }
+    }
+    if ((created > 0 || merged > 0) && onApplied) {
+      setTimeout(() => onApplied(), 300);
     }
   };
 
