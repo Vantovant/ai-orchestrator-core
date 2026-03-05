@@ -536,10 +536,16 @@ export type Database = {
           deleted_at: string | null
           display_name: string | null
           email_address: string
+          history_id: string | null
           id: string
           label: string | null
+          last_sync_at: string | null
           provider: string
+          refresh_token_encrypted: string | null
+          scopes: string[] | null
           status: string
+          token_encrypted: string | null
+          token_expires_at: string | null
           updated_at: string
           user_id: string
         }
@@ -548,10 +554,16 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           email_address: string
+          history_id?: string | null
           id?: string
           label?: string | null
+          last_sync_at?: string | null
           provider?: string
+          refresh_token_encrypted?: string | null
+          scopes?: string[] | null
           status?: string
+          token_encrypted?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_id: string
         }
@@ -560,30 +572,99 @@ export type Database = {
           deleted_at?: string | null
           display_name?: string | null
           email_address?: string
+          history_id?: string | null
           id?: string
           label?: string | null
+          last_sync_at?: string | null
           provider?: string
+          refresh_token_encrypted?: string | null
+          scopes?: string[] | null
           status?: string
+          token_encrypted?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_id?: string
         }
         Relationships: []
       }
+      email_inbox_items: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          id: string
+          last_touched_at: string
+          project_id: string | null
+          source: string
+          source_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          last_touched_at?: string
+          project_id?: string | null
+          source?: string
+          source_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          id?: string
+          last_touched_at?: string
+          project_id?: string | null
+          source?: string
+          source_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_inbox_items_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "email_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_inbox_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_messages: {
         Row: {
           account_id: string
+          body_preview: string | null
           category: string | null
+          cc: string[] | null
           created_at: string
           date: string
           deleted_at: string | null
           followup_due_date: string | null
+          gmail_message_id: string | null
+          gmail_thread_id: string | null
+          has_body: boolean | null
           id: string
           intent: string | null
+          internal_date: number | null
           is_archived: boolean
           is_read: boolean
           is_starred: boolean
+          label_ids: string[] | null
           labels: string[] | null
           message_id: string
+          permalink: string | null
+          raw_size: number | null
           recipients: string[] | null
           sender: string
           snippet: string | null
@@ -597,18 +678,27 @@ export type Database = {
         }
         Insert: {
           account_id: string
+          body_preview?: string | null
           category?: string | null
+          cc?: string[] | null
           created_at?: string
           date?: string
           deleted_at?: string | null
           followup_due_date?: string | null
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          has_body?: boolean | null
           id?: string
           intent?: string | null
+          internal_date?: number | null
           is_archived?: boolean
           is_read?: boolean
           is_starred?: boolean
+          label_ids?: string[] | null
           labels?: string[] | null
           message_id: string
+          permalink?: string | null
+          raw_size?: number | null
           recipients?: string[] | null
           sender?: string
           snippet?: string | null
@@ -622,18 +712,27 @@ export type Database = {
         }
         Update: {
           account_id?: string
+          body_preview?: string | null
           category?: string | null
+          cc?: string[] | null
           created_at?: string
           date?: string
           deleted_at?: string | null
           followup_due_date?: string | null
+          gmail_message_id?: string | null
+          gmail_thread_id?: string | null
+          has_body?: boolean | null
           id?: string
           intent?: string | null
+          internal_date?: number | null
           is_archived?: boolean
           is_read?: boolean
           is_starred?: boolean
+          label_ids?: string[] | null
           labels?: string[] | null
           message_id?: string
+          permalink?: string | null
+          raw_size?: number | null
           recipients?: string[] | null
           sender?: string
           snippet?: string | null
