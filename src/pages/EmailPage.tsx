@@ -298,8 +298,8 @@ export default function EmailPage() {
   const currentEmailForAction = openEmail || displayEmails[selectedIndex];
 
   const handleArchive = async (idx?: number) => {
-    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
-    const target = emails[targetIdx];
+    const targetIdx = idx ?? (openEmail ? displayEmails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = displayEmails[targetIdx];
     if (!target) return;
     await emailService.archive(target.id);
     toast({ title: "Archived" });
