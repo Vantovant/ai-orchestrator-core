@@ -105,8 +105,30 @@ export default function EmailPage() {
     unreadCounts[a.id] = emails.filter(e => e.account_id === a.id && !e.is_read).length;
   });
 
+  // Triage sorting & filtering
+  const displayEmails = (() => {
+    let list = [...emails];
+    // Focus filter: hide low-priority/newsletter/spam/fyi
+    if (triageMode && focusMode) {
+      list = list.filter(e => !["fyi", "spam"].includes(e.category || ""));
+    }
+    // Unread-only filter
+    if (unreadOnly) {
+      list = list.filter(e => !e.is_read);
+    }
+    // Triage sort: unread first, starred first, newest first
+    if (triageMode) {
+      list.sort((a, b) => {
+        if (a.is_read !== b.is_read) return a.is_read ? 1 : -1;
+        if (a.is_starred !== b.is_starred) return a.is_starred ? -1 : 1;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+    }
+    return list;
+  })();
+
   // Selected email
-  const openEmail = openEmailId ? emails.find(e => e.id === openEmailId) : undefined;
+  const openEmail = openEmailId ? displayEmails.find(e => e.id === openEmailId) : undefined;
 
   // Account labels map
   const accountLabels: Record<string, string> = {};
