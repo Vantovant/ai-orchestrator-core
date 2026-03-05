@@ -78,8 +78,7 @@ serve(async (req) => {
       db.from("user_roles")
         .select("role")
         .eq("user_id", userId)
-        .in("role", ["admin", "super_admin"])
-        .limit(1)
+        .limit(10)
         .maybeSingle(),
     ]);
 
