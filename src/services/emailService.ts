@@ -57,6 +57,7 @@ export const emailService = {
       label: a.label || "Business",
       status: a.status as EmailAccount["status"],
       provider: a.provider,
+      last_sync_at: a.last_sync_at,
     }));
   },
 
