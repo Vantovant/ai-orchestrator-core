@@ -249,8 +249,34 @@ function ExtensionSettings() {
 export default function SettingsPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const contexts = useQuery({ queryKey: ["executive_context"], queryFn: contextService.list });
   const clients = useQuery({ queryKey: ["clients"], queryFn: clientService.list });
+
+  // Gmail OAuth return handling
+  useEffect(() => {
+    const gmailStatus = searchParams.get("gmail");
+    if (gmailStatus === "connected") {
+      toast.success("Gmail connected ✅");
+      searchParams.delete("gmail");
+      setSearchParams(searchParams, { replace: true });
+    } else if (gmailStatus === "error") {
+      const code = searchParams.get("code") || "unknown";
+      const messages: Record<string, string> = {
+        oauth_cancelled: "Gmail connection was cancelled.",
+        access_denied: "This Google account is blocked. See guidance below.",
+        token_exchange_failed: "Token exchange failed — please try again.",
+        state_expired: "Connection timed out — please try again.",
+        missing_params: "Missing OAuth parameters — please try again.",
+        no_email: "Could not retrieve email address from Google.",
+        unknown: "An unknown error occurred.",
+      };
+      toast.error(`Gmail connection failed — ${messages[code] || messages.unknown}`);
+      searchParams.delete("gmail");
+      searchParams.delete("code");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, []);
 
   const [open, setOpen] = useState(false);
   const [editKey, setEditKey] = useState("");
