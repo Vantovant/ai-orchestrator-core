@@ -48,6 +48,8 @@ export default function EmailPage() {
 
   // Triage mode
   const [triageMode, setTriageMode] = useState(false);
+  const [focusMode, setFocusMode] = useState(true);
+  const [unreadOnly, setUnreadOnly] = useState(false);
 
   // Sync
   const [syncing, setSyncing] = useState(false);
