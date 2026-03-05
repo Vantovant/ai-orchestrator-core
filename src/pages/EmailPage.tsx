@@ -513,7 +513,16 @@ export default function EmailPage() {
     } catch (err: any) {
       if (err.message?.includes("duplicate") || err.code === "23505") {
         sonnerToast.info("Already created from this email");
-        if (emailId) setCreatedEmailIds(prev => new Set(prev).add(emailId));
+        if (emailId) {
+          setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          const { data: dup } = await supabase
+            .from("finance_entries")
+            .select("id, type")
+            .eq("source_email_id", emailId)
+            .is("deleted_at", null)
+            .maybeSingle();
+          if (dup) await logAction(emailId, dup.type === "income" ? "finance_income" : "finance_expense", dup.id);
+        }
       } else {
         toast({ title: "Failed to create income", description: err.message, variant: "destructive" });
       }
