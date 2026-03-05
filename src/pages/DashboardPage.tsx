@@ -258,15 +258,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* AI Status Banner */}
-      {aiStatus && aiStatus !== "ok" && (
-        <AiStatusBanner
-          aiStatus={aiStatus}
-          message={aiResult?.message ?? "AI is unavailable. Showing standard mode."}
-          onRetry={runAssistant}
-          retrying={aiLoading}
-        />
-      )}
+      {/* AI Availability Banner */}
+      <AiAvailabilityBanner onRetry={runAssistant} retrying={aiLoading} />
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
