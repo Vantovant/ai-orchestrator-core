@@ -688,7 +688,7 @@ export default function EmailPage() {
       </div>
 
       {/* Content */}
-      <Card className="flex-1 mx-3 sm:mx-4 mb-0 overflow-hidden rounded-b-none border-b-0">
+      <Card className="flex-1 mx-0 sm:mx-4 mb-0 overflow-hidden rounded-none sm:rounded-t-lg border-x-0 sm:border-x border-b-0">
         <CardContent className="p-0 h-full overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-16">
