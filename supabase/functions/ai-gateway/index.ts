@@ -174,7 +174,7 @@ serve(async (req) => {
     // ── Fetch user keys + roles + beta status in parallel ──
     const [keysResult, roleResult, betaResult] = await Promise.all([
       db.from("user_ai_keys").select("use_own_keys, openai_key_encrypted, gemini_key_encrypted").eq("user_id", userId).maybeSingle(),
-      db.from("user_roles").select("role").eq("user_id", userId).in("role", ["admin", "super_admin"]).limit(1).maybeSingle(),
+      db.from("user_roles").select("role").eq("user_id", userId),
       db.from("beta_testers").select("*").eq("user_id", userId).eq("is_active", true).maybeSingle(),
     ]);
 
