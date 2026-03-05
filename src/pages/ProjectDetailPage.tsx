@@ -542,7 +542,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
 
         {/* NOTES */}
         <TabsContent value="notes">
-          <ProjectNotesTab projectId={projectId} />
+          <ProjectNotesTab projectId={projectId} onApplied={() => setActiveTab("tasks")} />
         </TabsContent>
 
         {/* LINKS */}
