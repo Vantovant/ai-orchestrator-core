@@ -133,18 +133,32 @@ export default function EmailPage() {
 
   useEffect(() => { loadEmails(); }, [loadEmails]);
 
-  // Check if current email already has a finance entry
+  // Check if current email already has a finance entry + backfill action log
   useEffect(() => {
-    if (!openEmailId || createdEmailIds.has(openEmailId)) return;
-    supabase
-      .from("finance_entries")
-      .select("id")
-      .eq("source_email_id", openEmailId)
-      .is("deleted_at", null)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setCreatedEmailIds(prev => new Set(prev).add(openEmailId));
-      });
+    if (!openEmailId) return;
+    (async () => {
+      // Check for existing finance entry
+      const { data: finEntry } = await supabase
+        .from("finance_entries")
+        .select("id, type")
+        .eq("source_email_id", openEmailId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (finEntry) {
+        setCreatedEmailIds(prev => new Set(prev).add(openEmailId));
+
+        // Backfill: if action log has no finance action for this email, insert one
+        const actions = await emailActionLogService.getForEmail(openEmailId);
+        const hasFinanceLog = actions.some(a =>
+          a.action_type === "finance_income" || a.action_type === "finance_expense"
+        );
+        if (!hasFinanceLog) {
+          const actionType: EmailActionType = finEntry.type === "income" ? "finance_income" : "finance_expense";
+          await logAction(openEmailId, actionType, finEntry.id);
+        }
+      }
+    })();
   }, [openEmailId]);
 
   // Unread counts
