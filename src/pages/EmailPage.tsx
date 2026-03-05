@@ -390,6 +390,7 @@ export default function EmailPage() {
         entry_date: entities.date ? new Date(entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
         notes: `${entities.merchant || ""} – ${entities.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
         source: "email",
+        source_email_id: currentEmailForAction?.id || undefined,
       });
       sonnerToast.success("Expense created ✅");
     } catch (err: any) {

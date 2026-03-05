@@ -1146,6 +1146,7 @@ export type Database = {
           id: string
           notes: string | null
           source: string
+          source_email_id: string | null
           type: string
           updated_at: string
           user_id: string
@@ -1159,6 +1160,7 @@ export type Database = {
           id?: string
           notes?: string | null
           source?: string
+          source_email_id?: string | null
           type?: string
           updated_at?: string
           user_id: string
@@ -1172,6 +1174,7 @@ export type Database = {
           id?: string
           notes?: string | null
           source?: string
+          source_email_id?: string | null
           type?: string
           updated_at?: string
           user_id?: string
