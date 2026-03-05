@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const APP_URL = "https://executive.onlinecourseformlm.com";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -17,11 +19,11 @@ serve(async (req) => {
 
     if (error) {
       console.error("[gmail-auth-callback] OAuth error:", error);
-      return new Response(redirectHtml("Gmail connection cancelled."), { headers: { "Content-Type": "text/html" } });
+      return redirect(`${APP_URL}/settings?gmail=error&code=oauth_cancelled`);
     }
 
     if (!code || !state) {
-      return new Response(redirectHtml("Missing code or state."), { headers: { "Content-Type": "text/html" } });
+      return redirect(`${APP_URL}/settings?gmail=error&code=missing_params`);
     }
 
     // Decode state to get user_id
@@ -29,12 +31,12 @@ serve(async (req) => {
     try {
       stateData = JSON.parse(atob(state));
     } catch {
-      return new Response(redirectHtml("Invalid state."), { headers: { "Content-Type": "text/html" } });
+      return redirect(`${APP_URL}/settings?gmail=error&code=invalid_state`);
     }
 
     // Validate state age (max 10 minutes)
     if (Date.now() - stateData.ts > 10 * 60 * 1000) {
-      return new Response(redirectHtml("State expired. Please try again."), { headers: { "Content-Type": "text/html" } });
+      return redirect(`${APP_URL}/settings?gmail=error&code=state_expired`);
     }
 
     const userId = stateData.user_id;
@@ -60,7 +62,11 @@ serve(async (req) => {
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       console.error("[gmail-auth-callback] Token exchange failed:", errText);
-      return new Response(redirectHtml("Token exchange failed."), { headers: { "Content-Type": "text/html" } });
+      // Detect 403 / access_denied
+      if (errText.includes("access_denied") || errText.includes("403")) {
+        return redirect(`${APP_URL}/settings?gmail=error&code=access_denied`);
+      }
+      return redirect(`${APP_URL}/settings?gmail=error&code=token_exchange_failed`);
     }
 
     const tokens = await tokenRes.json();
@@ -76,7 +82,7 @@ serve(async (req) => {
     const emailAddress = profile.email;
 
     if (!emailAddress) {
-      return new Response(redirectHtml("Could not retrieve email address."), { headers: { "Content-Type": "text/html" } });
+      return redirect(`${APP_URL}/settings?gmail=error&code=no_email`);
     }
 
     const db = createClient(supabaseUrl, serviceKey);
@@ -113,24 +119,16 @@ serve(async (req) => {
 
     console.log("[gmail-auth-callback] Gmail connected for user:", userId, "email:", emailAddress);
 
-    // Redirect back to VantoOS settings
-    const appUrl = Deno.env.get("VANTOOS_APP_URL") || "https://vantoos-ai-core.lovable.app";
-    return new Response(redirectHtml("Gmail connected successfully!", `${appUrl}/settings`), {
-      headers: { "Content-Type": "text/html" },
-    });
+    return redirect(`${APP_URL}/settings?gmail=connected`);
   } catch (e) {
     console.error("[gmail-auth-callback] error:", e);
-    return new Response(redirectHtml("An error occurred. Please try again."), { headers: { "Content-Type": "text/html" } });
+    return redirect(`${APP_URL}/settings?gmail=error&code=unknown`);
   }
 });
 
-function redirectHtml(message: string, redirectUrl?: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
-    <title>VantoOS Gmail</title>
-    ${redirectUrl ? `<meta http-equiv="refresh" content="2;url=${redirectUrl}">` : ""}
-    <style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0a0a0a;color:#fff}
-    .card{text-align:center;padding:2rem;border-radius:12px;background:#1a1a1a;border:1px solid #333}
-    </style></head><body><div class="card"><h2>${message}</h2>
-    ${redirectUrl ? "<p>Redirecting to VantoOS...</p>" : "<p>You can close this window.</p>"}
-    </div></body></html>`;
+function redirect(url: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: url },
+  });
 }
