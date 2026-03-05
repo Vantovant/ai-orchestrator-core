@@ -11,6 +11,7 @@ export interface EmailAccount {
   label: string;
   status: "connected" | "disconnected" | "error" | "reconnect_needed";
   provider: string;
+  last_sync_at: string | null;
 }
 
 export interface EmailMessage {
@@ -42,7 +43,7 @@ export const emailService = {
 
     const { data } = await supabase
       .from("email_accounts")
-      .select("id, email_address, display_name, label, status, provider")
+      .select("id, email_address, display_name, label, status, provider, last_sync_at")
       .eq("user_id", user.id)
       .eq("provider", "gmail")
       .is("deleted_at", null)
@@ -56,6 +57,7 @@ export const emailService = {
       label: a.label || "Business",
       status: a.status as EmailAccount["status"],
       provider: a.provider,
+      last_sync_at: a.last_sync_at,
     }));
   },
 

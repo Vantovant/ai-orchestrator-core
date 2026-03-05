@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { emailService, type EmailMessage, type EmailAccount } from "@/services/emailService";
 import { taskService } from "@/services/taskService";
@@ -16,8 +17,14 @@ import CommandBar from "@/components/email/CommandBar";
 import CheatSheet from "@/components/email/CheatSheet";
 import KeyCoach from "@/components/email/KeyCoach";
 import OnboardingTutorial from "@/components/email/OnboardingTutorial";
-import { Inbox, Clock, Eye, HelpCircle, Loader2 } from "lucide-react";
+import { Inbox, Clock, Eye, HelpCircle, Loader2, RefreshCw, Zap } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const TUTORIAL_KEY = "vantoos_email_tutorial_done";
 
@@ -39,6 +46,13 @@ export default function EmailPage() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
 
+  // Triage mode
+  const [triageMode, setTriageMode] = useState(false);
+
+  // Sync
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncTimes, setLastSyncTimes] = useState<Record<string, string | null>>({});
+
   // Modals
   const [cmdBarOpen, setCmdBarOpen] = useState(false);
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
@@ -53,12 +67,15 @@ export default function EmailPage() {
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
       setAccounts(accs);
-      // Check if URL has account param (e.g. after adding new account)
+      // Build last sync times
+      const syncTimes: Record<string, string | null> = {};
+      accs.forEach(a => { syncTimes[a.id] = (a as any).last_sync_at || null; });
+      setLastSyncTimes(syncTimes);
+
       const urlAccount = searchParams.get("account");
       if (urlAccount && accs.find(a => a.id === urlAccount)) {
         setUnified(false);
         setSelectedAccount(urlAccount);
-        // Clean up URL
         searchParams.delete("account");
         setSearchParams(searchParams, { replace: true });
         sonnerToast.success("Gmail connected ✅");
@@ -91,7 +108,43 @@ export default function EmailPage() {
 
   // Account labels map
   const accountLabels: Record<string, string> = {};
-  accounts.forEach(a => { accountLabels[a.id] = a.label; });
+  const accountEmails: Record<string, string> = {};
+  accounts.forEach(a => {
+    accountLabels[a.id] = a.label;
+    accountEmails[a.id] = a.email_address;
+  });
+
+  // ─── Sync handler ──────────────────────────────────────────────
+  const handleSync = async (accountId?: string) => {
+    setSyncing(true);
+    try {
+      const accountsToSync = accountId
+        ? [accounts.find(a => a.id === accountId)].filter(Boolean)
+        : accounts;
+
+      let totalSynced = 0;
+      for (const acc of accountsToSync) {
+        if (!acc) continue;
+        const { data, error } = await supabase.functions.invoke("gmail-sync", {
+          body: { account_id: acc.id },
+        });
+        if (error) {
+          console.error(`[sync] Error syncing ${acc.email_address}:`, error);
+          continue;
+        }
+        const count = data?.synced_count ?? data?.count ?? 0;
+        totalSynced += count;
+        setLastSyncTimes(prev => ({ ...prev, [acc.id]: new Date().toISOString() }));
+      }
+
+      sonnerToast.success(`Synced ${totalSynced} emails ✅`);
+      await loadEmails();
+    } catch (e: any) {
+      toast({ title: "Sync failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // ─── Add Account handler ──────────────────────────────────────
   const handleAddAccount = async () => {
@@ -105,10 +158,29 @@ export default function EmailPage() {
         throw new Error("No auth URL returned");
       }
     } catch (e: any) {
-      toast({ title: "Failed to connect Gmail", description: e.message, variant: "destructive" });
+      if (e.message?.includes("403") || e.message?.includes("access_denied")) {
+        toast({
+          title: "Google account blocked",
+          description: "Use a Gmail.com test account or ask your Workspace admin to trust the app in Admin Console → Security → API controls.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Failed to connect Gmail", description: e.message, variant: "destructive" });
+      }
       setAddingAccount(false);
     }
   };
+
+  // ─── Auto-advance helper ───────────────────────────────────────
+  const autoAdvance = useCallback((removedIndex: number) => {
+    setOpenEmailId(null);
+    // Keep same index (next email slides into position), clamp to bounds
+    setSelectedIndex(i => {
+      const nextLen = emails.length - 1;
+      if (nextLen <= 0) return 0;
+      return Math.min(removedIndex, nextLen - 1);
+    });
+  }, [emails.length]);
 
   // ─── Keyboard shortcuts ────────────────────────────────────────
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -124,11 +196,19 @@ export default function EmailPage() {
     if (e.key === "?") { e.preventDefault(); setCheatSheetOpen(true); return; }
 
     if (openEmailId) {
+      const idx = emails.findIndex(em => em.id === openEmailId);
       if (e.key === "Escape") { e.preventDefault(); setOpenEmailId(null); return; }
-      if (e.key === "e" || e.key === "E") { e.preventDefault(); handleArchive(); return; }
-      if (e.key === "s" || e.key === "S") { e.preventDefault(); handleSnooze(); return; }
+      if (e.key === "e" || e.key === "E") { e.preventDefault(); handleArchive(idx); return; }
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); handleSnooze(undefined, idx); return; }
+      if (e.key === "w" || e.key === "W") { e.preventDefault(); handleWaitingOn(idx); return; }
       if (e.key === "t" || e.key === "T") { e.preventDefault(); handleCreateTask(); return; }
       if (e.key === "m" || e.key === "M") { e.preventDefault(); handleCreateMeeting(); return; }
+      if (e.key === "x" || e.key === "X") {
+        e.preventDefault();
+        const em = emails.find(em => em.id === openEmailId);
+        if (em) emailService.toggleStar(em.id, em.is_starred).then(() => loadEmails());
+        return;
+      }
     } else {
       if (e.key === "j" || e.key === "J") { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, emails.length - 1)); return; }
       if (e.key === "k" || e.key === "K") { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); return; }
@@ -140,17 +220,23 @@ export default function EmailPage() {
       }
       if (e.key === "e" || e.key === "E") {
         e.preventDefault();
-        const email = emails[selectedIndex];
-        if (email) { emailService.archive(email.id).then(() => { toast({ title: "Archived" }); loadEmails(); }); }
+        handleArchive(selectedIndex);
         return;
       }
       if (e.key === "s" || e.key === "S") {
         e.preventDefault();
+        handleSnooze(undefined, selectedIndex);
+        return;
+      }
+      if (e.key === "w" || e.key === "W") {
+        e.preventDefault();
+        handleWaitingOn(selectedIndex);
+        return;
+      }
+      if (e.key === "x" || e.key === "X") {
+        e.preventDefault();
         const email = emails[selectedIndex];
-        if (email) {
-          const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0);
-          emailService.snooze(email.id, d.toISOString()).then(() => { toast({ title: "Snoozed until tomorrow 8 AM" }); loadEmails(); });
-        }
+        if (email) emailService.toggleStar(email.id, email.is_starred).then(() => loadEmails());
         return;
       }
     }
@@ -164,30 +250,52 @@ export default function EmailPage() {
   // Reset index on view/account change
   useEffect(() => { setSelectedIndex(0); setOpenEmailId(null); }, [view, selectedAccount, unified]);
 
+  // Auto-select first email in triage mode
+  useEffect(() => {
+    if (triageMode && emails.length > 0 && !openEmailId) {
+      setSelectedIndex(0);
+    }
+  }, [triageMode, emails.length]);
+
   // Close tutorial
   const closeTutorial = () => {
     setTutorialOpen(false);
     try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch {}
   };
 
-  // ─── Action handlers ───────────────────────────────────────────
+  // ─── Action handlers with auto-advance ─────────────────────────
   const currentEmailForAction = openEmail || emails[selectedIndex];
 
-  const handleArchive = async () => {
-    if (!currentEmailForAction) return;
-    await emailService.archive(currentEmailForAction.id);
+  const handleArchive = async (idx?: number) => {
+    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = emails[targetIdx];
+    if (!target) return;
+    await emailService.archive(target.id);
     toast({ title: "Archived" });
-    setOpenEmailId(null);
+    autoAdvance(targetIdx);
     loadEmails();
   };
 
-  const handleSnooze = async (until?: string) => {
-    if (!currentEmailForAction) return;
+  const handleSnooze = async (until?: string, idx?: number) => {
+    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = emails[targetIdx];
+    if (!target) return;
     const d = new Date();
     if (!until) { d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); until = d.toISOString(); }
-    await emailService.snooze(currentEmailForAction.id, until);
-    toast({ title: "Snoozed" });
-    setOpenEmailId(null);
+    await emailService.snooze(target.id, until);
+    toast({ title: "Snoozed until tomorrow 8 AM" });
+    autoAdvance(targetIdx);
+    loadEmails();
+  };
+
+  const handleWaitingOn = async (idx?: number) => {
+    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = emails[targetIdx];
+    if (!target) return;
+    const d = new Date(); d.setDate(d.getDate() + 3);
+    await emailService.setWaitingOn(target.id, d.toISOString().slice(0, 10));
+    toast({ title: "Marked as Waiting On" });
+    autoAdvance(targetIdx);
     loadEmails();
   };
 
@@ -239,15 +347,6 @@ export default function EmailPage() {
     }
   };
 
-  const handleWaitingOn = async () => {
-    if (!currentEmailForAction) return;
-    const d = new Date(); d.setDate(d.getDate() + 3);
-    await emailService.setWaitingOn(currentEmailForAction.id, d.toISOString().slice(0, 10));
-    toast({ title: "Marked as Waiting On" });
-    setOpenEmailId(null);
-    loadEmails();
-  };
-
   // Command bar dispatcher
   const handleCommand = (action: string, payload?: any) => {
     switch (action) {
@@ -261,6 +360,18 @@ export default function EmailPage() {
     }
   };
 
+  // Last synced label for tooltip
+  const lastSyncedLabel = () => {
+    if (unified) {
+      return accounts.map(a => {
+        const t = lastSyncTimes[a.id];
+        return `${a.email_address}: ${t ? new Date(t).toLocaleTimeString() : "Never"}`;
+      }).join("\n");
+    }
+    const t = lastSyncTimes[selectedAccount];
+    return t ? `Last synced: ${new Date(t).toLocaleTimeString()}` : "Never synced";
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header */}
@@ -270,9 +381,47 @@ export default function EmailPage() {
             <h1 className="text-2xl font-bold">Email</h1>
             <p className="text-sm text-muted-foreground">Keyboard-first inbox · Press <kbd className="px-1 py-0.5 rounded bg-muted text-[11px] font-mono">?</kbd> for shortcuts</p>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCheatSheetOpen(true)}>
-            <HelpCircle className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Triage Mode toggle */}
+            <div className="flex items-center gap-1.5">
+              <Switch
+                checked={triageMode}
+                onCheckedChange={setTriageMode}
+                id="triage"
+                className="scale-90"
+              />
+              <label htmlFor="triage" className="text-xs text-muted-foreground cursor-pointer select-none flex items-center gap-1">
+                <Zap className="h-3 w-3" /> Triage
+              </label>
+            </div>
+
+            {/* Sync button */}
+            {accounts.length > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      disabled={syncing}
+                      onClick={() => handleSync(unified ? undefined : selectedAccount)}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                      {syncing ? "Syncing…" : "Sync"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs whitespace-pre-line max-w-[250px]">
+                    {lastSyncedLabel()}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCheatSheetOpen(true)}>
+              <HelpCircle className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {accounts.length > 0 && (
@@ -324,7 +473,7 @@ export default function EmailPage() {
             <EmailDetail
               email={openEmail}
               onBack={() => setOpenEmailId(null)}
-              onArchive={handleArchive}
+              onArchive={() => handleArchive()}
               onSnooze={() => handleSnooze()}
               onStar={() => { emailService.toggleStar(openEmail.id, openEmail.is_starred).then(() => loadEmails()); }}
               onCreateTask={handleCreateTask}
@@ -338,14 +487,16 @@ export default function EmailPage() {
               onSelect={setSelectedIndex}
               onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); }}
               accountLabels={accountLabels}
+              accountEmails={accountEmails}
               showAccountBadge={unified}
+              compact={triageMode}
             />
           )}
         </CardContent>
       </Card>
 
       {/* Key Coach strip */}
-      <KeyCoach context={openEmail ? "detail" : "list"} />
+      <KeyCoach context={openEmail ? "detail" : "list"} triageMode={triageMode} />
 
       {/* Modals */}
       <CommandBar
