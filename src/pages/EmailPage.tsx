@@ -623,6 +623,7 @@ export default function EmailPage() {
             <EmailDetail
               email={openEmail}
               selectedAccount={selectedBankAccount}
+              financeCreated={createdEmailIds.has(openEmail.id)}
               onBack={() => setOpenEmailId(null)}
               onArchive={() => handleArchive()}
               onSnooze={() => handleSnooze()}
