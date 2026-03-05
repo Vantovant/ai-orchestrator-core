@@ -566,56 +566,14 @@ export default function EmailPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       {/* Header */}
-      <div className="px-4 pt-4 pb-2 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Email</h1>
-            <p className="text-sm text-muted-foreground">Keyboard-first inbox · Press <kbd className="px-1 py-0.5 rounded bg-muted text-[11px] font-mono">?</kbd> for shortcuts</p>
+      <div className="px-3 sm:px-4 pt-3 sm:pt-4 pb-2 space-y-2 sm:space-y-3">
+        {/* Row 1: Title + core actions */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold">Email</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">Keyboard-first inbox · Press <kbd className="px-1 py-0.5 rounded bg-muted text-[11px] font-mono">?</kbd> for shortcuts</p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Triage Mode toggle */}
-            <div className="flex items-center gap-1.5">
-              <Switch
-                checked={triageMode}
-                onCheckedChange={setTriageMode}
-                id="triage"
-                className="scale-90"
-              />
-              <label htmlFor="triage" className="text-xs text-muted-foreground cursor-pointer select-none flex items-center gap-1">
-                <Zap className="h-3 w-3" /> Triage
-              </label>
-            </div>
-
-            {/* Focus & Unread & Unhandled filters */}
-            {triageMode && (
-              <div className="flex items-center gap-2 border-l border-border/50 pl-2">
-                <Button
-                  variant={focusMode ? "default" : "outline"}
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => setFocusMode(f => !f)}
-                >
-                  Focus
-                </Button>
-                <Button
-                  variant={unreadOnly ? "default" : "outline"}
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => setUnreadOnly(u => !u)}
-                >
-                  Unread
-                </Button>
-                <Button
-                  variant={unhandledOnly ? "default" : "outline"}
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => setUnhandledOnly(u => !u)}
-                >
-                  Unhandled
-                </Button>
-              </div>
-            )}
-
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Sync button */}
             {accounts.length > 0 && (
               <TooltipProvider>
@@ -624,12 +582,12 @@ export default function EmailPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1.5 text-xs"
+                      className="h-8 gap-1 sm:gap-1.5 text-xs px-2 sm:px-3"
                       disabled={syncing}
                       onClick={() => handleSync(unified ? undefined : selectedAccount)}
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-                      {syncing ? "Syncing…" : "Sync"}
+                      <span className="hidden sm:inline">{syncing ? "Syncing…" : "Sync"}</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs whitespace-pre-line max-w-[250px]">
@@ -643,6 +601,52 @@ export default function EmailPage() {
               <HelpCircle className="h-4 w-4" />
             </Button>
           </div>
+        </div>
+
+        {/* Row 2: Triage toggle + filters – wraps on mobile */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Triage Mode toggle */}
+          <div className="flex items-center gap-1.5">
+            <Switch
+              checked={triageMode}
+              onCheckedChange={setTriageMode}
+              id="triage"
+              className="scale-90"
+            />
+            <label htmlFor="triage" className="text-xs text-muted-foreground cursor-pointer select-none flex items-center gap-1">
+              <Zap className="h-3 w-3" /> Triage
+            </label>
+          </div>
+
+          {/* Focus & Unread & Unhandled filters */}
+          {triageMode && (
+            <div className="flex items-center gap-1.5 sm:gap-2 sm:border-l sm:border-border/50 sm:pl-2">
+              <Button
+                variant={focusMode ? "default" : "outline"}
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => setFocusMode(f => !f)}
+              >
+                Focus
+              </Button>
+              <Button
+                variant={unreadOnly ? "default" : "outline"}
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => setUnreadOnly(u => !u)}
+              >
+                Unread
+              </Button>
+              <Button
+                variant={unhandledOnly ? "default" : "outline"}
+                size="sm"
+                className="h-6 text-[10px] px-2"
+                onClick={() => setUnhandledOnly(u => !u)}
+              >
+                Unhandled
+              </Button>
+            </div>
+          )}
         </div>
 
         {accounts.length > 0 && (
