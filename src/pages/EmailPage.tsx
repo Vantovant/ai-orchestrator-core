@@ -380,6 +380,23 @@ export default function EmailPage() {
     }
   };
 
+  const handleCreateExpense = async (entities: any, route: SuggestedRoute) => {
+    if (!entities) return;
+    try {
+      await financeEntryService.create({
+        type: "expense",
+        category: route.category || entities.category_suggestion || "general",
+        amount: Math.abs(Number(entities.amount) || 0),
+        entry_date: entities.date ? new Date(entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        notes: `${entities.merchant || ""} – ${entities.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
+        source: "email",
+      });
+      sonnerToast.success("Expense created ✅");
+    } catch (err: any) {
+      toast({ title: "Failed to create expense", description: err.message, variant: "destructive" });
+    }
+  };
+
   // Command bar dispatcher
   const handleCommand = (action: string, payload?: any) => {
     switch (action) {
