@@ -3,14 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { EmailAccount } from "@/services/emailService";
-import { Mail, Plus } from "lucide-react";
-
-const LABEL_COLORS: Record<string, string> = {
-  Gov: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-  Business: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
-  NM: "bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30",
-  Personal: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-};
+import { Mail, Plus, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Props {
   accounts: EmailAccount[];
@@ -19,59 +18,131 @@ interface Props {
   onSelect: (id: string) => void;
   onToggleUnified: (v: boolean) => void;
   unreadCounts: Record<string, number>;
+  onAddAccount?: () => void;
+  addingAccount?: boolean;
 }
 
-export default function AccountSwitcher({ accounts, selected, unified, onSelect, onToggleUnified, unreadCounts }: Props) {
+export default function AccountSwitcher({
+  accounts,
+  selected,
+  unified,
+  onSelect,
+  onToggleUnified,
+  unreadCounts,
+  onAddAccount,
+  addingAccount,
+}: Props) {
+  const totalUnread = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+  const selectedAccount = accounts.find((a) => a.id === selected);
+  const currentLabel = unified
+    ? "All Accounts"
+    : selectedAccount?.email_address ?? selectedAccount?.label ?? "Select account";
+
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
-      {/* Unified toggle */}
-      <div className="flex items-center gap-1.5 mr-2 shrink-0">
-        <Switch checked={unified} onCheckedChange={onToggleUnified} id="unified" className="scale-90" />
-        <label htmlFor="unified" className="text-xs text-muted-foreground cursor-pointer select-none whitespace-nowrap">Unified</label>
-      </div>
+    <div className="space-y-1.5">
+      {/* Current account indicator */}
+      <p className="text-xs text-muted-foreground px-0.5">
+        Showing:{" "}
+        <span className="font-medium text-foreground">{currentLabel}</span>
+      </p>
 
-      {/* Account tabs */}
-      {!unified && accounts.map(acc => {
-        const count = unreadCounts[acc.id] || 0;
-        const isActive = selected === acc.id;
-        return (
-          <button
-            key={acc.id}
-            onClick={() => onSelect(acc.id)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all shrink-0",
-              isActive
-                ? "border-primary/40 bg-primary/10 text-foreground shadow-sm"
-                : "border-border/50 bg-background hover:bg-muted/50 text-muted-foreground"
-            )}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {/* Unified toggle */}
+        <div className="flex items-center gap-1.5 mr-2 shrink-0">
+          <Switch
+            checked={unified}
+            onCheckedChange={onToggleUnified}
+            id="unified"
+            className="scale-90"
+          />
+          <label
+            htmlFor="unified"
+            className="text-xs text-muted-foreground cursor-pointer select-none whitespace-nowrap"
           >
-            <Mail className="h-3 w-3" />
-            <span>{acc.label}</span>
-            {count > 0 && (
-              <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
-                {count}
-              </Badge>
-            )}
-          </button>
-        );
-      })}
-
-      {unified && (
-        <div className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-foreground shadow-sm shrink-0">
-          <Mail className="h-3 w-3" />
-          All Accounts
-          {Object.values(unreadCounts).reduce((a, b) => a + b, 0) > 0 && (
-            <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
-              {Object.values(unreadCounts).reduce((a, b) => a + b, 0)}
-            </Badge>
-          )}
+            Unified
+          </label>
         </div>
-      )}
 
-      {/* Add account (stub) */}
-      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground shrink-0" disabled>
-        <Plus className="h-3 w-3" /> Add Account
-      </Button>
+        {/* Account selector dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all shrink-0",
+                "border-primary/40 bg-primary/10 text-foreground shadow-sm"
+              )}
+            >
+              <Mail className="h-3 w-3" />
+              <span>{unified ? "All Accounts" : selectedAccount?.label || selectedAccount?.email_address || "Account"}</span>
+              {unified && totalUnread > 0 && (
+                <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {totalUnread}
+                </Badge>
+              )}
+              {!unified && selected && unreadCounts[selected] > 0 && (
+                <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {unreadCounts[selected]}
+                </Badge>
+              )}
+              <ChevronDown className="h-3 w-3 ml-0.5 opacity-60" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="min-w-[220px]">
+            <DropdownMenuItem
+              onClick={() => {
+                onToggleUnified(true);
+                onSelect("all");
+              }}
+              className="gap-2 text-xs"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              <span className="flex-1">All Accounts</span>
+              {totalUnread > 0 && (
+                <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {totalUnread}
+                </Badge>
+              )}
+            </DropdownMenuItem>
+            {accounts.map((acc) => {
+              const count = unreadCounts[acc.id] || 0;
+              return (
+                <DropdownMenuItem
+                  key={acc.id}
+                  onClick={() => {
+                    onToggleUnified(false);
+                    onSelect(acc.id);
+                  }}
+                  className="gap-2 text-xs"
+                >
+                  <Mail className="h-3.5 w-3.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate">{acc.email_address}</p>
+                    {acc.label && (
+                      <p className="text-[10px] text-muted-foreground">{acc.label}</p>
+                    )}
+                  </div>
+                  {count > 0 && (
+                    <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                      {count}
+                    </Badge>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Add account */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-xs text-muted-foreground shrink-0"
+          onClick={onAddAccount}
+          disabled={addingAccount || !onAddAccount}
+        >
+          <Plus className="h-3 w-3" /> Add Account
+        </Button>
+      </div>
     </div>
   );
 }

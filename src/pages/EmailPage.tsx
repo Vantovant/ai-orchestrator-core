@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -7,6 +8,7 @@ import { emailService, type EmailMessage, type EmailAccount } from "@/services/e
 import { taskService } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { meetingService } from "@/services/meetingService";
+import { supabase } from "@/integrations/supabase/client";
 import AccountSwitcher from "@/components/email/AccountSwitcher";
 import EmailList from "@/components/email/EmailList";
 import EmailDetail from "@/components/email/EmailDetail";
@@ -15,11 +17,13 @@ import CheatSheet from "@/components/email/CheatSheet";
 import KeyCoach from "@/components/email/KeyCoach";
 import OnboardingTutorial from "@/components/email/OnboardingTutorial";
 import { Inbox, Clock, Eye, HelpCircle, Loader2 } from "lucide-react";
+import { toast as sonnerToast } from "sonner";
 
 const TUTORIAL_KEY = "vantoos_email_tutorial_done";
 
 export default function EmailPage() {
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Accounts
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
@@ -42,11 +46,25 @@ export default function EmailPage() {
     try { return !localStorage.getItem(TUTORIAL_KEY); } catch { return false; }
   });
 
+  // Add account state
+  const [addingAccount, setAddingAccount] = useState(false);
+
   // Load accounts on mount
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
       setAccounts(accs);
-      if (accs.length > 0 && !selectedAccount) setSelectedAccount(accs[0].id);
+      // Check if URL has account param (e.g. after adding new account)
+      const urlAccount = searchParams.get("account");
+      if (urlAccount && accs.find(a => a.id === urlAccount)) {
+        setUnified(false);
+        setSelectedAccount(urlAccount);
+        // Clean up URL
+        searchParams.delete("account");
+        setSearchParams(searchParams, { replace: true });
+        sonnerToast.success("Gmail connected ✅");
+      } else if (accs.length > 0 && !selectedAccount) {
+        setSelectedAccount(accs[0].id);
+      }
     });
   }, []);
 
@@ -64,7 +82,6 @@ export default function EmailPage() {
 
   // Unread counts
   const unreadCounts: Record<string, number> = {};
-  // We'll compute from loaded emails if unified, otherwise approximate
   accounts.forEach(a => {
     unreadCounts[a.id] = emails.filter(e => e.account_id === a.id && !e.is_read).length;
   });
@@ -75,6 +92,23 @@ export default function EmailPage() {
   // Account labels map
   const accountLabels: Record<string, string> = {};
   accounts.forEach(a => { accountLabels[a.id] = a.label; });
+
+  // ─── Add Account handler ──────────────────────────────────────
+  const handleAddAccount = async () => {
+    setAddingAccount(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("gmail-auth-start");
+      if (error) throw error;
+      if (data?.auth_url) {
+        window.location.href = data.auth_url;
+      } else {
+        throw new Error("No auth URL returned");
+      }
+    } catch (e: any) {
+      toast({ title: "Failed to connect Gmail", description: e.message, variant: "destructive" });
+      setAddingAccount(false);
+    }
+  };
 
   // ─── Keyboard shortcuts ────────────────────────────────────────
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -249,7 +283,18 @@ export default function EmailPage() {
             onSelect={setSelectedAccount}
             onToggleUnified={setUnified}
             unreadCounts={unreadCounts}
+            onAddAccount={handleAddAccount}
+            addingAccount={addingAccount}
           />
+        )}
+
+        {accounts.length === 0 && !loading && (
+          <div className="rounded-lg border border-dashed border-border p-4 text-center">
+            <p className="text-sm text-muted-foreground mb-2">No Gmail accounts connected yet.</p>
+            <Button size="sm" onClick={handleAddAccount} disabled={addingAccount} className="gap-1.5">
+              <Inbox className="h-3.5 w-3.5" /> Connect Gmail
+            </Button>
+          </div>
         )}
 
         {/* View tabs */}
