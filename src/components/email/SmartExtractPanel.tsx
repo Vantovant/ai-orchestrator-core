@@ -287,16 +287,19 @@ export default function SmartExtractPanel({
           {routes.map((route, i) => {
             const routeInfo = getRouteLabel(route, moneyDir);
             const RouteIcon = routeInfo.icon;
+            const isFinanceRoute = route.target === "finance_income" || route.target === "finance_expense";
+            const isDisabled = isFinanceRoute && financeCreated;
             return (
               <Button
                 key={i}
-                variant={i === 0 ? "default" : "outline"}
+                variant={isDisabled ? "outline" : (i === 0 ? "default" : "outline")}
                 size="sm"
                 className="h-7 text-[11px] gap-1"
+                disabled={isDisabled}
                 onClick={() => handleRouteAction(route)}
               >
                 <RouteIcon className="h-3 w-3" />
-                {routeInfo.label}
+                {isDisabled ? `✓ ${routeInfo.label.replace("Create", "Created")}` : routeInfo.label}
                 {route.category && <span className="text-muted-foreground ml-0.5">({route.category})</span>}
               </Button>
             );
