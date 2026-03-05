@@ -679,7 +679,7 @@ function ProjectMeetingsTab({ meetings, loading, projectId, onClickMeeting, onCr
 }
 
 // ── Notes Tab ──
-function ProjectNotesTab({ projectId }: { projectId: string }) {
+function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplied?: () => void }) {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [extracting, setExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
