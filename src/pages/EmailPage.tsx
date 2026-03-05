@@ -308,8 +308,8 @@ export default function EmailPage() {
   };
 
   const handleSnooze = async (until?: string, idx?: number) => {
-    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
-    const target = emails[targetIdx];
+    const targetIdx = idx ?? (openEmail ? displayEmails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = displayEmails[targetIdx];
     if (!target) return;
     const d = new Date();
     if (!until) { d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); until = d.toISOString(); }
