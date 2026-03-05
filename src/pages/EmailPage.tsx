@@ -48,6 +48,8 @@ export default function EmailPage() {
 
   // Triage mode
   const [triageMode, setTriageMode] = useState(false);
+  const [focusMode, setFocusMode] = useState(true);
+  const [unreadOnly, setUnreadOnly] = useState(false);
 
   // Sync
   const [syncing, setSyncing] = useState(false);
@@ -103,8 +105,30 @@ export default function EmailPage() {
     unreadCounts[a.id] = emails.filter(e => e.account_id === a.id && !e.is_read).length;
   });
 
+  // Triage sorting & filtering
+  const displayEmails = (() => {
+    let list = [...emails];
+    // Focus filter: hide low-priority/newsletter/spam/fyi
+    if (triageMode && focusMode) {
+      list = list.filter(e => !["fyi", "spam"].includes(e.category || ""));
+    }
+    // Unread-only filter
+    if (unreadOnly) {
+      list = list.filter(e => !e.is_read);
+    }
+    // Triage sort: unread first, starred first, newest first
+    if (triageMode) {
+      list.sort((a, b) => {
+        if (a.is_read !== b.is_read) return a.is_read ? 1 : -1;
+        if (a.is_starred !== b.is_starred) return a.is_starred ? -1 : 1;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+    }
+    return list;
+  })();
+
   // Selected email
-  const openEmail = openEmailId ? emails.find(e => e.id === openEmailId) : undefined;
+  const openEmail = openEmailId ? displayEmails.find(e => e.id === openEmailId) : undefined;
 
   // Account labels map
   const accountLabels: Record<string, string> = {};
@@ -195,8 +219,15 @@ export default function EmailPage() {
 
     if (e.key === "?") { e.preventDefault(); setCheatSheetOpen(true); return; }
 
+    // U = toggle unread-only
+    if (e.key === "u" || e.key === "U") {
+      e.preventDefault();
+      setUnreadOnly(prev => !prev);
+      return;
+    }
+
     if (openEmailId) {
-      const idx = emails.findIndex(em => em.id === openEmailId);
+      const idx = displayEmails.findIndex(em => em.id === openEmailId);
       if (e.key === "Escape") { e.preventDefault(); setOpenEmailId(null); return; }
       if (e.key === "e" || e.key === "E") { e.preventDefault(); handleArchive(idx); return; }
       if (e.key === "s" || e.key === "S") { e.preventDefault(); handleSnooze(undefined, idx); return; }
@@ -205,16 +236,16 @@ export default function EmailPage() {
       if (e.key === "m" || e.key === "M") { e.preventDefault(); handleCreateMeeting(); return; }
       if (e.key === "x" || e.key === "X") {
         e.preventDefault();
-        const em = emails.find(em => em.id === openEmailId);
+        const em = displayEmails.find(em => em.id === openEmailId);
         if (em) emailService.toggleStar(em.id, em.is_starred).then(() => loadEmails());
         return;
       }
     } else {
-      if (e.key === "j" || e.key === "J") { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, emails.length - 1)); return; }
+      if (e.key === "j" || e.key === "J") { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, displayEmails.length - 1)); return; }
       if (e.key === "k" || e.key === "K") { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); return; }
       if (e.key === "Enter") {
         e.preventDefault();
-        const email = emails[selectedIndex];
+        const email = displayEmails[selectedIndex];
         if (email) { emailService.markRead(email.id); setOpenEmailId(email.id); loadEmails(); }
         return;
       }
@@ -235,7 +266,7 @@ export default function EmailPage() {
       }
       if (e.key === "x" || e.key === "X") {
         e.preventDefault();
-        const email = emails[selectedIndex];
+        const email = displayEmails[selectedIndex];
         if (email) emailService.toggleStar(email.id, email.is_starred).then(() => loadEmails());
         return;
       }
@@ -264,11 +295,11 @@ export default function EmailPage() {
   };
 
   // ─── Action handlers with auto-advance ─────────────────────────
-  const currentEmailForAction = openEmail || emails[selectedIndex];
+  const currentEmailForAction = openEmail || displayEmails[selectedIndex];
 
   const handleArchive = async (idx?: number) => {
-    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
-    const target = emails[targetIdx];
+    const targetIdx = idx ?? (openEmail ? displayEmails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = displayEmails[targetIdx];
     if (!target) return;
     await emailService.archive(target.id);
     toast({ title: "Archived" });
@@ -277,8 +308,8 @@ export default function EmailPage() {
   };
 
   const handleSnooze = async (until?: string, idx?: number) => {
-    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
-    const target = emails[targetIdx];
+    const targetIdx = idx ?? (openEmail ? displayEmails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = displayEmails[targetIdx];
     if (!target) return;
     const d = new Date();
     if (!until) { d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); until = d.toISOString(); }
@@ -289,8 +320,8 @@ export default function EmailPage() {
   };
 
   const handleWaitingOn = async (idx?: number) => {
-    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
-    const target = emails[targetIdx];
+    const targetIdx = idx ?? (openEmail ? displayEmails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = displayEmails[targetIdx];
     if (!target) return;
     const d = new Date(); d.setDate(d.getDate() + 3);
     await emailService.setWaitingOn(target.id, d.toISOString().slice(0, 10));
@@ -395,6 +426,28 @@ export default function EmailPage() {
               </label>
             </div>
 
+            {/* Focus & Unread filters (visible in triage) */}
+            {triageMode && (
+              <div className="flex items-center gap-2 border-l border-border/50 pl-2">
+                <Button
+                  variant={focusMode ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setFocusMode(f => !f)}
+                >
+                  Focus
+                </Button>
+                <Button
+                  variant={unreadOnly ? "default" : "outline"}
+                  size="sm"
+                  className="h-6 text-[10px] px-2"
+                  onClick={() => setUnreadOnly(u => !u)}
+                >
+                  Unread
+                </Button>
+              </div>
+            )}
+
             {/* Sync button */}
             {accounts.length > 0 && (
               <TooltipProvider>
@@ -482,7 +535,7 @@ export default function EmailPage() {
             />
           ) : (
             <EmailList
-              emails={emails}
+              emails={displayEmails}
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
               onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); }}

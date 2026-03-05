@@ -12,6 +12,7 @@ const LIST_KEYS = [
   { key: "S", label: "Snooze" },
   { key: "W", label: "Waiting" },
   { key: "X", label: "Star" },
+  { key: "U", label: "Unread" },
   { key: "⌘K", label: "Command" },
   { key: "?", label: "Help" },
 ];
