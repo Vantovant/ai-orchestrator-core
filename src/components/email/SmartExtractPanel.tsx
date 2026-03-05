@@ -81,6 +81,7 @@ export default function SmartExtractPanel({
   emailSender,
   emailSnippet,
   selectedAccount,
+  financeCreated,
   onCreateExpense,
   onCreateIncome,
   onCreateTask,
