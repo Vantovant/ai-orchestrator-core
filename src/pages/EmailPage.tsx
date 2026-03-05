@@ -71,6 +71,9 @@ export default function EmailPage() {
   const [bankAccounts, setBankAccounts] = useState<{ id: string; last4: string | null; account_name: string }[]>([]);
   const [selectedBankAccount, setSelectedBankAccount] = useState<{ last4: string; account_type?: string; account_id?: string } | null>(null);
 
+  // Track emails that already have finance entries created
+  const [createdEmailIds, setCreatedEmailIds] = useState<Set<string>>(new Set());
+
   // Load accounts on mount
   useEffect(() => {
     emailService.fetchAccounts().then(accs => {
