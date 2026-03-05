@@ -91,7 +91,11 @@ serve(async (req) => {
     const hasGeminiKey = !!(keys?.use_own_keys && keys?.gemini_key_encrypted);
     const isBetaTester = !!beta;
     const assistedRemaining = beta?.assisted_ai_remaining ?? 0;
-    const isSuperAdmin = !!(roleResult.data && ["admin", "super_admin"].includes(roleResult.data.role));
+    // Check all roles for admin/super_admin
+    const userRoles = roleResult.data ?? [];
+    const isSuperAdmin = Array.isArray(userRoles) 
+      ? userRoles.some((r: any) => ["admin", "super_admin"].includes(r.role))
+      : !!(roleResult.data && ["admin", "super_admin"].includes((roleResult.data as any).role));
 
     let assistedExpired = false;
     if (beta?.assisted_ai_expires_at && new Date(beta.assisted_ai_expires_at) < new Date()) {
