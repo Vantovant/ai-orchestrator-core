@@ -63,6 +63,7 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, on
           emailSender={email.sender}
           emailSnippet={email.snippet}
           selectedAccount={selectedAccount}
+          financeCreated={financeCreated}
           onCreateExpense={onCreateExpense || (() => {})}
           onCreateIncome={onCreateIncome}
           onCreateTask={onCreateTask}
