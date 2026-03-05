@@ -838,11 +838,16 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
     setSuggestions(updatedSuggestions);
     setApplying(false);
 
-    // Invalidate project tasks so Tasks tab reflects immediately
+    // Invalidate AND refetch project tasks so Tasks tab reflects immediately
     await Promise.all([
-      qc.invalidateQueries({ queryKey: ["project_tasks", projectId] }),
-      qc.invalidateQueries({ queryKey: ["tasks"] }),
-      qc.invalidateQueries({ queryKey: ["reminders"] }),
+      qc.invalidateQueries({ queryKey: ["project_tasks", projectId], exact: false }),
+      qc.invalidateQueries({ queryKey: ["tasks"], exact: false }),
+      qc.invalidateQueries({ queryKey: ["reminders"], exact: false }),
+    ]);
+    // Force refetch – don't rely on invalidation alone
+    await Promise.all([
+      qc.refetchQueries({ queryKey: ["project_tasks", projectId], exact: false }),
+      qc.refetchQueries({ queryKey: ["tasks"], exact: false }),
     ]);
 
     // Log activity
@@ -866,6 +871,29 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
     } else {
       toast.success(`Applied: ${receipt}`);
     }
+
+    // Verification query: count open tasks for this project
+    try {
+      const { count: verifiedCount, error: countErr } = await supabase
+        .from("tasks")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("project_id", projectId)
+        .is("deleted_at", null)
+        .in("status", ["todo", "open"]);
+      if (countErr) {
+        console.warn("Verification query failed:", countErr);
+      } else {
+        toast.info(`Verified: project now has ${verifiedCount ?? 0} open tasks`);
+        if (created > 0 && (verifiedCount ?? 0) === 0) {
+          toast.warning("⚠️ Insert may be blocked by RLS/constraint – check logs");
+          console.error("VERIFICATION MISMATCH: created=" + created + " but verifiedCount=" + verifiedCount);
+        }
+      }
+    } catch (verifyErr) {
+      console.warn("Verification query error:", verifyErr);
+    }
+
     if ((created > 0 || merged > 0) && onApplied) {
       setTimeout(() => onApplied(), 300);
     }
