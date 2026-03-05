@@ -754,9 +754,7 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
       if (!s) continue;
       try {
         if (s.type === "task" || s.type === "meeting") {
-          // Treat meeting suggestions as tasks too (meetings lack enough info)
-          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
-          // Check existing
+          const dedupeKey = makeDedupe(user.id, projectId, noteId, s.title);
           const { data: existing, error: lookupErr } = await supabase
             .from("tasks")
             .select("id")
@@ -780,10 +778,12 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
           } else {
             const { error: insertErr } = await supabase.from("tasks").insert({
               title: s.title,
+              description: s.description || null,
               user_id: user.id,
               priority: priorityMap[s.priority || "P2"] || "medium",
               due_date: s.due_at || null,
               source: "note_extract",
+              note_id: noteId,
               project_id: projectId,
               dedupe_key: dedupeKey,
               status: "todo",
