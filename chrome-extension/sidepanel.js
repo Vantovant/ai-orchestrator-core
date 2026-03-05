@@ -19,7 +19,34 @@ function showToast(msg, type = "success") {
   el.className = `toast toast-${type}`;
   el.textContent = msg;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3500);
+  setTimeout(() => el.remove(), 4500);
+}
+
+function showAssistedReminder(remaining) {
+  const existing = document.getElementById("assisted-reminder-banner");
+  if (existing) existing.remove();
+
+  const banner = document.createElement("div");
+  banner.id = "assisted-reminder-banner";
+  banner.style.cssText = "background:#1a1a2e;border:1px solid #4ade80;border-radius:8px;padding:10px 12px;margin:8px 0;font-size:11px;color:#d1d5db;";
+
+  if (remaining <= 0) {
+    banner.style.borderColor = "#ef4444";
+    banner.innerHTML = `
+      <div style="color:#fca5a5;font-weight:600;margin-bottom:4px">Assisted mode is now finished</div>
+      <div>Add your API key in Settings → AI Keys to continue using Smart Capture & Assistant.</div>
+      <button onclick="window.open('${APP_URL}/settings','_blank')" style="margin-top:6px;background:#4ade80;color:#000;border:none;border-radius:4px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600">Open Settings → AI Keys</button>
+    `;
+  } else {
+    banner.innerHTML = `
+      <div style="color:#4ade80;font-weight:600;margin-bottom:2px">Connect your own API key to keep AI running smoothly</div>
+      <div>Assisted uses remaining: <strong style="color:#fff">${remaining}</strong></div>
+      <a href="${APP_URL}/settings" target="_blank" style="color:#4ade80;text-decoration:underline;font-size:10px">Settings → AI Keys</a>
+    `;
+  }
+
+  const resultsEl = document.getElementById("smart-capture-results") || document.getElementById("panel-capture");
+  if (resultsEl) resultsEl.prepend(banner);
 }
 
 async function apiCall(fnName, { method = "GET", body, params, useExtToken = true } = {}) {
@@ -41,7 +68,7 @@ async function apiCall(fnName, { method = "GET", body, params, useExtToken = tru
       throw new Error("Session expired");
     }
     if (res.status === 402) {
-      throw new Error(data.message || "AI keys required");
+      throw new Error(data.message || "To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.");
     }
     throw new Error(data.error || `HTTP ${res.status}`);
   }
@@ -232,7 +259,6 @@ async function loadDomains() {
     state.domains = await apiCall("extension-domains");
     await checkAllDomainPermissions();
     renderDomains();
-    // Sync allowed domains to storage for content script injection
     const allowedDomains = state.domains.filter(d => d.enabled).map(d => d.domain);
     chrome.storage.local.set({ vantoos_allowed_domains: allowedDomains });
   } catch (e) {
@@ -399,6 +425,8 @@ document.getElementById("btn-quick-capture").addEventListener("click", () => {
   // Reset smart capture results
   document.getElementById("smart-capture-results").style.display = "none";
   document.getElementById("capture-deep-link").style.display = "none";
+  const assistedBanner = document.getElementById("assisted-reminder-banner");
+  if (assistedBanner) assistedBanner.remove();
 
   chrome.runtime.sendMessage({ type: "CAPTURE_TAB" }, async (res) => {
     if (res?.error) {
@@ -469,6 +497,8 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
   document.getElementById("smart-capture-results").style.display = "none";
   document.getElementById("capture-deep-link").style.display = "none";
   document.getElementById("btn-send-capture").style.display = "none";
+  const assistedBanner = document.getElementById("assisted-reminder-banner");
+  if (assistedBanner) assistedBanner.remove();
 
   const btn = document.getElementById("btn-smart-capture");
   btn.disabled = true;
@@ -521,9 +551,19 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
 
       state.smartCaptureResult = result;
 
+      // Show assisted mode reminder if applicable
+      if (result.mode === "assisted" && result.assisted_remaining !== undefined) {
+        showAssistedReminder(result.assisted_remaining);
+      }
+
       // Show redaction toast
       if (result.redaction_toast) {
         showToast("🔒 Sensitive PII scrubbed prior to AI processing.", "info");
+      }
+
+      // Show graceful degradation message if AI failed but capture saved
+      if (result.ai_provider_failed) {
+        showToast("AI provider unreachable — basic context captured. Update keys in Settings → AI Keys to resume Smart Capture.", "error");
       }
 
       // Show summary
@@ -580,8 +620,8 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
       const actionText = result.action === "merged" ? "Merged" : "Captured";
       showToast(`✅ Smart ${actionText}!`);
     } catch (e) {
-      if (e.message.includes("AI keys required") || e.message.includes("ai_keys_missing")) {
-        showToast("🔒 Connect AI in VantoOS → Settings → AI Keys", "error");
+      if (e.message.includes("AI keys required") || e.message.includes("ai_keys_missing") || e.message.includes("data sovereignty")) {
+        showToast("🔒 To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.", "error");
       } else {
         showToast(`❌ ${e.message}`, "error");
       }
@@ -715,6 +755,11 @@ document.getElementById("btn-ask-assistant").addEventListener("click", async () 
     document.getElementById("help-answer-text").textContent = result.answer;
     document.getElementById("help-ai-gate").style.display = "none";
 
+    // Show assisted mode reminder if applicable
+    if (result.mode === "assisted" && result.assisted_remaining !== undefined) {
+      showAssistedReminder(result.assisted_remaining);
+    }
+
     const safetyEl = document.getElementById("help-safety-note");
     if (result.safety_note) {
       safetyEl.style.display = "block";
@@ -723,8 +768,14 @@ document.getElementById("btn-ask-assistant").addEventListener("click", async () 
       safetyEl.style.display = "none";
     }
   } catch (e) {
-    if (e.message.includes("AI keys required") || e.message.includes("ai_keys_missing")) {
+    if (e.message.includes("AI keys required") || e.message.includes("ai_keys_missing") || e.message.includes("data sovereignty")) {
       document.getElementById("help-ai-gate").style.display = "block";
+      document.getElementById("help-ai-gate").innerHTML = `
+        <div style="text-align:center;padding:12px;">
+          <p style="font-size:12px;color:#fca5a5;margin-bottom:8px">To guarantee data sovereignty, connect your personal OpenAI or Gemini key.</p>
+          <button onclick="window.open('${APP_URL}/settings','_blank')" class="btn btn-primary btn-sm">Settings → AI Keys</button>
+        </div>
+      `;
       document.getElementById("help-answer-container").style.display = "none";
     } else {
       showToast(`❌ ${e.message}`, "error");
