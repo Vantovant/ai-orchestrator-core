@@ -11,6 +11,7 @@ export interface EmailAccount {
   label: string;
   status: "connected" | "disconnected" | "error" | "reconnect_needed";
   provider: string;
+  last_sync_at: string | null;
 }
 
 export interface EmailMessage {
