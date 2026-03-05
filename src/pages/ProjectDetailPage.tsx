@@ -4,7 +4,7 @@ import {
   projectService, projectNotesService, projectLinksService,
   type Project, type ProjectNote, type ProjectLink,
 } from "@/services/projectService";
-import { taskService, type Task, type TaskInsert } from "@/services/taskService";
+import { taskService, makeDedupe, type Task, type TaskInsert } from "@/services/taskService";
 import { meetingService, type Meeting, type MeetingInsert } from "@/services/meetingService";
 import { reminderService, type ReminderInsert } from "@/services/reminderService";
 import { activityLogService } from "@/services/activityLogService";
@@ -542,7 +542,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
 
         {/* NOTES */}
         <TabsContent value="notes">
-          <ProjectNotesTab projectId={projectId} />
+          <ProjectNotesTab projectId={projectId} onApplied={() => setActiveTab("tasks")} />
         </TabsContent>
 
         {/* LINKS */}
@@ -679,7 +679,7 @@ function ProjectMeetingsTab({ meetings, loading, projectId, onClickMeeting, onCr
 }
 
 // ── Notes Tab ──
-function ProjectNotesTab({ projectId }: { projectId: string }) {
+function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplied?: () => void }) {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [extracting, setExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
@@ -731,67 +731,76 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { toast.error("Not authenticated"); return; }
 
-    const toApply = [...selected].map(i => suggestions[i]).filter(s => s && s.applyStatus !== "created" && s.applyStatus !== "merged");
+    const toApply = [...selected].filter(i => {
+      const s = suggestions[i];
+      return s && s.applyStatus !== "created" && s.applyStatus !== "merged";
+    });
     if (toApply.length === 0) { toast.info("No items selected"); return; }
 
     setApplying(true);
     // Mark queued
     setSuggestions(prev => prev.map((s, i) => selected.has(i) && s.applyStatus === "idle" ? { ...s, applyStatus: "queued" } : s));
 
-    const { makeDedupe } = await import("@/services/taskService");
-    const { taskService } = await import("@/services/taskService");
-    const { reminderService } = await import("@/services/reminderService");
-
     const priorityMap: Record<string, string> = { P1: "high", P2: "medium", P3: "low" };
     let created = 0, merged = 0, failed = 0;
 
     const updatedSuggestions = [...suggestions];
-    for (const idx of selected) {
+    for (const idx of toApply) {
       const s = updatedSuggestions[idx];
       if (!s || s.applyStatus === "created" || s.applyStatus === "merged") continue;
       try {
         if (s.type === "task") {
           const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
           // Check existing
-          const { data: existing } = await supabase
+          const { data: existing, error: lookupErr } = await supabase
             .from("tasks")
             .select("id")
             .eq("user_id", user.id)
             .eq("dedupe_key", dedupeKey)
             .is("deleted_at", null)
             .maybeSingle();
+          if (lookupErr) throw lookupErr;
 
           if (existing) {
-            await supabase.from("tasks").update({
+            const { error: updateErr } = await supabase.from("tasks").update({
               description: s.description || null,
               priority: priorityMap[s.priority || "P2"] || "medium",
               due_date: s.due_at || null,
               source: "note_extract",
               last_touched_at: new Date().toISOString(),
             }).eq("id", existing.id);
+            if (updateErr) throw updateErr;
             updatedSuggestions[idx] = { ...s, applyStatus: "merged" };
             merged++;
           } else {
-            await taskService.create({
+            const { error: insertErr } = await supabase.from("tasks").insert({
               title: s.title,
+              user_id: user.id,
               priority: priorityMap[s.priority || "P2"] || "medium",
               due_date: s.due_at || null,
               source: "note_extract",
               project_id: projectId,
               dedupe_key: dedupeKey,
-            });
+              status: "todo",
+              last_touched_at: new Date().toISOString(),
+            }).select().single();
+            if (insertErr) throw insertErr;
             updatedSuggestions[idx] = { ...s, applyStatus: "created" };
             created++;
           }
         } else if (s.type === "reminder") {
-          await reminderService.create({
+          const { error: remErr } = await supabase.from("reminders").insert({
             title: s.title,
+            user_id: user.id,
             reminder_time: s.remind_at || new Date().toISOString(),
-          });
+            project_id: projectId,
+          }).select().single();
+          if (remErr) throw remErr;
           updatedSuggestions[idx] = { ...s, applyStatus: "created" };
           created++;
         }
       } catch (e: any) {
+        console.error("Apply action failed:", e);
         updatedSuggestions[idx] = { ...s, applyStatus: "failed", failReason: e.message };
         failed++;
       }
@@ -801,13 +810,27 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
     setApplying(false);
 
     // Invalidate project tasks so Tasks tab reflects immediately
-    qc.invalidateQueries({ queryKey: ["project_tasks", projectId] });
-    qc.invalidateQueries({ queryKey: ["tasks"] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["project_tasks", projectId] }),
+      qc.invalidateQueries({ queryKey: ["tasks"] }),
+      qc.invalidateQueries({ queryKey: ["reminders"] }),
+    ]);
+
+    // Log activity
+    try {
+      await activityLogService.log(projectId, "notes_actions_applied", {
+        created, merged, failed, date: selectedDate,
+      });
+    } catch { /* non-critical */ }
 
     if (failed > 0) {
       toast.error(`Applied: ${created} created, ${merged} merged, ${failed} failed`);
     } else {
       toast.success(`Applied: ${created} created, ${merged} merged`);
+      // Auto-navigate to Tasks tab after successful apply
+      if (created > 0 && onApplied) {
+        setTimeout(() => onApplied(), 500);
+      }
     }
   };
 
