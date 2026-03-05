@@ -59,8 +59,8 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onS
           )}
         >
           {/* Star */}
-          <div className="pt-0.5 shrink-0">
-            <Star className={cn("h-3.5 w-3.5", email.is_starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} />
+          <div className="pt-0.5 shrink-0" onClick={(e) => { e.stopPropagation(); onStar?.(email.id, email.is_starred); }} role="button" tabIndex={-1}>
+            <Star className={cn("h-3.5 w-3.5 cursor-pointer hover:text-amber-400 transition-colors", email.is_starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30")} />
           </div>
 
           {/* Content */}
