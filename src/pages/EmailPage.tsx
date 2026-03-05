@@ -382,19 +382,39 @@ export default function EmailPage() {
 
   const handleCreateExpense = async (entities: any, route: SuggestedRoute) => {
     if (!entities) return;
+    const moneyDir = entities?.money_direction;
     try {
       await financeEntryService.create({
         type: "expense",
-        category: route.category || entities.category_suggestion || "general",
-        amount: Math.abs(Number(entities.amount) || 0),
-        entry_date: entities.date ? new Date(entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-        notes: `${entities.merchant || ""} – ${entities.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
+        category: route.category || moneyDir?.category || entities.category_suggestion || "general",
+        amount: Math.abs(Number(moneyDir?.amount ?? entities.amount) || 0),
+        entry_date: (moneyDir?.datetime || entities.date) ? new Date(moneyDir?.datetime || entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        notes: `${entities.merchant || moneyDir?.counterparty || ""} – ${entities.reference || moneyDir?.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
         source: "email",
         source_email_id: currentEmailForAction?.id || undefined,
       });
       sonnerToast.success("Expense created ✅");
     } catch (err: any) {
       toast({ title: "Failed to create expense", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleCreateIncome = async (entities: any, route: SuggestedRoute) => {
+    if (!entities) return;
+    const moneyDir = entities?.money_direction;
+    try {
+      await financeEntryService.create({
+        type: "income",
+        category: route.category || moneyDir?.category || "Sales/Revenue",
+        amount: Math.abs(Number(moneyDir?.amount ?? entities.amount) || 0),
+        entry_date: (moneyDir?.datetime || entities.date) ? new Date(moneyDir?.datetime || entities.date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+        notes: `${moneyDir?.counterparty || entities.merchant || ""} – ${moneyDir?.reference || entities.reference || ""} (from email: ${currentEmailForAction?.subject || ""})`.trim(),
+        source: "email",
+        source_email_id: currentEmailForAction?.id || undefined,
+      });
+      sonnerToast.success("Income created ✅");
+    } catch (err: any) {
+      toast({ title: "Failed to create income", description: err.message, variant: "destructive" });
     }
   };
 
@@ -553,6 +573,7 @@ export default function EmailPage() {
               onCreateMeeting={handleCreateMeeting}
               onCreateReminder={handleCreateReminder}
               onCreateExpense={handleCreateExpense}
+              onCreateIncome={handleCreateIncome}
             />
           ) : (
             <EmailList
