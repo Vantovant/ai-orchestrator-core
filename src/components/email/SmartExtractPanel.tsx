@@ -67,6 +67,7 @@ interface Props {
   emailSender: string;
   emailSnippet: string;
   selectedAccount?: { last4: string; account_type?: string; account_id?: string } | null;
+  financeCreated?: boolean;
   onCreateExpense: (entities: any, route: SuggestedRoute) => void;
   onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
   onCreateTask: () => void;
