@@ -8,6 +8,7 @@ import VerificationBadge from "@/components/ai/VerificationBadge";
 import {
   Zap, RefreshCw, DollarSign, CheckSquare, CalendarPlus, Bell, FileText, AlertTriangle,
   CreditCard, Receipt, Plane, MessageSquare, Info, ShoppingBag, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, HelpCircle, TrendingUp,
+  Database,
 } from "lucide-react";
 
 const TYPE_ICONS: Record<string, typeof DollarSign> = {
@@ -45,7 +46,6 @@ function getRouteLabel(route: SuggestedRoute, moneyDirection: any): { label: str
     return { label: "Create Income", icon: TrendingUp };
   }
   if (route.target === "finance_expense") {
-    // Check money_direction to potentially override
     if (moneyDirection?.ui_action === "create_income") {
       return { label: "Create Income", icon: TrendingUp };
     }
@@ -66,6 +66,7 @@ interface Props {
   emailSubject: string;
   emailSender: string;
   emailSnippet: string;
+  selectedAccount?: { last4: string; account_type?: string; account_id?: string } | null;
   onCreateExpense: (entities: any, route: SuggestedRoute) => void;
   onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
   onCreateTask: () => void;
@@ -78,6 +79,7 @@ export default function SmartExtractPanel({
   emailSubject,
   emailSender,
   emailSnippet,
+  selectedAccount,
   onCreateExpense,
   onCreateIncome,
   onCreateTask,
@@ -88,13 +90,14 @@ export default function SmartExtractPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rerunning, setRerunning] = useState(false);
+  const [isCached, setIsCached] = useState(false);
 
   const fetchExtract = async (force = false) => {
     if (force) setRerunning(true);
     else setLoading(true);
     setError(null);
 
-    const result = await emailExtractService.extract(emailId, force);
+    const result = await emailExtractService.extract(emailId, force, selectedAccount || undefined);
 
     if (result.error) {
       if (result.error === "AI_BLOCKED") {
@@ -106,6 +109,7 @@ export default function SmartExtractPanel({
       }
     } else {
       setExtract(result.extract);
+      setIsCached(result.cached);
     }
     setLoading(false);
     setRerunning(false);
@@ -113,7 +117,7 @@ export default function SmartExtractPanel({
 
   useEffect(() => {
     fetchExtract();
-  }, [emailId]);
+  }, [emailId, selectedAccount?.last4]);
 
   const handleRouteAction = (route: SuggestedRoute) => {
     const moneyDir = (extract?.entities_json as any)?.money_direction;
@@ -205,6 +209,11 @@ export default function SmartExtractPanel({
           )}
           <span className="text-[10px] text-muted-foreground">{Math.round(extract.confidence * 100)}%</span>
           {needsVerification && <VerificationBadge grounded={false} />}
+          {/* Cached indicator */}
+          <Badge variant="outline" className={`text-[10px] h-4 px-1.5 py-0 gap-0.5 ${isCached ? "bg-muted text-muted-foreground border-border" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"}`}>
+            <Database className="h-2.5 w-2.5" />
+            {isCached ? "Cached" : "Fresh"}
+          </Badge>
         </div>
         <Button
           variant="ghost"
