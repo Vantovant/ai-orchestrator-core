@@ -77,6 +77,8 @@ export default function SmartExtractPanel({
     if (result.error) {
       if (result.error === "AI_BLOCKED") {
         setError(result.message || "AI not available. Add API keys in Settings → AI Keys.");
+      } else if (result.error === "AI_PARSE_ERROR") {
+        setError(result.message || "AI returned invalid data. Click Re-run to try again.");
       } else {
         setError(result.error);
       }
