@@ -6,8 +6,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Key, Eye, EyeOff, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { Key, Eye, EyeOff, CheckCircle2, AlertTriangle, Loader2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+
+function KeySetupGuide() {
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+      <p className="text-xs font-semibold text-primary">How to add your AI key</p>
+      <ol className="text-xs text-muted-foreground list-decimal ml-4 space-y-1.5">
+        <li>
+          <strong>Get your key:</strong>
+          <ul className="list-disc ml-4 mt-1 space-y-0.5">
+            <li>OpenAI: <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-0.5">platform.openai.com <ExternalLink className="h-2.5 w-2.5" /></a> → Create new secret key</li>
+            <li>Gemini: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline inline-flex items-center gap-0.5">aistudio.google.com <ExternalLink className="h-2.5 w-2.5" /></a> → Create API key</li>
+          </ul>
+        </li>
+        <li><strong>Paste</strong> into the field below (starts with <code className="bg-muted px-1 rounded text-[10px]">sk-...</code> or <code className="bg-muted px-1 rounded text-[10px]">AI...</code>)</li>
+        <li>Click <strong>Test</strong> — you'll see a ✓ Connected badge if valid</li>
+        <li>Click <strong>Save AI Settings</strong> — Smart Capture and Assistant will activate immediately</li>
+      </ol>
+    </div>
+  );
+}
 
 export default function AIKeysSettings() {
   const { user } = useAuth();
@@ -137,7 +157,7 @@ export default function AIKeysSettings() {
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2"><Key className="h-4 w-4" /> AI Keys (Required)</CardTitle>
         <CardDescription>
-          To guarantee absolute data sovereignty for this private cohort, a personal OpenAI or Gemini key is required. Your keys are stored securely and never logged.
+          To guarantee data sovereignty, you can connect your personal OpenAI or Gemini key. Your keys are stored securely and never logged.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -151,6 +171,7 @@ export default function AIKeysSettings() {
 
         {useOwnKeys && (
           <div className="space-y-3 pt-2 border-t">
+            <KeySetupGuide />
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-xs font-medium text-muted-foreground">OpenAI API Key</label>

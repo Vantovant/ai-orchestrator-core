@@ -67,15 +67,35 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const hasKey = keyData?.use_own_keys && (keyData.openai_key_encrypted || keyData.gemini_key_encrypted);
+
+    // Check Beta Assist eligibility if no BYOK
+    let isBetaAssist = false;
+    let betaRemaining = 0;
     if (!hasKey) {
-      return new Response(JSON.stringify({
-        error: "ai_keys_missing",
-        message: "Connect your AI key in VantoOS → Settings → AI Keys to unlock Ask Assistant.",
-        ai_status: "blocked",
-      }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const { data: betaData } = await supabaseAdmin
+        .from("beta_testers")
+        .select("is_active, assisted_ai_remaining, assisted_ai_expires_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (betaData?.is_active && betaData.assisted_ai_remaining > 0) {
+        const notExpired = !betaData.assisted_ai_expires_at || new Date(betaData.assisted_ai_expires_at) > new Date();
+        if (notExpired) {
+          isBetaAssist = true;
+          betaRemaining = betaData.assisted_ai_remaining;
+        }
+      }
+
+      if (!isBetaAssist) {
+        return new Response(JSON.stringify({
+          error: "ai_keys_missing",
+          message: "To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.",
+          ai_status: "blocked",
+        }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Build context
@@ -98,6 +118,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         calling_function: "assistant-help",
         workspace_type: "private",
+        beta_assist_mode: isBetaAssist,
+        beta_user_id: isBetaAssist ? userId : undefined,
         messages: [
           {
             role: "system",
@@ -130,6 +152,8 @@ Extension tabs:
         : null,
       ai_status: aiData.ai_status || "ok",
       provider_used: aiData.provider_used || "unknown",
+      mode: aiData.mode || "byok",
+      assisted_remaining: aiData.assisted_remaining,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

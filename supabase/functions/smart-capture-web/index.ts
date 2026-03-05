@@ -41,7 +41,6 @@ function truncateSnapshot(snapshot: any): { truncated: any; wasTruncated: boolea
 
   if (totalChars <= SNAPSHOT_MAX_CHARS) return { truncated: snapshot, wasTruncated: false };
 
-  // Progressively trim
   const trimmed = { ...snapshot };
   if (trimmed.textBlocks) {
     while (totalChars > SNAPSHOT_MAX_CHARS && trimmed.textBlocks.length > 1) {
@@ -134,7 +133,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Check BYOK
+    // Check BYOK keys
     const { data: keyData } = await supabaseAdmin
       .from("user_ai_keys")
       .select("use_own_keys, openai_key_encrypted, gemini_key_encrypted")
@@ -142,15 +141,35 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const hasKey = keyData?.use_own_keys && (keyData.openai_key_encrypted || keyData.gemini_key_encrypted);
+
+    // Check Beta Assist eligibility if no BYOK
+    let isBetaAssist = false;
+    let betaRemaining = 0;
     if (!hasKey) {
-      return new Response(JSON.stringify({
-        error: "ai_keys_missing",
-        message: "Connect your AI key in VantoOS → Settings → AI Keys to use Smart Capture.",
-        ai_status: "blocked",
-      }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      const { data: betaData } = await supabaseAdmin
+        .from("beta_testers")
+        .select("is_active, assisted_ai_remaining, assisted_ai_expires_at")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (betaData?.is_active && betaData.assisted_ai_remaining > 0) {
+        const notExpired = !betaData.assisted_ai_expires_at || new Date(betaData.assisted_ai_expires_at) > new Date();
+        if (notExpired) {
+          isBetaAssist = true;
+          betaRemaining = betaData.assisted_ai_remaining;
+        }
+      }
+
+      if (!isBetaAssist) {
+        return new Response(JSON.stringify({
+          error: "ai_keys_missing",
+          message: "To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.",
+          ai_status: "blocked",
+        }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Redact PII from snapshot text fields
@@ -198,6 +217,8 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         calling_function: "smart-capture-web",
         workspace_type: "private",
+        beta_assist_mode: isBetaAssist,
+        beta_user_id: isBetaAssist ? userId : undefined,
         messages: [
           {
             role: "system",
@@ -258,13 +279,14 @@ Deno.serve(async (req) => {
       try { aiResult = JSON.parse(aiData.result); } catch { /* fallback */ }
     }
 
-    // Fallback if AI failed
+    // Graceful degradation: if AI failed, still save the capture
+    const aiProviderFailed = !aiResult || aiData.ai_status === "error" || aiData.all_providers_failed;
     if (!aiResult) {
       aiResult = {
         summary: `Captured page: ${title || url}`,
         extracted_actions: [],
         needs_verification: true,
-        verification_reasons: ["AI analysis unavailable"],
+        verification_reasons: ["AI analysis unavailable — basic context captured"],
       };
     }
 
@@ -358,7 +380,6 @@ Deno.serve(async (req) => {
       ? `${APP_URL}/projects?id=${effectiveProjectId}&tab=inbox${inboxItemId ? `&highlight=${inboxItemId}` : ""}`
       : `${APP_URL}/projects`;
 
-    // Determine recommended destination
     const recommendedDestination = effectiveProjectId
       ? "project_inbox"
       : aiResult.extracted_actions?.length
@@ -380,6 +401,9 @@ Deno.serve(async (req) => {
       redaction_toast: redactionToast,
       ai_status: aiData.ai_status || "ok",
       provider_used: aiData.provider_used || "unknown",
+      mode: aiData.mode || "byok",
+      assisted_remaining: aiData.assisted_remaining,
+      ai_provider_failed: aiProviderFailed,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
