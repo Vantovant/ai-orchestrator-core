@@ -573,6 +573,7 @@ export default function EmailPage() {
               onCreateMeeting={handleCreateMeeting}
               onCreateReminder={handleCreateReminder}
               onCreateExpense={handleCreateExpense}
+              onCreateIncome={handleCreateIncome}
             />
           ) : (
             <EmailList
