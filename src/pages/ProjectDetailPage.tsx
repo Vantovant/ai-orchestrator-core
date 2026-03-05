@@ -850,16 +850,41 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm">Extracted Actions</CardTitle></CardHeader>
               <CardContent className="space-y-2">
-                {suggestions.map((s: any, i: number) => (
-                  <label key={i} className="flex items-start gap-2 p-2 rounded hover:bg-muted/50 cursor-pointer">
-                    <input type="checkbox" checked={selected.has(i)} onChange={() => { const n = new Set(selected); n.has(i) ? n.delete(i) : n.add(i); setSelected(n); }} className="mt-0.5 h-4 w-4" />
-                    <div>
-                      <Badge variant="outline" className="text-[10px] mr-1">{s.type}</Badge>
-                      <span className="text-sm">{s.title}</span>
-                    </div>
-                  </label>
-                ))}
-                <Button size="sm" disabled={selected.size === 0}>Apply {selected.size} Selected</Button>
+                {suggestions.map((s: any, i: number) => {
+                  const isDone = s.applyStatus === "created" || s.applyStatus === "merged";
+                  const isFailed = s.applyStatus === "failed";
+                  return (
+                    <label key={i} className={`flex items-start gap-2 p-2 rounded cursor-pointer border ${
+                      isFailed ? "bg-destructive/5 border-destructive/30" :
+                      isDone ? "bg-primary/5 border-primary/30" :
+                      s.applyStatus === "queued" ? "bg-muted/50 border-muted" :
+                      "hover:bg-muted/50 border-transparent"
+                    }`}>
+                      {s.applyStatus === "queued" ? <Loader2 className="h-4 w-4 animate-spin mt-0.5" /> :
+                       isDone ? <CheckCircle2 className="h-4 w-4 text-primary mt-0.5" /> :
+                       isFailed ? <AlertTriangle className="h-4 w-4 text-destructive mt-0.5" /> :
+                       <input type="checkbox" checked={selected.has(i)} onChange={() => { const n = new Set(selected); n.has(i) ? n.delete(i) : n.add(i); setSelected(n); }} className="mt-0.5 h-4 w-4" disabled={applying} />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant="outline" className="text-[10px]">{s.type}</Badge>
+                          {s.priority && <Badge variant={s.priority === "P1" ? "destructive" : "secondary"} className="text-[10px]">{s.priority}</Badge>}
+                          <span className={`text-sm ${isDone ? "line-through text-muted-foreground" : ""}`}>{s.title}</span>
+                        </div>
+                        {isDone && <span className="text-[10px] text-primary">{s.applyStatus === "created" ? "✓ Created" : "↻ Merged"}</span>}
+                        {isFailed && <span className="text-[10px] text-destructive">✗ {s.failReason || "Failed"}</span>}
+                      </div>
+                    </label>
+                  );
+                })}
+                {(() => {
+                  const actionable = [...selected].filter(i => suggestions[i]?.applyStatus === "idle").length;
+                  return actionable > 0 ? (
+                    <Button size="sm" className="w-full gap-1" onClick={handleApply} disabled={applying}>
+                      {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      {applying ? "Applying…" : `Apply ${actionable} Selected`}
+                    </Button>
+                  ) : null;
+                })()}
               </CardContent>
             </Card>
           )}
