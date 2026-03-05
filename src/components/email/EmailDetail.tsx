@@ -62,7 +62,7 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, ha
       </div>
 
       {/* Email content */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-4">
         {/* Sticky Handled + Smart Extract panel */}
         <div className="sticky top-0 z-10 space-y-3 bg-background pb-2">
           <HandledStamp emailId={email.id} refreshKey={handledRefreshKey} />
