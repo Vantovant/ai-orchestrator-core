@@ -128,11 +128,11 @@ export const financeEntryService = {
     return data as FinanceEntry[];
   },
 
-  async create(entry: Pick<FinanceEntry, "type" | "category" | "amount" | "entry_date"> & Partial<Pick<FinanceEntry, "notes" | "source">>) {
+  async create(entry: Pick<FinanceEntry, "type" | "category" | "amount" | "entry_date"> & Partial<Pick<FinanceEntry, "notes" | "source">> & { source_email_id?: string }) {
     const userId = await getUserId();
     const { data, error } = await supabase
       .from("finance_entries")
-      .insert({ ...entry, user_id: userId })
+      .insert({ ...entry, user_id: userId } as any)
       .select()
       .single();
     if (error) throw error;
