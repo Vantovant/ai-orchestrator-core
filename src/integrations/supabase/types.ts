@@ -587,6 +587,44 @@ export type Database = {
         }
         Relationships: []
       }
+      email_action_log: {
+        Row: {
+          action_type: string
+          created_at: string
+          deleted_at: string | null
+          email_id: string
+          id: string
+          related_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          created_at?: string
+          deleted_at?: string | null
+          email_id: string
+          id?: string
+          related_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          deleted_at?: string | null
+          email_id?: string
+          id?: string
+          related_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_action_log_email_id_fkey"
+            columns: ["email_id"]
+            isOneToOne: false
+            referencedRelation: "email_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_extracts: {
         Row: {
           confidence: number

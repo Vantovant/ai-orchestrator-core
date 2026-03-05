@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import type { EmailMessage } from "@/services/emailService";
 import type { SuggestedRoute } from "@/services/emailExtractService";
 import SmartExtractPanel from "@/components/email/SmartExtractPanel";
+import HandledStamp from "@/components/email/HandledStamp";
 import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip } from "lucide-react";
 import { format } from "date-fns";
 
@@ -10,6 +11,7 @@ interface Props {
   email: EmailMessage;
   selectedAccount?: { last4: string; account_type?: string; account_id?: string } | null;
   financeCreated?: boolean;
+  handledRefreshKey?: number;
   onBack: () => void;
   onArchive: () => void;
   onSnooze: () => void;
@@ -21,7 +23,7 @@ interface Props {
   onCreateIncome?: (entities: any, route: SuggestedRoute) => void;
 }
 
-export default function EmailDetail({ email, selectedAccount, financeCreated, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
+export default function EmailDetail({ email, selectedAccount, financeCreated, handledRefreshKey, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -56,20 +58,23 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, on
 
       {/* Email content */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-        {/* Smart Extract Panel */}
-        <SmartExtractPanel
-          emailId={email.id}
-          emailSubject={email.subject}
-          emailSender={email.sender}
-          emailSnippet={email.snippet}
-          selectedAccount={selectedAccount}
-          financeCreated={financeCreated}
-          onCreateExpense={onCreateExpense || (() => {})}
-          onCreateIncome={onCreateIncome}
-          onCreateTask={onCreateTask}
-          onCreateMeeting={onCreateMeeting}
-          onCreateReminder={onCreateReminder}
-        />
+        {/* Sticky Handled + Smart Extract panel */}
+        <div className="sticky top-0 z-10 space-y-3 bg-background pb-2">
+          <HandledStamp emailId={email.id} refreshKey={handledRefreshKey} />
+          <SmartExtractPanel
+            emailId={email.id}
+            emailSubject={email.subject}
+            emailSender={email.sender}
+            emailSnippet={email.snippet}
+            selectedAccount={selectedAccount}
+            financeCreated={financeCreated}
+            onCreateExpense={onCreateExpense || (() => {})}
+            onCreateIncome={onCreateIncome}
+            onCreateTask={onCreateTask}
+            onCreateMeeting={onCreateMeeting}
+            onCreateReminder={onCreateReminder}
+          />
+        </div>
 
         <h2 className="text-lg font-semibold text-foreground mb-2">{email.subject}</h2>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
