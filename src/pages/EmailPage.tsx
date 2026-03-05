@@ -320,8 +320,8 @@ export default function EmailPage() {
   };
 
   const handleWaitingOn = async (idx?: number) => {
-    const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
-    const target = emails[targetIdx];
+    const targetIdx = idx ?? (openEmail ? displayEmails.findIndex(e => e.id === openEmail.id) : selectedIndex);
+    const target = displayEmails[targetIdx];
     if (!target) return;
     const d = new Date(); d.setDate(d.getDate() + 3);
     await emailService.setWaitingOn(target.id, d.toISOString().slice(0, 10));
