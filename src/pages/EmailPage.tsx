@@ -449,6 +449,7 @@ export default function EmailPage() {
         if (existing) {
           sonnerToast.info(`Already created from this email (${existing.type} – ${existing.category})`);
           setCreatedEmailIds(prev => new Set(prev).add(emailId));
+          await logAction(emailId, existing.type === "income" ? "finance_income" : "finance_expense", existing.id);
           return;
         }
       }
