@@ -551,6 +551,7 @@ export default function EmailPage() {
               onCreateTask={handleCreateTask}
               onCreateMeeting={handleCreateMeeting}
               onCreateReminder={handleCreateReminder}
+              onCreateExpense={handleCreateExpense}
             />
           ) : (
             <EmailList
