@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { emailExtractService, type EmailExtract, type SuggestedRoute } from "@/services/emailExtractService";
-import { VerificationBadge } from "@/components/ai/VerificationBadge";
+import VerificationBadge from "@/components/ai/VerificationBadge";
 import {
   Zap, RefreshCw, DollarSign, CheckSquare, CalendarPlus, Bell, FileText, AlertTriangle,
   CreditCard, Receipt, Plane, MessageSquare, Info, ShoppingBag
