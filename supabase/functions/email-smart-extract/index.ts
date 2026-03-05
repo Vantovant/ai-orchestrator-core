@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are VantoOS "Smart Extract" for Email. Your job is to read an email (metadata + snippet + optional capped body) and output ONE strict JSON object. Do not write explanations. Do not wrap in markdown. Do not add extra keys. If a field is unknown, use null or an empty string/array as appropriate.
+// Versioned prompt for reproducibility
+const SYSTEM_PROMPT_V1 = `You are VantoOS "Smart Extract" for Email. Your job is to read an email (metadata + snippet + optional capped body) and output ONE strict JSON object. Do not write explanations. Do not wrap in markdown. Do not add extra keys. If a field is unknown, use null or an empty string/array as appropriate.
 
 PII SAFETY RULES (MANDATORY):
 - Never output full card numbers, full ID numbers, or any secret tokens.
@@ -33,23 +34,23 @@ TASK:
 - suggested_routes must include at least one route with target: finance_expense | task | meeting | reminder | notes | project
 - For finance_expense: provide category and short reason.
 
-OUTPUT JSON (RETURN EXACTLY THIS SHAPE):
+OUTPUT JSON (RETURN EXACTLY THIS SHAPE, NO EXTRA KEYS):
 {
   "email_id": "string",
   "detected_type": "expense|invoice|subscription|travel|task|meeting|fyi|other",
   "confidence": 0.0,
   "summary": "string",
   "entities": {
-    "merchant": "string|null",
+    "merchant": null,
     "amount": null,
     "currency": "ZAR",
     "transaction_type": null,
-    "date": "ISO|null",
-    "account_hint": "string|null",
-    "reference": "string|null",
-    "category_suggestion": "string|null",
-    "vendor_email": "string|null",
-    "subscription_hint": "string|null",
+    "date": null,
+    "account_hint": null,
+    "reference": null,
+    "category_suggestion": null,
+    "vendor_email": null,
+    "subscription_hint": null,
     "line_items": []
   },
   "suggested_routes": [
@@ -57,7 +58,7 @@ OUTPUT JSON (RETURN EXACTLY THIS SHAPE):
       "target": "finance_expense|task|meeting|reminder|notes|project",
       "account_id": null,
       "project_id": null,
-      "category": "string|null",
+      "category": null,
       "confidence": 0.0,
       "reason": "string"
     }
@@ -65,18 +66,55 @@ OUTPUT JSON (RETURN EXACTLY THIS SHAPE):
   "requires_user_confirmation": true
 }`;
 
-// Simple PII redaction before sending to AI
+const ALLOWED_TOP_KEYS = new Set([
+  "email_id", "detected_type", "confidence", "summary",
+  "entities", "suggested_routes", "requires_user_confirmation",
+]);
+const ALLOWED_ENTITY_KEYS = new Set([
+  "merchant", "amount", "currency", "transaction_type", "date",
+  "account_hint", "reference", "category_suggestion", "vendor_email",
+  "subscription_hint", "line_items",
+]);
+
 function redactPII(text: string): string {
   if (!text) return "";
   let result = text;
-  // SA ID numbers (13 digits)
   result = result.replace(/\b\d{13}\b/g, "[REDACTED_ID]");
-  // Phone numbers
   result = result.replace(/\+27\s?\d[\d\s-]{7,12}/g, "[REDACTED_PHONE]");
   result = result.replace(/\b0[1-9]\d[\d\s-]{7,10}\b/g, "[REDACTED_PHONE]");
-  // Bank account numbers (9-12 digits, but not amounts)
   result = result.replace(/\b\d{9,12}\b/g, "[REDACTED_NUM]");
   return result;
+}
+
+/** Strip any keys not in the contract to prevent prompt injection / hallucination drift */
+function sanitizeExtract(raw: any): any {
+  const out: any = {};
+  for (const k of ALLOWED_TOP_KEYS) {
+    out[k] = raw[k] ?? null;
+  }
+  if (raw.entities && typeof raw.entities === "object") {
+    const ent: any = {};
+    for (const k of ALLOWED_ENTITY_KEYS) {
+      ent[k] = raw.entities[k] ?? null;
+    }
+    out.entities = ent;
+  } else {
+    out.entities = {};
+  }
+  if (Array.isArray(raw.suggested_routes)) {
+    out.suggested_routes = raw.suggested_routes.map((r: any) => ({
+      target: r.target ?? "notes",
+      account_id: r.account_id ?? null,
+      project_id: r.project_id ?? null,
+      category: r.category ?? null,
+      confidence: r.confidence ?? 0,
+      reason: r.reason ?? "",
+    }));
+  } else {
+    out.suggested_routes = [];
+  }
+  out.requires_user_confirmation = raw.requires_user_confirmation ?? true;
+  return out;
 }
 
 serve(async (req) => {
@@ -106,7 +144,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "email_id required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Check cache first
+    // Check cache first (skip on force rerun)
     if (!forceRerun) {
       const { data: cached } = await userClient
         .from("email_extracts")
@@ -142,14 +180,14 @@ serve(async (req) => {
       .select("id, account_name, bank_name, last4")
       .is("deleted_at", null);
 
-    const knownAccounts = (bankAccounts ?? []).map(a => ({
+    const knownAccounts = (bankAccounts ?? []).map((a: any) => ({
       account_id: a.id,
       name: a.account_name,
       label: a.bank_name,
       hints: [a.last4, a.bank_name].filter(Boolean),
     }));
 
-    // Redact PII from email content
+    // Redact PII
     const redactedSnippet = redactPII(email.snippet || "");
     const redactedBody = redactPII((email.body_preview || "").slice(0, 1500));
     const redactedSubject = redactPII(email.subject || "");
@@ -176,13 +214,10 @@ serve(async (req) => {
     // Call AI gateway
     const aiRes = await fetch(`${supabaseUrl}/functions/v1/ai-gateway`, {
       method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: authHeader, "Content-Type": "application/json" },
       body: JSON.stringify({
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: SYSTEM_PROMPT_V1 },
           { role: "user", content: userPrompt },
         ],
         calling_function: "email-smart-extract",
@@ -198,39 +233,44 @@ serve(async (req) => {
       });
     }
 
-    // Parse result
+    // ── Strict JSON parsing ──
     let extractResult: any;
     try {
       const raw = aiData.result;
       if (typeof raw === "string") {
-        // Try to parse, strip markdown fences if present
         const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
         extractResult = JSON.parse(cleaned);
-      } else {
+      } else if (typeof raw === "object" && raw !== null) {
         extractResult = raw;
+      } else {
+        throw new Error("AI returned non-JSON value");
       }
     } catch (e) {
-      console.error("[email-smart-extract] Failed to parse AI result:", aiData.result);
-      return new Response(JSON.stringify({ error: "AI_PARSE_ERROR", raw: aiData.result }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("[email-smart-extract] JSON parse failed:", e, "raw:", aiData.result);
+      return new Response(JSON.stringify({
+        error: "AI_PARSE_ERROR",
+        message: "AI returned invalid data. Please try Re-run.",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (!extractResult || !extractResult.detected_type) {
-      return new Response(JSON.stringify({ error: "AI_INVALID_RESULT", raw: extractResult }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({
+        error: "AI_PARSE_ERROR",
+        message: "AI response missing required fields. Please try Re-run.",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Sanitize: strip extra keys
+    const sanitized = sanitizeExtract(extractResult);
+
     // Match bank account hints to actual account IDs
-    const entities = extractResult.entities || {};
-    const routes = extractResult.suggested_routes || [];
+    const entities = sanitized.entities || {};
+    const routes = sanitized.suggested_routes || [];
     if (entities.account_hint && knownAccounts.length > 0) {
       const hint = (entities.account_hint || "").toLowerCase();
       for (const acc of knownAccounts) {
-        const matches = acc.hints.some(h => h && hint.includes(h.toLowerCase()));
+        const matches = acc.hints.some((h: string) => h && hint.includes(h.toLowerCase()));
         if (matches) {
-          // Set account_id on finance routes
           for (const route of routes) {
             if (route.target === "finance_expense" && !route.account_id) {
               route.account_id = acc.account_id;
@@ -241,33 +281,28 @@ serve(async (req) => {
       }
     }
 
-    // Store in DB (upsert)
+    // ── Upsert into DB (no delete+insert race) ──
     const db = createClient(supabaseUrl, serviceKey);
     const extractRow = {
       user_id: user.id,
       email_id: emailId,
-      detected_type: extractResult.detected_type,
-      confidence: extractResult.confidence ?? 0,
-      summary: extractResult.summary || "",
+      detected_type: sanitized.detected_type || "other",
+      confidence: sanitized.confidence ?? 0,
+      summary: sanitized.summary || "",
       entities_json: entities,
       suggested_routes_json: routes,
-      requires_user_confirmation: extractResult.requires_user_confirmation ?? true,
+      requires_user_confirmation: sanitized.requires_user_confirmation ?? true,
+      deleted_at: null, // clear soft-delete on re-run
     };
-
-    // Delete existing if force rerun
-    if (forceRerun) {
-      await db.from("email_extracts").delete().eq("email_id", emailId).eq("user_id", user.id);
-    }
 
     const { data: saved, error: saveErr } = await db
       .from("email_extracts")
-      .insert(extractRow)
+      .upsert(extractRow, { onConflict: "user_id,email_id" })
       .select()
       .single();
 
     if (saveErr) {
-      console.error("[email-smart-extract] save error:", saveErr);
-      // Return result even if save fails
+      console.error("[email-smart-extract] upsert error:", saveErr);
     }
 
     return new Response(JSON.stringify({ extract: saved || extractRow, cached: false }), {
