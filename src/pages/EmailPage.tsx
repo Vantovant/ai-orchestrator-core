@@ -579,6 +579,7 @@ export default function EmailPage() {
           ) : openEmail ? (
             <EmailDetail
               email={openEmail}
+              selectedAccount={selectedBankAccount}
               onBack={() => setOpenEmailId(null)}
               onArchive={() => handleArchive()}
               onSnooze={() => handleSnooze()}
