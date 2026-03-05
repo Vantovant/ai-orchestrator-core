@@ -55,7 +55,7 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onS
             data-email-index={idx}
             onClick={() => { onSelect(idx); onOpen(email.id); }}
             className={cn(
-              "w-full text-left px-4 transition-colors flex gap-3 group",
+              "w-full text-left px-2.5 sm:px-4 transition-colors flex gap-2 sm:gap-3 group",
               compact ? "py-2" : "py-3",
               idx === selectedIndex ? "bg-primary/8 border-l-2 border-l-primary" : "border-l-2 border-l-transparent hover:bg-muted/40",
               !email.is_read && "font-medium"
