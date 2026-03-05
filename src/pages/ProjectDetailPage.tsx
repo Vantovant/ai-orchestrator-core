@@ -718,10 +718,97 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
         body: { content: content.slice(0, 3000), note_date: selectedDate, project_id: projectId },
       });
       if (error) throw error;
-      setSuggestions(data?.suggestions ?? []);
-      setSelected(new Set((data?.suggestions ?? []).map((_: any, i: number) => i)));
+      if (data?.error) throw new Error(data.error);
+      const items = data?.suggestions ?? [];
+      setSuggestions(items.map((s: any) => ({ ...s, applyStatus: "idle" })));
+      setSelected(new Set(items.map((_: any, i: number) => i)));
+      toast.success(items.length > 0 ? `Extracted ${items.length} action(s)` : "No actionable items found");
     } catch (e: any) { toast.error(e.message || "Extraction failed"); }
     setExtracting(false);
+  };
+
+  const handleApply = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast.error("Not authenticated"); return; }
+
+    const toApply = [...selected].map(i => suggestions[i]).filter(s => s && s.applyStatus !== "created" && s.applyStatus !== "merged");
+    if (toApply.length === 0) { toast.info("No items selected"); return; }
+
+    setApplying(true);
+    // Mark queued
+    setSuggestions(prev => prev.map((s, i) => selected.has(i) && s.applyStatus === "idle" ? { ...s, applyStatus: "queued" } : s));
+
+    const { makeDedupe } = await import("@/services/taskService");
+    const { taskService } = await import("@/services/taskService");
+    const { reminderService } = await import("@/services/reminderService");
+
+    const priorityMap: Record<string, string> = { P1: "high", P2: "medium", P3: "low" };
+    let created = 0, merged = 0, failed = 0;
+
+    const updatedSuggestions = [...suggestions];
+    for (const idx of selected) {
+      const s = updatedSuggestions[idx];
+      if (!s || s.applyStatus === "created" || s.applyStatus === "merged") continue;
+      try {
+        if (s.type === "task") {
+          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
+          // Check existing
+          const { data: existing } = await supabase
+            .from("tasks")
+            .select("id")
+            .eq("user_id", user.id)
+            .eq("dedupe_key", dedupeKey)
+            .is("deleted_at", null)
+            .maybeSingle();
+
+          if (existing) {
+            await supabase.from("tasks").update({
+              description: s.description || null,
+              priority: priorityMap[s.priority || "P2"] || "medium",
+              due_date: s.due_at || null,
+              source: "note_extract",
+              last_touched_at: new Date().toISOString(),
+            }).eq("id", existing.id);
+            updatedSuggestions[idx] = { ...s, applyStatus: "merged" };
+            merged++;
+          } else {
+            await taskService.create({
+              title: s.title,
+              priority: priorityMap[s.priority || "P2"] || "medium",
+              due_date: s.due_at || null,
+              source: "note_extract",
+              project_id: projectId,
+              dedupe_key: dedupeKey,
+            });
+            updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+            created++;
+          }
+        } else if (s.type === "reminder") {
+          await reminderService.create({
+            title: s.title,
+            reminder_time: s.remind_at || new Date().toISOString(),
+          });
+          updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+          created++;
+        }
+      } catch (e: any) {
+        updatedSuggestions[idx] = { ...s, applyStatus: "failed", failReason: e.message };
+        failed++;
+      }
+    }
+
+    setSuggestions(updatedSuggestions);
+    setApplying(false);
+
+    // Invalidate project tasks so Tasks tab reflects immediately
+    qc.invalidateQueries({ queryKey: ["project_tasks", projectId] });
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+
+    if (failed > 0) {
+      toast.error(`Applied: ${created} created, ${merged} merged, ${failed} failed`);
+    } else {
+      toast.success(`Applied: ${created} created, ${merged} merged`);
+    }
   };
 
   return (
