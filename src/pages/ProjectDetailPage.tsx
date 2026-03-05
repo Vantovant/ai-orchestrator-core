@@ -4,7 +4,7 @@ import {
   projectService, projectNotesService, projectLinksService,
   type Project, type ProjectNote, type ProjectLink,
 } from "@/services/projectService";
-import { taskService, type Task, type TaskInsert } from "@/services/taskService";
+import { taskService, makeDedupe, type Task, type TaskInsert } from "@/services/taskService";
 import { meetingService, type Meeting, type MeetingInsert } from "@/services/meetingService";
 import { reminderService, type ReminderInsert } from "@/services/reminderService";
 import { activityLogService } from "@/services/activityLogService";
