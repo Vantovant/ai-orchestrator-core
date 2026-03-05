@@ -9,7 +9,9 @@ import { emailService, type EmailMessage, type EmailAccount } from "@/services/e
 import { taskService } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { meetingService } from "@/services/meetingService";
+import { financeEntryService } from "@/services/financeService";
 import { supabase } from "@/integrations/supabase/client";
+import type { SuggestedRoute } from "@/services/emailExtractService";
 import AccountSwitcher from "@/components/email/AccountSwitcher";
 import EmailList from "@/components/email/EmailList";
 import EmailDetail from "@/components/email/EmailDetail";
