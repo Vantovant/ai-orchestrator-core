@@ -226,7 +226,7 @@ async function processMessages(db: any, userId: string, account: any, accessToke
         is_read: !(msgData.labelIds ?? []).includes("UNREAD"),
         raw_size: msgData.sizeEstimate || null,
       }, {
-        onConflict: "user_id,account_id,gmail_message_id",
+        onConflict: "account_id,message_id",
         ignoreDuplicates: false,
       });
 
