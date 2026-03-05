@@ -5,12 +5,13 @@ import { reminderService, type Reminder } from "@/services/reminderService";
 import { meetingService, type Meeting } from "@/services/meetingService";
 import { assistantRunService } from "@/services/assistantRunService";
 import { useAuth } from "@/hooks/useAuth";
+import { useAiStatus } from "@/hooks/useAiStatus";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target, RefreshCw, AlertTriangle, Copy } from "lucide-react";
+import { CheckSquare, Bell, Calendar, Zap, AlertCircle, Sparkles, Clock, Target, RefreshCw, AlertTriangle, Copy, Key, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useMemo } from "react";
 import ComplianceWidget from "@/components/compliance/ComplianceWidget";
@@ -55,26 +56,99 @@ function getUserName(user: any): string {
   return "there";
 }
 
-// ── AI Status Banner ──
-function AiStatusBanner({ aiStatus, message, onRetry, retrying }: { aiStatus: string; message: string; onRetry: () => void; retrying: boolean }) {
-  if (aiStatus === "ok") return null;
-  const isError = aiStatus === "error" || aiStatus === "rate_limited";
-  return (
-    <Card className={isError ? "border-destructive/50 bg-destructive/5" : "border-warning/50 bg-warning/5"}>
-      <CardContent className="flex items-center justify-between gap-3 p-4">
-        <div className="flex items-center gap-3">
-          <AlertTriangle className={`h-5 w-5 ${isError ? "text-destructive" : "text-warning"}`} />
-          <div>
-            <p className="text-sm font-medium">{aiStatus === "rate_limited" ? "AI Rate Limited" : aiStatus === "degraded" ? "Standard Mode" : "AI Unavailable"}</p>
-            <p className="text-xs text-muted-foreground">{message}</p>
+// ── AI Status Banner (unified via ai-status edge function) ──
+function AiAvailabilityBanner({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
+  const { data: aiStatus, isLoading, refetch } = useAiStatus();
+  const navigate = useNavigate();
+
+  if (isLoading || !aiStatus) return null;
+
+  // a) BYOK available → "AI Ready"
+  if (aiStatus.status === "ready") {
+    return (
+      <Card className="border-success/50 bg-success/5">
+        <CardContent className="flex items-center gap-3 p-3">
+          <ShieldCheck className="h-5 w-5 text-success shrink-0" />
+          <p className="text-sm font-medium text-success">AI Ready — Your keys are connected</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // b) Beta tester + remaining > 0
+  if (aiStatus.status === "assisted") {
+    return (
+      <Card className="border-warning/50 bg-warning/5">
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-3">
+            <Sparkles className="h-5 w-5 text-warning shrink-0" />
+            <div>
+              <p className="text-sm font-medium">Connect your key to keep AI running smoothly</p>
+              <p className="text-xs text-muted-foreground">Assisted uses remaining: {aiStatus.assisted_ai_remaining}</p>
+            </div>
           </div>
-        </div>
-        <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying} className="gap-1">
-          <RefreshCw className={`h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} /> Retry
-        </Button>
-      </CardContent>
-    </Card>
-  );
+          <Button variant="outline" size="sm" className="gap-1 shrink-0" onClick={() => navigate("/settings")}>
+            <Key className="h-3.5 w-3.5" /> Settings → AI Keys
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // c) Blocked — no key, no assisted remaining
+  if (aiStatus.status === "blocked") {
+    return (
+      <Card className="border-destructive/50 bg-destructive/5">
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-destructive">AI Key Required</p>
+              <p className="text-xs text-muted-foreground">
+                To guarantee data sovereignty, connect your personal OpenAI or Gemini key in Settings → AI Keys.
+              </p>
+              {aiStatus.is_beta_tester && aiStatus.assisted_ai_remaining === 0 && (
+                <p className="text-xs text-destructive mt-1 font-medium">
+                  Assisted mode is now finished. Add your API key to continue using Smart Capture & Assistant.
+                </p>
+              )}
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="gap-1 shrink-0" onClick={() => navigate("/settings")}>
+            <Key className="h-3.5 w-3.5" /> Settings → AI Keys
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // d) Degraded — key exists but provider error
+  if (aiStatus.status === "degraded") {
+    const errorMsg = aiStatus.last_error === "rate_limited"
+      ? "AI provider rate limited. Retry shortly."
+      : aiStatus.last_error === "invalid_key"
+        ? "Your API key appears invalid. Update it in Settings → AI Keys."
+        : "AI provider error. Retry.";
+
+    return (
+      <Card className="border-warning/50 bg-warning/5">
+        <CardContent className="flex items-center justify-between gap-3 p-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-warning shrink-0" />
+            <div>
+              <p className="text-sm font-medium">AI Provider Issue</p>
+              <p className="text-xs text-muted-foreground">{errorMsg}</p>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => { refetch(); onRetry(); }} disabled={retrying} className="gap-1">
+            <RefreshCw className={`h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} /> Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return null;
 }
 
 export default function DashboardPage() {
@@ -184,15 +258,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* AI Status Banner */}
-      {aiStatus && aiStatus !== "ok" && (
-        <AiStatusBanner
-          aiStatus={aiStatus}
-          message={aiResult?.message ?? "AI is unavailable. Showing standard mode."}
-          onRetry={runAssistant}
-          retrying={aiLoading}
-        />
-      )}
+      {/* AI Availability Banner */}
+      <AiAvailabilityBanner onRetry={runAssistant} retrying={aiLoading} />
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
