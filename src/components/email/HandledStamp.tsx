@@ -15,6 +15,7 @@ const ACTION_CONFIG: Record<EmailActionType, { label: string; icon: typeof Check
   archived: { label: "Archived", icon: Archive, className: "text-muted-foreground" },
   snoozed: { label: "Snoozed", icon: Clock, className: "text-violet-600 dark:text-violet-400" },
   starred: { label: "Starred", icon: Star, className: "text-amber-500" },
+  waiting_on: { label: "Waiting On", icon: Eye, className: "text-blue-600 dark:text-blue-400" },
 };
 
 interface Props {

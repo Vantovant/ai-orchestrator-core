@@ -9,7 +9,8 @@ export type EmailActionType =
   | "notes"
   | "archived"
   | "snoozed"
-  | "starred";
+  | "starred"
+  | "waiting_on";
 
 export interface EmailActionLogEntry {
   id: string;

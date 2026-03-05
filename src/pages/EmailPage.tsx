@@ -378,7 +378,7 @@ export default function EmailPage() {
     if (!target) return;
     const d = new Date(); d.setDate(d.getDate() + 3);
     await emailService.setWaitingOn(target.id, d.toISOString().slice(0, 10));
-    await logAction(target.id, "starred"); // log waiting_on as a handled action
+    await logAction(target.id, "waiting_on" as EmailActionType);
     toast({ title: "Marked as Waiting On" });
     autoAdvance(targetIdx);
     loadEmails();
