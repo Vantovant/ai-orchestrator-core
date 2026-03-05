@@ -24,7 +24,7 @@ export default function EmailPage() {
   // Accounts
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [selectedAccount, setSelectedAccount] = useState("");
-  const [unified, setUnified] = useState(false);
+  const [unified, setUnified] = useState(true);
 
   // Emails
   const [emails, setEmails] = useState<EmailMessage[]>([]);
@@ -54,8 +54,8 @@ export default function EmailPage() {
   const loadEmails = useCallback(async () => {
     setLoading(true);
     const accountId = unified ? "all" : selectedAccount;
-    if (!accountId) { setLoading(false); return; }
-    const data = await emailService.fetchEmails(accountId, view);
+    if (!accountId && !unified) { setLoading(false); return; }
+    const data = await emailService.fetchEmails(unified ? "all" : accountId, view);
     setEmails(data);
     setLoading(false);
   }, [selectedAccount, unified, view]);
