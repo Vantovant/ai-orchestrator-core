@@ -42,7 +42,7 @@ export const emailService = {
 
     const { data } = await supabase
       .from("email_accounts")
-      .select("id, email_address, display_name, label, status, provider")
+      .select("id, email_address, display_name, label, status, provider, last_sync_at")
       .eq("user_id", user.id)
       .eq("provider", "gmail")
       .is("deleted_at", null)
