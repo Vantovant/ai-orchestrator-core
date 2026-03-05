@@ -33,7 +33,7 @@ interface Props {
   compact?: boolean;
 }
 
-export default function EmailList({ emails, selectedIndex, onSelect, onOpen, accountLabels, accountEmails, showAccountBadge, compact }: Props) {
+export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onStar, accountLabels, accountEmails, showAccountBadge, compact }: Props) {
   if (emails.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
