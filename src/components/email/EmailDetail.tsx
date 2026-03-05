@@ -61,6 +61,7 @@ export default function EmailDetail({ email, onBack, onArchive, onSnooze, onStar
           emailSender={email.sender}
           emailSnippet={email.snippet}
           onCreateExpense={onCreateExpense || (() => {})}
+          onCreateIncome={onCreateIncome}
           onCreateTask={onCreateTask}
           onCreateMeeting={onCreateMeeting}
           onCreateReminder={onCreateReminder}
