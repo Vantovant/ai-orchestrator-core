@@ -804,20 +804,29 @@ function ProjectNotesTab({ projectId, onApplied }: { projectId: string; onApplie
           updatedSuggestions[idx] = { ...s, applyStatus: "created" };
           created++;
         } else {
-          // Unknown type – still create as task
-          const dedupeKey = makeDedupe(user.id, projectId, null, s.title);
-          const { error: insertErr } = await supabase.from("tasks").insert({
-            title: s.title,
-            user_id: user.id,
-            source: "note_extract",
-            project_id: projectId,
-            dedupe_key: dedupeKey,
-            status: "todo",
-            last_touched_at: new Date().toISOString(),
-          });
-          if (insertErr) throw insertErr;
-          updatedSuggestions[idx] = { ...s, applyStatus: "created" };
-          created++;
+          const dedupeKey = makeDedupe(user.id, projectId, noteId, s.title);
+          const { data: existing } = await supabase
+            .from("tasks").select("id").eq("user_id", user.id).eq("dedupe_key", dedupeKey).is("deleted_at", null).maybeSingle();
+          if (existing) {
+            await supabase.from("tasks").update({ source: "note_extract", last_touched_at: new Date().toISOString() }).eq("id", existing.id);
+            updatedSuggestions[idx] = { ...s, applyStatus: "merged" };
+            merged++;
+          } else {
+            const { error: insertErr } = await supabase.from("tasks").insert({
+              title: s.title,
+              description: s.description || null,
+              user_id: user.id,
+              source: "note_extract",
+              note_id: noteId,
+              project_id: projectId,
+              dedupe_key: dedupeKey,
+              status: "todo",
+              last_touched_at: new Date().toISOString(),
+            });
+            if (insertErr) throw insertErr;
+            updatedSuggestions[idx] = { ...s, applyStatus: "created" };
+            created++;
+          }
         }
       } catch (e: any) {
         console.error("Apply action failed:", idx, s.title, e);
