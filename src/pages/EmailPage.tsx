@@ -295,7 +295,7 @@ export default function EmailPage() {
   };
 
   // ─── Action handlers with auto-advance ─────────────────────────
-  const currentEmailForAction = openEmail || emails[selectedIndex];
+  const currentEmailForAction = openEmail || displayEmails[selectedIndex];
 
   const handleArchive = async (idx?: number) => {
     const targetIdx = idx ?? (openEmail ? emails.findIndex(e => e.id === openEmail.id) : selectedIndex);
