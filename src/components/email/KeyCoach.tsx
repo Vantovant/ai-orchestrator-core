@@ -32,7 +32,7 @@ export default function KeyCoach({ context, triageMode }: Props) {
   const keys = context === "detail" ? DETAIL_KEYS : LIST_KEYS;
 
   return (
-    <div className="flex items-center justify-center gap-3 px-4 py-1.5 bg-muted/30 border-t border-border/30">
+    <div className="hidden sm:flex items-center justify-center gap-3 px-4 py-1.5 bg-muted/30 border-t border-border/30">
       {triageMode && (
         <span className="text-[10px] font-medium text-primary mr-2">⚡ TRIAGE</span>
       )}

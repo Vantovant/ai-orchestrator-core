@@ -55,7 +55,7 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onS
             data-email-index={idx}
             onClick={() => { onSelect(idx); onOpen(email.id); }}
             className={cn(
-              "w-full text-left px-4 transition-colors flex gap-3 group",
+              "w-full text-left px-2.5 sm:px-4 transition-colors flex gap-2 sm:gap-3 group",
               compact ? "py-2" : "py-3",
               idx === selectedIndex ? "bg-primary/8 border-l-2 border-l-primary" : "border-l-2 border-l-transparent hover:bg-muted/40",
               !email.is_read && "font-medium"
@@ -68,23 +68,23 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onS
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={cn("text-sm truncate", !email.is_read ? "text-foreground" : "text-muted-foreground")}>
+            <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 flex-wrap">
+                <span className={cn("text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none", !email.is_read ? "text-foreground" : "text-muted-foreground")}>
                   {email.sender.split("@")[0].split("<").pop()}
                 </span>
                 {/* Handled badge */}
                 {isHandled && (
-                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0 gap-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 shrink-0">
-                    <CheckCircle2 className="h-2.5 w-2.5" /> Handled
+                  <Badge variant="outline" className="text-[10px] h-4 px-1 sm:px-1.5 py-0 gap-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 shrink-0">
+                    <CheckCircle2 className="h-2.5 w-2.5" /> <span className="hidden sm:inline">Handled</span><span className="sm:hidden">✓</span>
                   </Badge>
                 )}
                 {/* Account badge */}
                 {showAccountBadge && accountEmails?.[email.account_id] && (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0 max-w-[180px] truncate">
+                  <span className="text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 shrink-0 max-w-[100px] sm:max-w-[180px] truncate">
                     {accountEmails[email.account_id]}
                   </span>
                 )}
-                <span className="ml-auto text-[11px] text-muted-foreground shrink-0">
+                <span className="ml-auto text-[10px] sm:text-[11px] text-muted-foreground shrink-0">
                   {formatDistanceToNow(new Date(email.date), { addSuffix: false })}
                 </span>
               </div>
