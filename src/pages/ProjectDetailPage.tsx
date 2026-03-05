@@ -684,6 +684,7 @@ function ProjectNotesTab({ projectId }: { projectId: string }) {
   const [extracting, setExtracting] = useState(false);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [applying, setApplying] = useState(false);
   const freeformRef = useRef<HTMLTextAreaElement>(null);
   const lastDictationRef = useRef<string | null>(null);
   const qc = useQueryClient();
