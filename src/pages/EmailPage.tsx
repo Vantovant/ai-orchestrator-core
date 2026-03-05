@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { emailService, type EmailMessage } from "@/services/emailService";
+import { emailService, type EmailMessage, type EmailAccount } from "@/services/emailService";
 import { taskService } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { meetingService } from "@/services/meetingService";
@@ -15,7 +14,7 @@ import CommandBar from "@/components/email/CommandBar";
 import CheatSheet from "@/components/email/CheatSheet";
 import KeyCoach from "@/components/email/KeyCoach";
 import OnboardingTutorial from "@/components/email/OnboardingTutorial";
-import { Inbox, Clock, Eye, HelpCircle } from "lucide-react";
+import { Inbox, Clock, Eye, HelpCircle, Loader2 } from "lucide-react";
 
 const TUTORIAL_KEY = "vantoos_email_tutorial_done";
 
@@ -23,9 +22,13 @@ export default function EmailPage() {
   const { toast } = useToast();
 
   // Accounts
-  const accounts = emailService.getAccounts();
-  const [selectedAccount, setSelectedAccount] = useState(accounts[0]?.id || "");
+  const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState("");
   const [unified, setUnified] = useState(false);
+
+  // Emails
+  const [emails, setEmails] = useState<EmailMessage[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // View
   const [view, setView] = useState<"inbox" | "snoozed" | "waiting">("inbox");
@@ -39,22 +42,35 @@ export default function EmailPage() {
     try { return !localStorage.getItem(TUTORIAL_KEY); } catch { return false; }
   });
 
-  // Force re-render on mutations
-  const [tick, setTick] = useState(0);
-  const refresh = () => setTick(t => t + 1);
+  // Load accounts on mount
+  useEffect(() => {
+    emailService.fetchAccounts().then(accs => {
+      setAccounts(accs);
+      if (accs.length > 0 && !selectedAccount) setSelectedAccount(accs[0].id);
+    });
+  }, []);
 
-  // Current email list
-  const accountId = unified ? "all" : selectedAccount;
-  const emails = emailService.getEmails(accountId, view);
+  // Load emails when account/view changes
+  const loadEmails = useCallback(async () => {
+    setLoading(true);
+    const accountId = unified ? "all" : selectedAccount;
+    if (!accountId) { setLoading(false); return; }
+    const data = await emailService.fetchEmails(accountId, view);
+    setEmails(data);
+    setLoading(false);
+  }, [selectedAccount, unified, view]);
+
+  useEffect(() => { loadEmails(); }, [loadEmails]);
 
   // Unread counts
   const unreadCounts: Record<string, number> = {};
+  // We'll compute from loaded emails if unified, otherwise approximate
   accounts.forEach(a => {
-    unreadCounts[a.id] = emailService.getEmails(a.id, "inbox").filter(e => !e.is_read).length;
+    unreadCounts[a.id] = emails.filter(e => e.account_id === a.id && !e.is_read).length;
   });
 
   // Selected email
-  const openEmail = openEmailId ? emailService.getById(openEmailId) : undefined;
+  const openEmail = openEmailId ? emails.find(e => e.id === openEmailId) : undefined;
 
   // Account labels map
   const accountLabels: Record<string, string> = {};
@@ -62,11 +78,9 @@ export default function EmailPage() {
 
   // ─── Keyboard shortcuts ────────────────────────────────────────
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // Don't capture when typing in inputs
     const tag = (e.target as HTMLElement).tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-    // Ctrl+K / Cmd+K → command bar
     if ((e.ctrlKey || e.metaKey) && e.key === "k") {
       e.preventDefault();
       setCmdBarOpen(true);
@@ -76,26 +90,24 @@ export default function EmailPage() {
     if (e.key === "?") { e.preventDefault(); setCheatSheetOpen(true); return; }
 
     if (openEmailId) {
-      // Detail view shortcuts
       if (e.key === "Escape") { e.preventDefault(); setOpenEmailId(null); return; }
       if (e.key === "e" || e.key === "E") { e.preventDefault(); handleArchive(); return; }
       if (e.key === "s" || e.key === "S") { e.preventDefault(); handleSnooze(); return; }
       if (e.key === "t" || e.key === "T") { e.preventDefault(); handleCreateTask(); return; }
       if (e.key === "m" || e.key === "M") { e.preventDefault(); handleCreateMeeting(); return; }
     } else {
-      // List view shortcuts
       if (e.key === "j" || e.key === "J") { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, emails.length - 1)); return; }
       if (e.key === "k" || e.key === "K") { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); return; }
       if (e.key === "Enter") {
         e.preventDefault();
         const email = emails[selectedIndex];
-        if (email) { emailService.markRead(email.id); setOpenEmailId(email.id); refresh(); }
+        if (email) { emailService.markRead(email.id); setOpenEmailId(email.id); loadEmails(); }
         return;
       }
       if (e.key === "e" || e.key === "E") {
         e.preventDefault();
         const email = emails[selectedIndex];
-        if (email) { emailService.archive(email.id); toast({ title: "Archived" }); refresh(); }
+        if (email) { emailService.archive(email.id).then(() => { toast({ title: "Archived" }); loadEmails(); }); }
         return;
       }
       if (e.key === "s" || e.key === "S") {
@@ -103,14 +115,12 @@ export default function EmailPage() {
         const email = emails[selectedIndex];
         if (email) {
           const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0);
-          emailService.snooze(email.id, d.toISOString());
-          toast({ title: "Snoozed until tomorrow 8 AM" });
-          refresh();
+          emailService.snooze(email.id, d.toISOString()).then(() => { toast({ title: "Snoozed until tomorrow 8 AM" }); loadEmails(); });
         }
         return;
       }
     }
-  }, [openEmailId, emails, selectedIndex, tick]);
+  }, [openEmailId, emails, selectedIndex]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -129,22 +139,22 @@ export default function EmailPage() {
   // ─── Action handlers ───────────────────────────────────────────
   const currentEmailForAction = openEmail || emails[selectedIndex];
 
-  const handleArchive = () => {
+  const handleArchive = async () => {
     if (!currentEmailForAction) return;
-    emailService.archive(currentEmailForAction.id);
+    await emailService.archive(currentEmailForAction.id);
     toast({ title: "Archived" });
     setOpenEmailId(null);
-    refresh();
+    loadEmails();
   };
 
-  const handleSnooze = (until?: string) => {
+  const handleSnooze = async (until?: string) => {
     if (!currentEmailForAction) return;
     const d = new Date();
     if (!until) { d.setDate(d.getDate() + 1); d.setHours(8, 0, 0, 0); until = d.toISOString(); }
-    emailService.snooze(currentEmailForAction.id, until);
+    await emailService.snooze(currentEmailForAction.id, until);
     toast({ title: "Snoozed" });
     setOpenEmailId(null);
-    refresh();
+    loadEmails();
   };
 
   const handleCreateTask = async () => {
@@ -195,13 +205,13 @@ export default function EmailPage() {
     }
   };
 
-  const handleWaitingOn = () => {
+  const handleWaitingOn = async () => {
     if (!currentEmailForAction) return;
     const d = new Date(); d.setDate(d.getDate() + 3);
-    emailService.setWaitingOn(currentEmailForAction.id, d.toISOString().slice(0, 10));
+    await emailService.setWaitingOn(currentEmailForAction.id, d.toISOString().slice(0, 10));
     toast({ title: "Marked as Waiting On" });
     setOpenEmailId(null);
-    refresh();
+    loadEmails();
   };
 
   // Command bar dispatcher
@@ -226,22 +236,21 @@ export default function EmailPage() {
             <h1 className="text-2xl font-bold">Email</h1>
             <p className="text-sm text-muted-foreground">Keyboard-first inbox · Press <kbd className="px-1 py-0.5 rounded bg-muted text-[11px] font-mono">?</kbd> for shortcuts</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-[10px]">Mock Data</Badge>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCheatSheetOpen(true)}>
-              <HelpCircle className="h-4 w-4" />
-            </Button>
-          </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setCheatSheetOpen(true)}>
+            <HelpCircle className="h-4 w-4" />
+          </Button>
         </div>
 
-        <AccountSwitcher
-          accounts={accounts}
-          selected={selectedAccount}
-          unified={unified}
-          onSelect={setSelectedAccount}
-          onToggleUnified={setUnified}
-          unreadCounts={unreadCounts}
-        />
+        {accounts.length > 0 && (
+          <AccountSwitcher
+            accounts={accounts}
+            selected={selectedAccount}
+            unified={unified}
+            onSelect={setSelectedAccount}
+            onToggleUnified={setUnified}
+            unreadCounts={unreadCounts}
+          />
+        )}
 
         {/* View tabs */}
         <Tabs value={view} onValueChange={(v) => setView(v as any)}>
@@ -262,13 +271,17 @@ export default function EmailPage() {
       {/* Content */}
       <Card className="flex-1 mx-4 mb-0 overflow-hidden rounded-b-none border-b-0">
         <CardContent className="p-0 h-full overflow-y-auto">
-          {openEmail ? (
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : openEmail ? (
             <EmailDetail
               email={openEmail}
               onBack={() => setOpenEmailId(null)}
               onArchive={handleArchive}
               onSnooze={() => handleSnooze()}
-              onStar={() => { emailService.toggleStar(openEmail.id); refresh(); }}
+              onStar={() => { emailService.toggleStar(openEmail.id, openEmail.is_starred).then(() => loadEmails()); }}
               onCreateTask={handleCreateTask}
               onCreateMeeting={handleCreateMeeting}
               onCreateReminder={handleCreateReminder}
@@ -278,7 +291,7 @@ export default function EmailPage() {
               emails={emails}
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
-              onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); refresh(); }}
+              onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); }}
               accountLabels={accountLabels}
               showAccountBadge={unified}
             />
