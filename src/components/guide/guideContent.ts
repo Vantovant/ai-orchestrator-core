@@ -159,12 +159,14 @@ export const pageGuides: Record<string, GuideSection> = {
       "This is where you configure your VantoOS experience.",
       "👤 Profile: Set up your personal details, role, and preferences using the Profile Wizard.",
       "🔑 AI Keys: To guarantee absolute data sovereignty for this private cohort, a personal OpenAI or Gemini key is required. Connect yours in Settings → AI Keys.",
-      "📧 Email: Connect and manage your email accounts.",
+      "📧 Gmail Integration: Connect one or more Gmail accounts. Click 'Connect Gmail', sign in with Google, and allow VantoOS read-only access. Once connected, click 'Sync' to pull in your latest emails. You can label each account (e.g. Business, Personal) and disconnect at any time.",
+      "🧩 Chrome Extension: Pair the VantoOS Companion extension by generating a pairing code. Manage allowed capture domains here.",
       "⚙️ Preferences: Adjust notification settings, currency, and other preferences.",
     ],
     tips: [
       "Complete the Profile Wizard for the best AI experience — it helps the AI understand your context.",
       "A personal OpenAI or Gemini key is required to use AI features. Go to Settings → AI Keys to connect yours.",
+      "If Gmail sync shows 0 emails, try disconnecting and reconnecting the account to refresh OAuth permissions.",
     ],
   },
   "/testers": {
