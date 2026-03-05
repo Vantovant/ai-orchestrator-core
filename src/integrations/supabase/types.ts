@@ -321,6 +321,42 @@ export type Database = {
           },
         ]
       }
+      beta_testers: {
+        Row: {
+          assisted_ai_expires_at: string | null
+          assisted_ai_remaining: number
+          assisted_ai_used: number
+          cohort_tag: string
+          created_at: string
+          id: string
+          is_active: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assisted_ai_expires_at?: string | null
+          assisted_ai_remaining?: number
+          assisted_ai_used?: number
+          cohort_tag?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assisted_ai_expires_at?: string | null
+          assisted_ai_remaining?: number
+          assisted_ai_used?: number
+          cohort_tag?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       business_cases: {
         Row: {
           created_at: string
