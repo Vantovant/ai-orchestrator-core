@@ -539,6 +539,7 @@ export default function EmailPage() {
               selectedIndex={selectedIndex}
               onSelect={setSelectedIndex}
               onOpen={(id) => { emailService.markRead(id); setOpenEmailId(id); }}
+              onStar={(id, current) => { emailService.toggleStar(id, current).then(() => loadEmails()); }}
               accountLabels={accountLabels}
               accountEmails={accountEmails}
               showAccountBadge={unified}
