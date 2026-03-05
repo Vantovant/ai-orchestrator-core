@@ -182,7 +182,10 @@ serve(async (req) => {
     const byokUser = !!(keys?.use_own_keys && (keys?.openai_key_encrypted || keys?.gemini_key_encrypted));
     const openaiKey = keys?.use_own_keys ? keys.openai_key_encrypted : null;
     const geminiKey = keys?.use_own_keys ? keys.gemini_key_encrypted : null;
-    const isSuperAdmin = !!(roleResult.data && ["admin", "super_admin"].includes(roleResult.data.role));
+    const userRoles = roleResult.data ?? [];
+    const isSuperAdmin = Array.isArray(userRoles)
+      ? userRoles.some((r: any) => ["admin", "super_admin"].includes(r.role))
+      : !!(roleResult.data && ["admin", "super_admin"].includes((roleResult.data as any).role));
     const betaData = betaResult.data;
     const isBetaTester = !!betaData;
     const assistedRemaining = betaData?.assisted_ai_remaining ?? 0;
