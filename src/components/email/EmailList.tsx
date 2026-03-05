@@ -26,6 +26,7 @@ interface Props {
   selectedIndex: number;
   onSelect: (index: number) => void;
   onOpen: (id: string) => void;
+  onStar?: (id: string, currentState: boolean) => void;
   accountLabels: Record<string, string>;
   accountEmails?: Record<string, string>;
   showAccountBadge: boolean;
