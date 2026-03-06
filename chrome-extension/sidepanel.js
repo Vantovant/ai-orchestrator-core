@@ -1012,7 +1012,7 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
 
     const renderDebug = () => {
       if (!debugEl) return;
-      const dbg = snap?.debug || {};
+      const dbg = snapshot?.debug || {};
       const countsLine =
         `selectors: prePlain=${dbg.prePlain ?? 0}, copyable=${dbg.copyable ?? 0}, msgContainer=${dbg.msgContainer ?? 0}, selectable=${dbg.selectable ?? 0}, ltr=${dbg.ltr ?? 0}`;
 
