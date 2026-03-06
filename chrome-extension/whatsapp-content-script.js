@@ -34,7 +34,9 @@
 
   // ── Chat detection (robust, proven selectors) ─────
   function getChatTitle() {
-    const selected = document.querySelector('#pane-side [aria-selected="true"] span[title]');
+    // Use unquoted attribute selector first to avoid escape issues
+    const selected = document.querySelector('#pane-side [aria-selected=true] span[title]')
+      || document.querySelector('#pane-side [aria-selected="true"] span[title]');
     if (selected) {
       const t = selected.getAttribute("title");
       if (t) return t;
