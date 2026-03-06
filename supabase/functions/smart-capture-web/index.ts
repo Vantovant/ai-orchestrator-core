@@ -222,11 +222,13 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a smart web capture assistant for VantoOS (executive OS for South African entrepreneurs). Analyze the captured web page and return structured insights. Be concise and actionable.`,
+            content: `You are a smart web capture assistant for VantoOS (executive OS for South African entrepreneurs). Analyze the captured web page and return structured insights. Be concise and actionable.
+
+CRITICAL: Every claim in your summary MUST be backed by a direct quote from the page content. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true and provide only what is directly evidenced.`,
           },
           {
             role: "user",
-            content: `Analyze this captured web page and extract:\n1. A 2-3 sentence summary\n2. Any actionable tasks (max 5)\n3. If I have projects, suggest which project this relates to\n\nPage data:\n${snapshotText.slice(0, 3000)}`,
+            content: `Analyze this captured web page and extract:\n1. A 2-3 sentence summary (each statement must reference specific page content)\n2. Evidence quotes backing each summary statement\n3. Any actionable tasks (max 5)\n4. If I have projects, suggest which project this relates to\n\nPage data:\n${snapshotText.slice(0, 3000)}`,
           },
         ],
         tools: [
