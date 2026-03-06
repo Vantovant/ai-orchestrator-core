@@ -836,7 +836,7 @@ async function checkWhatsAppMode() {
 function updateWaProjectDropdown() {
   const waSelect = document.getElementById("wa-capture-project");
   if (waSelect) {
-    waSelect.innerHTML = '<option value="">No plan</option>' +
+    waSelect.innerHTML = '<option value="">No project (save to Plan only)</option>' +
       state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
   }
 }
