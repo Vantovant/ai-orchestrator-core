@@ -1190,7 +1190,9 @@ export type Database = {
           id: string
           notes: string | null
           source: string
+          source_chat_key: string | null
           source_email_id: string | null
+          source_message_hash: string | null
           type: string
           updated_at: string
           user_id: string
@@ -1204,7 +1206,9 @@ export type Database = {
           id?: string
           notes?: string | null
           source?: string
+          source_chat_key?: string | null
           source_email_id?: string | null
+          source_message_hash?: string | null
           type?: string
           updated_at?: string
           user_id: string
@@ -1218,7 +1222,9 @@ export type Database = {
           id?: string
           notes?: string | null
           source?: string
+          source_chat_key?: string | null
           source_email_id?: string | null
+          source_message_hash?: string | null
           type?: string
           updated_at?: string
           user_id?: string
