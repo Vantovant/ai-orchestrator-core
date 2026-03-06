@@ -176,7 +176,7 @@
         <div id="wa-debug-info" style="display:none;margin-top:6px;font-size:10px;color:#666;background:#111;border:1px solid #262626;border-radius:4px;padding:6px;white-space:pre-wrap;font-family:monospace;max-height:80px;overflow-y:auto"></div>
       </div>
 
-      <!-- Transcript Preview (shown before AI call) -->
+      <!-- STEP 1: Transcript Preview -->
       <div id="wa-transcript-preview" style="display:none;margin-top:10px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <span style="font-size:11px;font-weight:600;color:#ccc">📝 Transcript Preview</span>
@@ -184,25 +184,57 @@
         </div>
         <div id="wa-transcript-lines" style="background:#111;border:1px solid #262626;border-radius:6px;padding:8px;max-height:240px;overflow-y:auto;font-size:11px;line-height:1.6;color:#d4d4d4;font-family:monospace;white-space:pre-wrap"></div>
         <div style="display:flex;gap:6px;margin-top:8px">
-          <button class="btn btn-ai" id="wa-btn-send-to-ai" style="flex:1">🚀 Send to AI</button>
+          <button class="btn btn-ai" id="wa-btn-analyze" style="flex:1">🔬 Analyze</button>
           <button class="btn btn-secondary" id="wa-btn-cancel-extract" style="flex:0 0 auto">Cancel</button>
         </div>
       </div>
 
-      <!-- Smart Extract Results -->
+      <!-- STEP 2: PhD Analysis Results -->
       <div id="wa-smart-results" style="display:none;margin-top:12px">
+        <!-- Summary -->
         <div class="summary-card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <span style="font-size:11px;font-weight:600;color:#8b5cf6">✨ AI Analysis</span>
+            <span style="font-size:11px;font-weight:600;color:#8b5cf6">🎓 PhD Analysis</span>
             <div style="display:flex;gap:4px">
               <span id="wa-confidence-chip" class="badge badge-info" style="font-size:9px;cursor:pointer" title=""></span>
               <span id="wa-verify-chip" class="badge badge-warning" style="font-size:9px;cursor:pointer;display:none" title=""></span>
-              <span id="wa-cached-chip" class="badge badge-info" style="font-size:9px;display:none">Fresh</span>
             </div>
           </div>
           <div class="summary-text" id="wa-smart-summary"></div>
-          <div id="wa-evidence-list" style="display:none;margin-top:8px;font-size:11px;color:#999;border-top:1px solid #262626;padding-top:6px"></div>
         </div>
+
+        <!-- Key Points -->
+        <div id="wa-key-points" style="display:none;margin-top:8px" class="card">
+          <div style="font-size:10px;font-weight:600;color:#888;margin-bottom:4px">📌 Key Points</div>
+          <div id="wa-key-points-list" style="font-size:11px;color:#d4d4d4"></div>
+        </div>
+
+        <!-- Sentiment -->
+        <div id="wa-sentiment" style="display:none;margin-top:6px" class="card">
+          <div style="font-size:10px;font-weight:600;color:#888;margin-bottom:2px">🎭 Sentiment</div>
+          <div id="wa-sentiment-text" style="font-size:11px;color:#d4d4d4"></div>
+        </div>
+
+        <!-- Stakeholders -->
+        <div id="wa-stakeholders" style="display:none;margin-top:6px" class="card">
+          <div style="font-size:10px;font-weight:600;color:#888;margin-bottom:4px">👥 Stakeholders</div>
+          <div id="wa-stakeholders-list" style="font-size:11px;color:#d4d4d4"></div>
+        </div>
+
+        <!-- Risks & Opportunities -->
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <div id="wa-risks" style="display:none;flex:1" class="card">
+            <div style="font-size:10px;font-weight:600;color:#ef4444;margin-bottom:4px">⚠ Risks</div>
+            <div id="wa-risks-list" style="font-size:11px;color:#d4d4d4"></div>
+          </div>
+          <div id="wa-opportunities" style="display:none;flex:1" class="card">
+            <div style="font-size:10px;font-weight:600;color:#22c55e;margin-bottom:4px">💡 Opportunities</div>
+            <div id="wa-opportunities-list" style="font-size:11px;color:#d4d4d4"></div>
+          </div>
+        </div>
+
+        <!-- Evidence -->
+        <div id="wa-evidence-list" style="display:none;margin-top:8px"></div>
 
         <!-- Money Direction Badge -->
         <div id="wa-money-badge" style="display:none;margin-top:6px" class="card">
@@ -221,13 +253,18 @@
             <span id="wa-actions-count" style="font-size:10px;color:#888"></span>
           </div>
           <div id="wa-actions-list" class="card" style="padding:8px"></div>
-          <button class="btn btn-primary btn-sm" id="wa-btn-apply-actions" style="width:100%;margin-top:6px">Apply Selected</button>
         </div>
 
-        <!-- Apply Receipt -->
-        <div id="wa-apply-receipt" style="display:none;margin-top:8px" class="card">
-          <span id="wa-receipt-text" style="font-size:12px;color:#86efac"></span>
+        <!-- Confirmation Gate -->
+        <div id="wa-confirm-gate" style="display:none;margin-top:8px;padding:8px;background:#1a1a1a;border:1px solid #854d0e;border-radius:6px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#fbbf24;cursor:pointer">
+            <input type="checkbox" id="wa-confirm-checkbox" style="width:auto" />
+            I confirm the transcript preview is correct
+          </label>
         </div>
+
+        <!-- STEP 3: Send to VantoOS button -->
+        <button class="btn btn-primary" id="wa-btn-send-to-vantoos" style="width:100%;margin-top:8px" disabled>🚀 Send to VantoOS</button>
 
         <!-- Draft Reply -->
         <div id="wa-draft-reply-container" style="display:none;margin-top:8px">
@@ -235,10 +272,20 @@
           <textarea id="wa-draft-reply-text" rows="3" style="font-size:12px"></textarea>
           <button class="btn btn-secondary btn-sm" id="wa-btn-insert-reply" style="width:100%;margin-top:4px">Insert into Composer (won't send)</button>
         </div>
+
+        <!-- Apply Receipt -->
+        <div id="wa-apply-receipt" style="display:none;margin-top:8px" class="card">
+          <div id="wa-receipt-text" style="font-size:12px;color:#86efac"></div>
+          <div id="wa-receipt-details" style="font-size:11px;color:#999;margin-top:4px"></div>
+          <button class="btn btn-primary btn-sm" id="wa-btn-open-plan" style="width:100%;margin-top:6px;display:none">📋 Open Plan</button>
+        </div>
       </div>
 
-      <!-- Project selector -->
-      <select id="wa-capture-project" style="margin-top:12px"><option value="">Select project…</option></select>
+      <!-- Plan selector (was Project) -->
+      <div style="margin-top:12px">
+        <div style="font-size:11px;font-weight:600;color:#888;margin-bottom:4px">Choose Plan</div>
+        <select id="wa-capture-project"><option value="">No plan</option></select>
+      </div>
     </div>
   </div>
 
