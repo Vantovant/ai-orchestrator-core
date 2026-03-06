@@ -841,10 +841,27 @@ function fetchWaContext() {
   });
 }
 
-// Refresh Chat Context button
-document.getElementById("wa-btn-refresh-context")?.addEventListener("click", () => {
+// Refresh Chat Context button — also fetches message count via snapshot
+document.getElementById("wa-btn-refresh-context")?.addEventListener("click", async () => {
   fetchWaContext();
   showToast("Refreshing chat context…", "info");
+
+  // Also request a snapshot to show message count
+  try {
+    const tabInfo = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, resolve)
+    );
+    if (tabInfo?.tabId) {
+      chrome.tabs.sendMessage(tabInfo.tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 30 }, (res) => {
+        if (chrome.runtime.lastError || !res) return;
+        const msgCount = res.messages?.length || 0;
+        const meta = document.getElementById("wa-chat-meta");
+        if (meta && res.chat_title) {
+          meta.textContent = `${msgCount} messages available · Key: ${(res.chat_key || "").slice(0, 12)}…`;
+        }
+      });
+    }
+  } catch (_) { /* ignore */ }
 });
 
 function updateWaHandledUI(actions) {

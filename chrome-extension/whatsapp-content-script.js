@@ -357,14 +357,63 @@
     obs.observe(app, { childList: true, subtree: true, attributes: true, attributeFilter: ["title", "aria-selected"] });
   }
 
-  // Listen for handled stamp updates from background
-  chrome.runtime.onMessage.addListener((msg) => {
+  // Listen for messages from background / sidepanel
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "WHATSAPP_HANDLED_UPDATE" && msg.chat_key === currentChatKey) {
       updateHandledStamp(msg.actions);
     }
     if (msg?.type === "WHATSAPP_TOAST") {
       showBarToast(msg.message);
     }
+
+    // ── Snapshot API: sidepanel requests messages from content script ──
+    if (msg?.type === "WA_GET_CHAT_SNAPSHOT") {
+      const count = msg.count || 30;
+      const title = getChatTitle();
+
+      // Debug counts for each selector strategy
+      const debugCounts = {
+        "data-pre-plain-text": document.querySelectorAll('#main [data-pre-plain-text]').length,
+        "div.copyable-text[data-pre-plain-text]": document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]').length,
+        "msg-container": document.querySelectorAll('#main [data-testid="msg-container"]').length,
+        "selectable-text": document.querySelectorAll('#main span.selectable-text').length,
+        "span-dir-ltr": document.querySelectorAll('#main span[dir="ltr"]').length,
+      };
+
+      let messages = getMessages(count);
+
+      // If 0 messages, do one scroll nudge to force lazy-render, then retry
+      if (messages.length === 0) {
+        const scroller = document.querySelector('#main [role="application"]')
+          || document.querySelector('#main div[tabindex="-1"]')
+          || document.querySelector('#main');
+        if (scroller) scroller.scrollBy(0, 200);
+
+        setTimeout(() => {
+          messages = getMessages(count);
+          // Update debug counts after retry
+          debugCounts["after-retry-data-pre-plain-text"] = document.querySelectorAll('#main [data-pre-plain-text]').length;
+          debugCounts["after-retry-selectable-text"] = document.querySelectorAll('#main span.selectable-text').length;
+          sendResponse({
+            chat_key: currentChatKey,
+            chat_title: title || currentChatTitle,
+            messages,
+            debug: debugCounts,
+          });
+        }, 300);
+        return true; // async sendResponse
+      }
+
+      sendResponse({
+        chat_key: currentChatKey,
+        chat_title: title || currentChatTitle,
+        messages,
+        debug: debugCounts,
+      });
+      return true;
+    }
+
+    return false;
   });
 
   // ── Init ──────────────────────────────────────────
