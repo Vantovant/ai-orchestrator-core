@@ -236,11 +236,24 @@ CRITICAL: Every claim in your summary MUST be backed by a direct quote from the 
             type: "function",
             function: {
               name: "smart_capture_result",
-              description: "Return structured smart capture analysis",
+              description: "Return structured smart capture analysis with evidence",
               parameters: {
                 type: "object",
                 properties: {
-                  summary: { type: "string", description: "2-3 sentence summary of the page" },
+                  summary: { type: "string", description: "2-3 sentence summary of the page, each statement backed by evidence" },
+                  evidence: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        claim: { type: "string", description: "A specific claim from the summary" },
+                        quote: { type: "string", description: "Direct quote from the page content supporting this claim" },
+                        source: { type: "string", description: "Where on the page (heading, paragraph, etc)" },
+                      },
+                      required: ["claim", "quote"],
+                    },
+                    description: "Evidence backing each summary claim",
+                  },
                   extracted_actions: {
                     type: "array",
                     items: {
@@ -256,14 +269,14 @@ CRITICAL: Every claim in your summary MUST be backed by a direct quote from the 
                   },
                   suggested_project_name: { type: "string", description: "Name of project this might relate to, or empty" },
                   confidence: { type: "number", description: "0-1 confidence in suggestion" },
-                  needs_verification: { type: "boolean", description: "Whether info needs human verification" },
+                  needs_verification: { type: "boolean", description: "Whether info needs human verification (true if any claim lacks direct evidence)" },
                   verification_reasons: {
                     type: "array",
                     items: { type: "string" },
                     description: "Why verification is needed",
                   },
                 },
-                required: ["summary", "extracted_actions", "needs_verification"],
+                required: ["summary", "evidence", "extracted_actions", "needs_verification"],
               },
             },
           },
