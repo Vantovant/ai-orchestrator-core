@@ -970,34 +970,48 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
 
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: (count) => {
-        const headerEl = document.querySelector('header span[dir="auto"][title]')
-          || document.querySelector('#main header span[title]');
-        const chatTitle = headerEl?.getAttribute("title") || headerEl?.textContent?.trim() || "Unknown";
-        const msgs = [];
-        const containers = document.querySelectorAll('[data-testid="msg-container"], .message-in, .message-out');
-        const msgEls = containers.length ? containers : document.querySelectorAll('div.copyable-text[data-pre-plain-text]');
-        const allMsgEls = Array.from(msgEls).slice(-count);
-        for (const el of allMsgEls) {
-          const textEl = el.querySelector('span.selectable-text') || el.querySelector('[class*="selectable-text"]');
-          const text = textEl?.innerText?.trim();
-          if (!text) continue;
-          let direction = "unknown";
-          const classes = el.className + " " + (el.closest("[class*='message-']")?.className || "");
-          if (classes.includes("message-out")) direction = "me";
-          else if (classes.includes("message-in")) direction = "them";
-          let timestamp = null;
-          const preAttr = el.getAttribute("data-pre-plain-text") || el.querySelector("[data-pre-plain-text]")?.getAttribute("data-pre-plain-text");
-          if (preAttr) { const match = preAttr.match(/\[([^\]]+)\]/); if (match) timestamp = match[1]; }
-          msgs.push({ text, direction, timestamp });
+      func: async (count) => {
+        const headerEl = document.querySelector('#pane-side [aria-selected="true"] span[title]')
+          || document.querySelector('#main header span[title]')
+          || document.querySelector('header span[dir="auto"][title]');
+        const chatTitle = headerEl?.getAttribute("title") || document.querySelector('#main header')?.innerText?.split('\n')[0]?.trim() || "Unknown";
+
+        function scrapeMessages(n) {
+          const msgs = [];
+          let nodes = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
+          if (nodes.length === 0) {
+            nodes = Array.from(document.querySelectorAll('#main [data-testid="msg-container"]'));
+          }
+          for (const node of nodes.slice(-n)) {
+            const pre = node.getAttribute("data-pre-plain-text") || "";
+            const text = (node.querySelector('span.selectable-text')?.innerText?.trim()) || node.innerText?.trim();
+            if (!text) continue;
+            let direction = "unknown";
+            if (node.closest('.message-out')) direction = "me";
+            else if (node.closest('.message-in')) direction = "them";
+            let timestamp = null;
+            const match = pre.match(/\[([^\]]+)\]/);
+            if (match) timestamp = match[1];
+            msgs.push({ text, direction, timestamp });
+          }
+          return msgs;
         }
-        return { chatTitle, messages: msgs };
+
+        let messages = scrapeMessages(count);
+        if (messages.length === 0) {
+          // Retry: scroll to force render, wait, re-scrape
+          const scroller = document.querySelector('#main [role="application"]') || document.querySelector('#main');
+          scroller?.scrollBy(0, 200);
+          await new Promise(r => setTimeout(r, 250));
+          messages = scrapeMessages(count);
+        }
+        return { chatTitle, messages };
       },
       args: [25],
     });
 
     const { chatTitle, messages } = results?.[0]?.result || {};
-    if (!messages?.length) throw new Error("No messages found in chat");
+    if (!messages?.length) throw new Error("No readable text messages found (try scrolling the chat a bit, then retry).");
 
     // Use authoritative chat_key from content script, don't invent one
     document.getElementById("wa-chat-title-display").textContent = waState.chatTitle || chatTitle;
