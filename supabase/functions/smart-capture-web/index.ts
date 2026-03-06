@@ -409,6 +409,7 @@ CRITICAL: Every claim in your summary MUST be backed by a direct quote from the 
       suggested_project_id: suggestedProjectId,
       deep_link_url: deepLinkUrl,
       summary: aiResult.summary,
+      evidence: aiResult.evidence || [],
       extracted_actions: aiResult.extracted_actions || [],
       needs_verification: aiResult.needs_verification ?? true,
       verification_reasons: aiResult.verification_reasons || [],
