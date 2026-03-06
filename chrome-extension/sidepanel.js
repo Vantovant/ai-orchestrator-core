@@ -938,6 +938,11 @@ document.getElementById("wa-btn-refresh-context")?.addEventListener("click", asy
   } catch (_) {}
 });
 
+// "Detect from Page" button — direct DOM fallback
+document.getElementById("wa-btn-detect-from-page")?.addEventListener("click", () => {
+  detectFromPageDOM(false);
+});
+
 function updateWaHandledUI(actions) {
   waState.handledActions = actions || [];
   const icon = document.getElementById("wa-handled-icon");
