@@ -1364,7 +1364,7 @@ document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", asy
     }
 
     // A2) Also create project capture if project selected
-    let projectNoteResult = null;
+    projectNoteResult = null;
     if (projectId) {
       try {
         const today = new Date().toISOString().split("T")[0];
