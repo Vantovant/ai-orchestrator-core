@@ -368,6 +368,8 @@
         type: "WHATSAPP_CHAT_CONTEXT",
         chat_key: null,
         chat_title: null,
+      }, () => {
+        if (chrome.runtime.lastError) console.warn('[VantoOS] context send error (null)', chrome.runtime.lastError);
       });
       return;
     }
