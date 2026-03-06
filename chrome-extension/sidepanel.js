@@ -843,24 +843,79 @@ function updateWaProjectDropdown() {
 
 function fetchWaContext() {
   chrome.runtime.sendMessage({ type: "GET_WHATSAPP_CONTEXT" }, (res) => {
-    if (chrome.runtime.lastError) return;
+    if (chrome.runtime.lastError) {
+      // Channel closed — try DOM fallback silently
+      detectFromPageDOM(true);
+      return;
+    }
     if (res?.chat_key) {
       waState.chatKey = res.chat_key;
       waState.chatTitle = res.chat_title;
       document.getElementById("wa-chat-title-display").textContent = res.chat_title || "No chat open";
       document.getElementById("wa-chat-meta").textContent = `Key: ${res.chat_key.slice(0, 16)}…`;
       chrome.runtime.sendMessage({ type: "GET_WHATSAPP_HANDLED", chat_key: res.chat_key }, (hRes) => {
+        if (chrome.runtime.lastError) return;
         if (hRes?.actions) updateWaHandledUI(hRes.actions);
         else updateWaHandledUI([]);
       });
     } else {
+      // Background returned null — try DOM fallback
+      detectFromPageDOM(true);
+    }
+  });
+}
+
+// ── Direct DOM Fallback: executeScript to read chat title from page ──
+async function detectFromPageDOM(silent = false) {
+  try {
+    const tabInfo = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, (r) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(r);
+      });
+    });
+    const tabId = tabInfo?.tabId;
+    if (!tabId || !tabInfo?.url?.includes("web.whatsapp.com")) {
+      if (!silent) {
+        waState.chatKey = null;
+        waState.chatTitle = null;
+        document.getElementById("wa-chat-title-display").textContent = "No chat detected";
+        document.getElementById("wa-chat-meta").textContent = "Open a WhatsApp chat — then press 🔄";
+        updateWaHandledUI([]);
+      }
+      return;
+    }
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const title =
+          document.querySelector('#pane-side [aria-selected=true] span[title]')?.getAttribute('title')
+          || document.querySelector('#pane-side [aria-selected="true"] span[title]')?.getAttribute('title')
+          || document.querySelector('#main header')?.innerText?.split('\n')[0]?.trim()
+          || null;
+        return title;
+      },
+    });
+
+    const title = results?.[0]?.result;
+    if (title) {
+      waState.chatTitle = title;
+      waState.chatKey = 'wa:fallback-' + title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+      document.getElementById("wa-chat-title-display").textContent = title;
+      document.getElementById("wa-chat-meta").textContent = `Detected from page · fallback key`;
+      if (!silent) showToast("Detected from page ✅", "info");
+    } else {
       waState.chatKey = null;
       waState.chatTitle = null;
       document.getElementById("wa-chat-title-display").textContent = "No chat detected";
-      document.getElementById("wa-chat-meta").textContent = "Open a WhatsApp chat — then press 🔄";
+      document.getElementById("wa-chat-meta").textContent = "Open a WhatsApp chat — then press 🔄 or 🔍";
       updateWaHandledUI([]);
+      if (!silent) showToast("No open chat found on page", "error");
     }
-  });
+  } catch (e) {
+    if (!silent) showToast("DOM detection failed: " + e.message, "error");
+  }
 }
 
 document.getElementById("wa-btn-refresh-context")?.addEventListener("click", async () => {
