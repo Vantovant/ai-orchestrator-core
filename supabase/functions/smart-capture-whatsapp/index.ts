@@ -51,7 +51,6 @@ async function resolveUser(req: Request): Promise<string> {
   throw new Error("Unauthorized");
 }
 
-// Money detection patterns
 const MONEY_PATTERNS = [
   /[R$€£]\s?[\d,]+(?:\.\d{1,2})?/i,
   /\b(?:paid|credited|debited|deposited|transferred|invoice|fee|commission|payment|amount|balance|EFT|debit order)\b/i,
@@ -113,8 +112,8 @@ Deno.serve(async (req) => {
     const selectedClean = selected_text ? redactPII(selected_text).redacted : "";
 
     // Build conversation text for AI
-    const conversationText = cleanMessages.map((m: any) =>
-      `[${m.direction}]${m.timestamp ? ` (${m.timestamp})` : ""}: ${m.text}`
+    const conversationText = cleanMessages.map((m: any, i: number) =>
+      `[MSG${i}][${m.direction}]${m.timestamp ? ` (${m.timestamp})` : ""}: ${m.text}`
     ).join("\n");
 
     const fullText = conversationText + (selectedClean ? `\n\nUser-selected text: ${selectedClean}` : "");
@@ -124,46 +123,72 @@ Deno.serve(async (req) => {
     const locale = user_context?.locale || "ZA";
     const currency = user_context?.currency_default || "ZAR";
 
-    // Call AI gateway
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const systemPrompt = `You are a smart WhatsApp chat assistant for VantoOS (executive OS for South African entrepreneurs).
-Analyze the WhatsApp conversation and extract structured insights. Be concise and actionable.
+    const systemPrompt = `You are a PhD-level executive analyst for VantoOS (executive OS for South African entrepreneurs).
+Analyze the WhatsApp conversation with academic rigor and produce a structured, evidence-backed executive briefing.
 Locale: ${locale}, Default currency: ${currency}.
 
-CRITICAL RULES:
-1. EVIDENCE-BASED OUTPUT: Every claim in your summary MUST be backed by a direct quote from the transcript. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true and provide a minimal factual summary only.
-2. For money_direction: ONLY set it if you detect CLEAR money patterns (amounts with currency symbols, bank keywords like paid/credited/debited/fee/commission, or explicit transaction references). If no money patterns exist, money_direction MUST be: {"transaction_type":"unknown","ui_action":"none","confidence":0}
-3. transaction_type can be: "income", "expense", "bank_fee", "transfer", "commission", "unknown"
-4. ui_action can be: "create_income", "create_expense", "none"
-5. NEVER guess or infer financial transactions from non-financial context.
-6. NEVER invent facts not present in the transcript.`;
+CRITICAL ANTI-HALLUCINATION RULES:
+1. EVERY claim MUST reference a direct quote from the transcript using the [MSG#] index.
+2. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true.
+3. extracted_actions: EVERY action MUST have at least 1 evidence_quote from the transcript. Actions without evidence are FORBIDDEN and must be omitted.
+4. For money_direction: ONLY set if CLEAR money patterns exist (amounts with R/$/€, bank keywords). Otherwise: {"transaction_type":"unknown","ui_action":"none","confidence":0}
+5. NEVER invent facts. NEVER extrapolate beyond what the transcript explicitly states.
+6. Provide key_points as bullet-point insights, sentiment analysis, stakeholder identification, risks, and opportunities.`;
 
     const toolDef = {
       type: "function" as const,
       function: {
-        name: "whatsapp_extract_result",
-        description: "Return structured WhatsApp chat analysis with evidence",
+        name: "whatsapp_phd_analysis",
+        description: "Return PhD-grade structured WhatsApp chat analysis with evidence",
         parameters: {
           type: "object",
           properties: {
-            summary: { type: "string", description: "2-3 sentence summary of the conversation, each statement backed by evidence" },
+            summary: { type: "string", description: "2-4 sentence executive summary, each statement backed by evidence" },
+            key_points: {
+              type: "array",
+              items: { type: "string" },
+              description: "3-7 bullet-point key insights from the conversation",
+            },
+            sentiment: { type: "string", description: "One-line sentiment analysis of the conversation tone" },
+            stakeholders: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  role: { type: "string", description: "Inferred role or relationship" },
+                },
+                required: ["name"],
+              },
+              description: "People identified in the conversation with inferred roles",
+            },
+            risks: {
+              type: "array",
+              items: { type: "string" },
+              description: "Potential risks or concerns identified",
+            },
+            opportunities: {
+              type: "array",
+              items: { type: "string" },
+              description: "Potential opportunities identified",
+            },
             confidence: { type: "number", description: "0-1 confidence in analysis" },
-            requires_user_confirmation: { type: "boolean" },
-            needs_verification: { type: "boolean", description: "True if any claim lacks direct evidence from the transcript" },
+            needs_verification: { type: "boolean", description: "True if any claim lacks direct evidence" },
             evidence: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  claim: { type: "string", description: "A specific claim from the summary" },
-                  quote: { type: "string", description: "Direct quote from the transcript supporting this claim" },
-                  source: { type: "string", description: "Who said it (sender name or direction)" },
+                  claim: { type: "string", description: "A specific claim" },
+                  quote: { type: "string", description: "Direct quote from transcript" },
+                  source: { type: "string", description: "Who said it + message index e.g. 'MSG3 - John'" },
                 },
-                required: ["claim", "quote"],
+                required: ["claim", "quote", "source"],
               },
-              description: "Evidence backing each summary claim. Every summary statement must have a corresponding evidence entry.",
+              description: "Evidence backing each summary claim. REQUIRED for every claim.",
             },
             extracted_actions: {
               type: "array",
@@ -173,9 +198,20 @@ CRITICAL RULES:
                   title: { type: "string" },
                   action_type: { type: "string", enum: ["task", "meeting", "reminder", "notes"] },
                   priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
-                  details: { type: "string", description: "Extra context like date/time for meetings" },
+                  suggested_due_date: { type: "string", description: "ISO date if inferable, or null" },
+                  details: { type: "string", description: "Extra context" },
+                  evidence_quotes: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Direct quotes from transcript supporting this action. REQUIRED, min 1.",
+                  },
+                  message_refs: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Message indices or timestamps e.g. ['MSG3', 'MSG7']",
+                  },
                 },
-                required: ["title", "action_type", "priority"],
+                required: ["title", "action_type", "priority", "evidence_quotes", "message_refs"],
               },
             },
             money_direction: {
@@ -192,7 +228,7 @@ CRITICAL RULES:
             },
             draft_reply: { type: "string", description: "Optional suggested reply text" },
           },
-          required: ["summary", "confidence", "requires_user_confirmation", "needs_verification", "evidence", "extracted_actions", "money_direction"],
+          required: ["summary", "key_points", "sentiment", "confidence", "needs_verification", "evidence", "extracted_actions", "money_direction"],
         },
       },
     };
@@ -207,10 +243,10 @@ CRITICAL RULES:
         beta_user_id: isBetaAssist ? userId : undefined,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Analyze this WhatsApp conversation:\n\nChat: ${chat_title || "Unknown"}\n\n${truncated}` },
+          { role: "user", content: `Produce a PhD-grade executive analysis of this WhatsApp conversation:\n\nChat: ${chat_title || "Unknown"}\n\n${truncated}` },
         ],
         tools: [toolDef],
-        tool_choice: { type: "function", function: { name: "whatsapp_extract_result" } },
+        tool_choice: { type: "function", function: { name: "whatsapp_phd_analysis" } },
       }),
     });
 
@@ -225,8 +261,14 @@ CRITICAL RULES:
     if (!aiResult) {
       aiResult = {
         summary: `WhatsApp chat: ${chat_title || "Unknown"}`,
+        key_points: [],
+        sentiment: "Unable to analyze",
+        stakeholders: [],
+        risks: [],
+        opportunities: [],
         confidence: 0.3,
-        requires_user_confirmation: true,
+        needs_verification: true,
+        evidence: [],
         extracted_actions: [],
         money_direction: { transaction_type: "unknown", ui_action: "none", confidence: 0 },
       };
@@ -235,16 +277,25 @@ CRITICAL RULES:
     // HARD GATE: enforce money_direction rules
     if (!moneyDetected) {
       aiResult.money_direction = { transaction_type: "unknown", ui_action: "none", confidence: 0 };
-    } else if (aiResult.money_direction) {
-      if (aiResult.money_direction.confidence < 0.75) {
-        aiResult.money_direction.ui_action = "none";
-      }
+    } else if (aiResult.money_direction?.confidence < 0.75) {
+      aiResult.money_direction.ui_action = "none";
+    }
+
+    // HARD GATE: drop actions without evidence_quotes
+    if (aiResult.extracted_actions) {
+      aiResult.extracted_actions = aiResult.extracted_actions.filter((a: any) =>
+        a.evidence_quotes && a.evidence_quotes.length > 0
+      );
     }
 
     return new Response(JSON.stringify({
       summary: aiResult.summary,
+      key_points: aiResult.key_points || [],
+      sentiment: aiResult.sentiment || null,
+      stakeholders: aiResult.stakeholders || [],
+      risks: aiResult.risks || [],
+      opportunities: aiResult.opportunities || [],
       confidence: aiResult.confidence,
-      requires_user_confirmation: aiResult.requires_user_confirmation ?? true,
       needs_verification: aiResult.needs_verification ?? true,
       evidence: aiResult.evidence || [],
       extracted_actions: aiResult.extracted_actions || [],

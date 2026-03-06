@@ -570,6 +570,36 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
         badgeEl.innerHTML = '<span class="badge badge-info">✓ Grounded</span>';
       }
 
+      // Web evidence display
+      const webEvidenceEl = document.getElementById("smart-evidence-list");
+      const webEvidence = result.evidence || [];
+      if (webEvidence.length > 0) {
+        webEvidenceEl.style.display = "block";
+        webEvidenceEl.innerHTML = '<div style="font-size:10px;font-weight:600;color:#888;margin-bottom:4px">📎 Evidence</div>' +
+          webEvidence.map(e =>
+            `<div style="margin-bottom:6px;padding:4px 6px;background:#0a0a0a;border-radius:4px;border-left:2px solid #4ade80">` +
+            `<div style="color:#d4d4d4;font-size:11px">${escapeHtml(e.claim || '')}</div>` +
+            `<div style="color:#666;font-size:10px;font-style:italic;margin-top:2px">"${escapeHtml(e.quote || '')}"</div>` +
+            `</div>`
+          ).join('');
+      } else {
+        webEvidenceEl.style.display = "none";
+      }
+
+      // Web confirmation gate
+      const webGate = document.getElementById("smart-confirm-gate");
+      const webConfirmCb = document.getElementById("smart-confirm-checkbox");
+      const applyTasksBtn = document.getElementById("btn-apply-tasks");
+      if (result.needs_verification) {
+        webGate.style.display = "block";
+        if (applyTasksBtn) applyTasksBtn.disabled = true;
+        webConfirmCb.checked = false;
+        webConfirmCb.onchange = () => { if (applyTasksBtn) applyTasksBtn.disabled = !webConfirmCb.checked; };
+      } else {
+        webGate.style.display = "none";
+        if (applyTasksBtn) applyTasksBtn.disabled = false;
+      }
+
       if (result.suggested_project_id && !projectId) {
         const proj = state.projects.find(p => p.id === result.suggested_project_id);
         if (proj) {
@@ -584,9 +614,7 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
       if (actions.length) {
         document.getElementById("smart-actions-container").style.display = "block";
         document.getElementById("smart-actions-count").textContent = `${actions.length} task(s)`;
-
         const prioColor = (p) => p === "critical" ? "#dc2626" : p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
-
         document.getElementById("smart-actions-list").innerHTML = actions.map((a, i) => `
           <div class="action-item">
             <input type="checkbox" id="action-${i}" checked data-index="${i}" />
@@ -797,9 +825,7 @@ async function checkWhatsAppMode() {
         waMode.style.display = isWA ? "block" : "none";
       }
       if (isWA) {
-        // Populate project dropdown with proper options
         updateWaProjectDropdown();
-        // Fetch context from content script (single source of truth)
         fetchWaContext();
       }
       resolve(isWA);
@@ -810,23 +836,19 @@ async function checkWhatsAppMode() {
 function updateWaProjectDropdown() {
   const waSelect = document.getElementById("wa-capture-project");
   if (waSelect) {
-    waSelect.innerHTML = '<option value="">No project</option>' +
+    waSelect.innerHTML = '<option value="">No plan</option>' +
       state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
   }
 }
 
 function fetchWaContext() {
   chrome.runtime.sendMessage({ type: "GET_WHATSAPP_CONTEXT" }, (res) => {
-    if (chrome.runtime.lastError) {
-      console.warn("[VantoOS SP] fetchWaContext error:", chrome.runtime.lastError);
-      return;
-    }
+    if (chrome.runtime.lastError) return;
     if (res?.chat_key) {
       waState.chatKey = res.chat_key;
       waState.chatTitle = res.chat_title;
       document.getElementById("wa-chat-title-display").textContent = res.chat_title || "No chat open";
       document.getElementById("wa-chat-meta").textContent = `Key: ${res.chat_key.slice(0, 16)}…`;
-      // Fetch handled status with the authoritative key
       chrome.runtime.sendMessage({ type: "GET_WHATSAPP_HANDLED", chat_key: res.chat_key }, (hRes) => {
         if (hRes?.actions) updateWaHandledUI(hRes.actions);
         else updateWaHandledUI([]);
@@ -841,12 +863,9 @@ function fetchWaContext() {
   });
 }
 
-// Refresh Chat Context button — also fetches message count via snapshot
 document.getElementById("wa-btn-refresh-context")?.addEventListener("click", async () => {
   fetchWaContext();
   showToast("Refreshing chat context…", "info");
-
-  // Also request a snapshot to show message count
   try {
     const tabInfo = await new Promise(resolve =>
       chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, resolve)
@@ -861,7 +880,7 @@ document.getElementById("wa-btn-refresh-context")?.addEventListener("click", asy
         }
       });
     }
-  } catch (_) { /* ignore */ }
+  } catch (_) {}
 });
 
 function updateWaHandledUI(actions) {
@@ -887,30 +906,25 @@ function updateWaHandledUI(actions) {
       list.innerHTML = actions.map(a => {
         const label = typeLabels[a.action_type] || a.action_type;
         const time = new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        return `<div style="display:flex;justify-content:space-between;padding:2px 0">${label}<span style="color:#555">${time}</span></div>`;
+        return `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${label}</span><span style="color:#555">${time}</span></div>`;
       }).join("");
     }
   }
 }
 
-async function hashForDedupe(str) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+async function hashForDedupe(input) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
-// WhatsApp manual action buttons — NEVER invent chat keys
+// WhatsApp manual action buttons
 ["task", "meeting", "reminder", "notes"].forEach(action => {
   const btn = document.getElementById(`wa-btn-${action}-sp`);
   if (btn) {
     btn.addEventListener("click", async () => {
-      // Must have authoritative chat key from content script
-      if (!waState.chatKey) {
-        showToast("Open a WhatsApp chat first", "error");
-        return;
-      }
+      if (!waState.chatKey) { showToast("Open a WhatsApp chat first", "error"); return; }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
-
       try {
         const projectId = document.getElementById("wa-capture-project")?.value;
         const title = `[WhatsApp] ${waState.chatTitle || "Chat"}: ${action}`;
@@ -935,15 +949,15 @@ async function hashForDedupe(str) {
           });
           showToast("✅ Sent to Notes!");
         } else if (action === "meeting") {
-          const result = await apiCall("extension-task-create", {
+          const result = await apiCall("extension-meeting-create", {
             method: "POST",
-            body: { title: `📅 Meeting: ${waState.chatTitle || "Chat"}`, priority: "high", project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
+            body: { title: `📅 Meeting: ${waState.chatTitle || "Chat"}`, project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
           });
-          showToast(`✅ Meeting task ${result.action}!`);
+          showToast(`✅ Meeting ${result.action}!`);
         } else if (action === "reminder") {
-          const result = await apiCall("extension-task-create", {
+          const result = await apiCall("extension-reminder-create", {
             method: "POST",
-            body: { title: `🔔 Reminder: ${waState.chatTitle || "Chat"}`, priority: "high", project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
+            body: { title: `🔔 Reminder: ${waState.chatTitle || "Chat"}`, project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
           });
           showToast(`✅ Reminder ${result.action}!`);
         }
@@ -966,8 +980,8 @@ async function hashForDedupe(str) {
   }
 });
 
-// ── WhatsApp Smart Extract: Step 1 — fetch transcript & show preview ──
-let _waTranscriptCache = null; // holds snapshot between preview and send-to-AI
+// ── STEP 1: Extract transcript & show preview ──
+let _waTranscriptCache = null;
 
 document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async () => {
   if (!state.token) { showToast("Connect to VantoOS first", "error"); return; }
@@ -985,14 +999,12 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
   document.getElementById("wa-transcript-preview").style.display = "none";
 
   try {
-    // Get active tab
     const tabInfo = await new Promise(resolve =>
       chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, resolve)
     );
     const tabId = tabInfo?.tabId;
     if (!tabId) throw new Error("No active WhatsApp tab found");
 
-    // Request snapshot from content script
     const snapshot = await new Promise((resolve, reject) => {
       chrome.tabs.sendMessage(tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 25 }, (res) => {
         if (chrome.runtime.lastError) {
@@ -1008,7 +1020,6 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     const chatTitle = snapshot?.chat_title || waState.chatTitle;
     const chatKey = snapshot?.chat_key || waState.chatKey;
 
-    // Show debug counts
     if (debugEl) {
       const dbg = snapshot?.debug || {};
       debugEl.style.display = "block";
@@ -1019,12 +1030,10 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
       }
     }
 
-    // If no messages, show actionable error
     if (!transcript.length && !messages.length) {
       throw new Error("No text messages found. Open a chat and scroll up once, then retry.");
     }
 
-    // Cache for send-to-AI step
     _waTranscriptCache = { transcript, messages, chatTitle, chatKey };
 
     // Render transcript preview
@@ -1045,10 +1054,8 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     }).join('');
 
     previewEl.style.display = "block";
-
-    // Update chat info
     document.getElementById("wa-chat-title-display").textContent = chatTitle;
-    document.getElementById("wa-chat-meta").textContent = `${displayItems.length} messages ready for AI`;
+    document.getElementById("wa-chat-meta").textContent = `${displayItems.length} messages ready for analysis`;
 
   } catch (e) {
     showToast(`❌ ${e.message}`, "error");
@@ -1058,17 +1065,17 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
   }
 });
 
-// ── Step 2: Cancel ──
+// Cancel
 document.getElementById("wa-btn-cancel-extract")?.addEventListener("click", () => {
   document.getElementById("wa-transcript-preview").style.display = "none";
   _waTranscriptCache = null;
 });
 
-// ── Step 2: Send to AI ──
-document.getElementById("wa-btn-send-to-ai")?.addEventListener("click", async () => {
+// ── STEP 2: Analyze (Send to AI) ──
+document.getElementById("wa-btn-analyze")?.addEventListener("click", async () => {
   if (!_waTranscriptCache) { showToast("No transcript to send", "error"); return; }
 
-  const btn = document.getElementById("wa-btn-send-to-ai");
+  const btn = document.getElementById("wa-btn-analyze");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Analyzing…';
 
@@ -1088,9 +1095,8 @@ document.getElementById("wa-btn-send-to-ai")?.addEventListener("click", async ()
 
     waState.smartResult = result;
 
-    // Hide preview, show results
     document.getElementById("wa-transcript-preview").style.display = "none";
-    renderWaSmartResults(result);
+    renderWaPhDResults(result);
 
     if (result.redaction_toast) showToast("🔒 PII scrubbed before AI processing.", "info");
     if (result.mode === "assisted" && result.assisted_remaining !== undefined) showAssistedReminder(result.assisted_remaining);
@@ -1103,30 +1109,83 @@ document.getElementById("wa-btn-send-to-ai")?.addEventListener("click", async ()
     }
   } finally {
     btn.disabled = false;
-    btn.textContent = "🚀 Send to AI";
-    _waTranscriptCache = null;
+    btn.textContent = "🔬 Analyze";
   }
 });
 
-function renderWaSmartResults(result) {
+function renderWaPhDResults(result) {
   document.getElementById("wa-smart-results").style.display = "block";
   document.getElementById("wa-smart-summary").textContent = result.summary || "No summary";
 
+  // Confidence
   const confChip = document.getElementById("wa-confidence-chip");
   const conf = Math.round((result.confidence || 0) * 100);
   confChip.textContent = `${conf}% conf`;
   confChip.title = `AI confidence: ${conf}%`;
 
+  // Verification
   const verifyChip = document.getElementById("wa-verify-chip");
-  if (result.requires_user_confirmation || result.needs_verification) {
+  const needsVerify = result.needs_verification;
+  if (needsVerify) {
     verifyChip.style.display = "";
-    verifyChip.textContent = "⚠ Verify";
-    verifyChip.title = "This analysis needs your verification before acting";
+    verifyChip.textContent = "⚠ Needs verification";
+    verifyChip.title = "Some claims may not have full evidence";
   } else {
     verifyChip.style.display = "none";
   }
 
-  // Evidence quotes
+  // Key Points
+  const kpEl = document.getElementById("wa-key-points");
+  const kpList = document.getElementById("wa-key-points-list");
+  if (result.key_points?.length) {
+    kpEl.style.display = "block";
+    kpList.innerHTML = result.key_points.map(p => `<div style="margin-bottom:2px">• ${escapeHtml(p)}</div>`).join("");
+  } else {
+    kpEl.style.display = "none";
+  }
+
+  // Sentiment
+  const sentEl = document.getElementById("wa-sentiment");
+  if (result.sentiment) {
+    sentEl.style.display = "block";
+    document.getElementById("wa-sentiment-text").textContent = result.sentiment;
+  } else {
+    sentEl.style.display = "none";
+  }
+
+  // Stakeholders
+  const stEl = document.getElementById("wa-stakeholders");
+  const stList = document.getElementById("wa-stakeholders-list");
+  if (result.stakeholders?.length) {
+    stEl.style.display = "block";
+    stList.innerHTML = result.stakeholders.map(s =>
+      `<div style="margin-bottom:2px">• <strong>${escapeHtml(s.name)}</strong>${s.role ? ` — ${escapeHtml(s.role)}` : ''}</div>`
+    ).join("");
+  } else {
+    stEl.style.display = "none";
+  }
+
+  // Risks
+  const riskEl = document.getElementById("wa-risks");
+  const riskList = document.getElementById("wa-risks-list");
+  if (result.risks?.length) {
+    riskEl.style.display = "block";
+    riskList.innerHTML = result.risks.map(r => `<div style="margin-bottom:2px">• ${escapeHtml(r)}</div>`).join("");
+  } else {
+    riskEl.style.display = "none";
+  }
+
+  // Opportunities
+  const oppEl = document.getElementById("wa-opportunities");
+  const oppList = document.getElementById("wa-opportunities-list");
+  if (result.opportunities?.length) {
+    oppEl.style.display = "block";
+    oppList.innerHTML = result.opportunities.map(o => `<div style="margin-bottom:2px">• ${escapeHtml(o)}</div>`).join("");
+  } else {
+    oppEl.style.display = "none";
+  }
+
+  // Evidence
   const evidenceEl = document.getElementById("wa-evidence-list");
   const evidence = result.evidence || [];
   if (evidence.length > 0) {
@@ -1136,6 +1195,7 @@ function renderWaSmartResults(result) {
         `<div style="margin-bottom:6px;padding:4px 6px;background:#0a0a0a;border-radius:4px;border-left:2px solid #4ade80">` +
         `<div style="color:#d4d4d4;font-size:11px">${escapeHtml(e.claim || '')}</div>` +
         `<div style="color:#666;font-size:10px;font-style:italic;margin-top:2px">"${escapeHtml(e.quote || '')}"</div>` +
+        `<div style="color:#555;font-size:9px;margin-top:1px">${escapeHtml(e.source || '')}</div>` +
         `</div>`
       ).join('');
   } else {
@@ -1152,7 +1212,6 @@ function renderWaSmartResults(result) {
     document.getElementById("wa-money-label").textContent = isIncome ? "INCOME" : "EXPENSE";
     document.getElementById("wa-money-label").style.color = isIncome ? "#22c55e" : "#ef4444";
     document.getElementById("wa-money-amount").textContent = md.amount ? `${md.currency || "ZAR"} ${md.amount}` : "";
-
     const finBtn = document.getElementById("wa-btn-create-finance");
     finBtn.style.display = "block";
     finBtn.textContent = isIncome ? "Create Income" : "Create Expense";
@@ -1161,7 +1220,7 @@ function renderWaSmartResults(result) {
       finBtn.innerHTML = '<span class="spinner"></span>';
       try {
         const sourceMessageHash = await hashForDedupe(`${waState.chatKey}|${md.description || ""}|${md.amount || ""}`);
-        const result = await apiCall("extension-finance-create", {
+        await apiCall("extension-finance-create", {
           method: "POST",
           body: {
             type: isIncome ? "income" : "expense",
@@ -1173,19 +1232,14 @@ function renderWaSmartResults(result) {
             source_message_hash: sourceMessageHash,
           },
         });
-
         chrome.runtime.sendMessage({
           type: "LOG_WHATSAPP_ACTION",
           chat_key: waState.chatKey,
           chat_title: waState.chatTitle,
           action_type: isIncome ? "finance_income" : "finance_expense",
-          related_id: result.finance_entry_id,
-          meta: { amount: md.amount, currency: md.currency, description: md.description },
         }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
-
-        const actionText = result.action === "merged" ? "Already exists" : "Created";
-        showToast(`✅ ${isIncome ? "Income" : "Expense"} ${actionText}!`);
-        finBtn.textContent = `✅ ${actionText}`;
+        showToast(`✅ ${isIncome ? "Income" : "Expense"} created!`);
+        finBtn.textContent = "✅ Created";
       } catch (e) {
         showToast(`❌ ${e.message}`, "error");
         finBtn.textContent = isIncome ? "Create Income" : "Create Expense";
@@ -1196,109 +1250,224 @@ function renderWaSmartResults(result) {
     moneyBadge.style.display = "none";
   }
 
-  // Extracted actions with checkboxes and per-item status
+  // Extracted actions with checkboxes and evidence
   const actions = result.extracted_actions || [];
   if (actions.length) {
     document.getElementById("wa-actions-container").style.display = "block";
     document.getElementById("wa-actions-count").textContent = `${actions.length} action(s)`;
     const prioColor = (p) => p === "critical" ? "#dc2626" : p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
     const typeIcon = (t) => t === "meeting" ? "📅" : t === "reminder" ? "🔔" : t === "notes" ? "📝" : "✓";
-    document.getElementById("wa-actions-list").innerHTML = actions.map((a, i) => `
-      <div class="action-item" id="wa-action-row-${i}">
-        <input type="checkbox" id="wa-action-${i}" checked data-index="${i}" />
-        <label for="wa-action-${i}">${typeIcon(a.action_type)} ${escapeHtml(a.title)}</label>
-        <span class="action-priority" style="color:${prioColor(a.priority)}">${a.priority}</span>
-        <span id="wa-action-status-${i}" style="font-size:9px;color:#555;margin-left:4px"></span>
-      </div>
-    `).join("");
+
+    document.getElementById("wa-actions-list").innerHTML = actions.map((a, i) => {
+      const evidQuotes = (a.evidence_quotes || []).map(q => `<div style="color:#666;font-size:9px;font-style:italic;margin-top:1px">"${escapeHtml(q)}"</div>`).join("");
+      const dueStr = a.suggested_due_date ? `<span style="color:#888;font-size:9px"> · Due: ${a.suggested_due_date}</span>` : "";
+      return `
+        <div class="action-item" id="wa-action-row-${i}">
+          <input type="checkbox" id="wa-action-${i}" checked data-index="${i}" />
+          <div style="flex:1">
+            <label for="wa-action-${i}" style="display:block">${typeIcon(a.action_type)} ${escapeHtml(a.title)}</label>
+            ${a.details ? `<div style="font-size:10px;color:#888;margin-top:1px">${escapeHtml(a.details)}</div>` : ""}
+            ${evidQuotes}
+            ${dueStr}
+          </div>
+          <span class="action-priority" style="color:${prioColor(a.priority)}">${a.priority}</span>
+          <span id="wa-action-status-${i}" style="font-size:9px;color:#555;margin-left:4px"></span>
+        </div>
+      `;
+    }).join("");
   } else {
     document.getElementById("wa-actions-container").style.display = "none";
   }
 
+  // Draft reply
   if (result.draft_reply) {
     document.getElementById("wa-draft-reply-container").style.display = "block";
     document.getElementById("wa-draft-reply-text").value = result.draft_reply;
   } else {
     document.getElementById("wa-draft-reply-container").style.display = "none";
   }
+
+  // Confirmation gate
+  const gateEl = document.getElementById("wa-confirm-gate");
+  const sendBtn = document.getElementById("wa-btn-send-to-vantoos");
+  const confirmCb = document.getElementById("wa-confirm-checkbox");
+  confirmCb.checked = false;
+
+  if (needsVerify) {
+    gateEl.style.display = "block";
+    sendBtn.disabled = true;
+    confirmCb.onchange = () => { sendBtn.disabled = !confirmCb.checked; };
+  } else {
+    gateEl.style.display = "none";
+    sendBtn.disabled = false;
+  }
+
+  // Hide receipt
+  document.getElementById("wa-apply-receipt").style.display = "none";
 }
 
-// Apply WhatsApp extracted actions with per-item status
-document.getElementById("wa-btn-apply-actions")?.addEventListener("click", async () => {
-  if (!waState.smartResult?.extracted_actions?.length) return;
-  if (!waState.chatKey) {
-    showToast("No chat key — open a WhatsApp chat first", "error");
-    return;
-  }
+// ── STEP 3: Send to VantoOS (Apply) ──
+document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", async () => {
+  if (!waState.smartResult) { showToast("Run analysis first", "error"); return; }
+  if (!waState.chatKey) { showToast("No chat key", "error"); return; }
 
-  const actions = waState.smartResult.extracted_actions;
-  const checkboxes = document.querySelectorAll('#wa-actions-list input[type="checkbox"]');
-  const selected = [];
-  checkboxes.forEach(cb => { if (cb.checked) selected.push(parseInt(cb.dataset.index)); });
-  if (!selected.length) { showToast("Select at least one action", "error"); return; }
-
-  const btn = document.getElementById("wa-btn-apply-actions");
+  const btn = document.getElementById("wa-btn-send-to-vantoos");
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Applying…';
+  btn.innerHTML = '<span class="spinner"></span> Saving to VantoOS…';
 
-  let created = 0, merged = 0, failed = 0;
   const projectId = document.getElementById("wa-capture-project")?.value;
+  const result = waState.smartResult;
+  let noteResult = null;
+  let created = 0, merged = 0, failed = 0;
 
-  // Mark all selected as queued
-  for (const idx of selected) {
-    const statusEl = document.getElementById(`wa-action-status-${idx}`);
-    if (statusEl) { statusEl.textContent = "⏳ queued"; statusEl.style.color = "#888"; }
-  }
+  try {
+    // A) Create Plan Note
+    const transcriptText = (_waTranscriptCache?.transcript || []).map(m =>
+      `${m.ts || ""} • ${m.sender || m.direction}: ${m.text}`
+    ).join("\n") || result.summary || "";
 
-  for (const idx of selected) {
-    const a = actions[idx];
-    if (!a) continue;
-    const statusEl = document.getElementById(`wa-action-status-${idx}`);
     try {
-      const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|${a.title.toLowerCase().replace(/\s+/g, " ")}`);
-      const result = await apiCall("extension-task-create", {
+      noteResult = await apiCall("capture-whatsapp", {
         method: "POST",
         body: {
-          title: a.title,
-          priority: a.priority || "medium",
+          chat_key: waState.chatKey,
+          chat_title: waState.chatTitle,
+          transcript_text: transcriptText,
+          ai_summary: result.summary,
+          ai_evidence: result.evidence,
+          extracted_actions_count: (result.extracted_actions || []).length,
+          message_count: _waTranscriptCache?.messages?.length || 0,
           project_id: projectId || undefined,
-          source: "whatsapp",
-          dedupe_key: dedupeKey,
         },
       });
-      if (result.action === "merged") {
-        merged++;
-        if (statusEl) { statusEl.textContent = "🔄 merged"; statusEl.style.color = "#f59e0b"; }
-      } else {
-        created++;
-        if (statusEl) { statusEl.textContent = "✅ created"; statusEl.style.color = "#22c55e"; }
-      }
+    } catch (e) {
+      console.error("Note creation failed:", e);
+    }
 
+    // Log smart_extract action
+    chrome.runtime.sendMessage({
+      type: "LOG_WHATSAPP_ACTION",
+      chat_key: waState.chatKey,
+      chat_title: waState.chatTitle,
+      action_type: "smart_extract",
+    });
+
+    if (noteResult) {
       chrome.runtime.sendMessage({
         type: "LOG_WHATSAPP_ACTION",
         chat_key: waState.chatKey,
         chat_title: waState.chatTitle,
-        action_type: a.action_type || "task",
-        related_id: result.task_id,
-        meta: { title: a.title },
-      }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
-    } catch {
-      failed++;
-      if (statusEl) { statusEl.textContent = "❌ failed"; statusEl.style.color = "#ef4444"; }
+        action_type: "notes",
+        related_id: noteResult.note_id,
+      });
     }
+
+    // B) Create selected actions
+    const actions = result.extracted_actions || [];
+    const checkboxes = document.querySelectorAll('#wa-actions-list input[type="checkbox"]');
+    const selected = [];
+    checkboxes.forEach(cb => { if (cb.checked) selected.push(parseInt(cb.dataset.index)); });
+
+    for (const idx of selected) {
+      const a = actions[idx];
+      if (!a) continue;
+      const statusEl = document.getElementById(`wa-action-status-${idx}`);
+
+      try {
+        const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|${a.title.toLowerCase().replace(/\s+/g, " ")}|${a.suggested_due_date || ""}`);
+
+        let actionResult;
+        if (a.action_type === "meeting") {
+          actionResult = await apiCall("extension-meeting-create", {
+            method: "POST",
+            body: {
+              title: a.title,
+              project_id: projectId || undefined,
+              description: a.details || (a.evidence_quotes || []).join(" | "),
+              source: "whatsapp_extract",
+              dedupe_key: dedupeKey,
+            },
+          });
+          if (actionResult.action === "merged") { merged++; } else { created++; }
+        } else if (a.action_type === "reminder") {
+          actionResult = await apiCall("extension-reminder-create", {
+            method: "POST",
+            body: {
+              title: a.title,
+              project_id: projectId || undefined,
+              description: a.details || (a.evidence_quotes || []).join(" | "),
+              source: "whatsapp_extract",
+              dedupe_key: dedupeKey,
+            },
+          });
+          if (actionResult.action === "merged") { merged++; } else { created++; }
+        } else {
+          // task or notes → use extension-task-create
+          actionResult = await apiCall("extension-task-create", {
+            method: "POST",
+            body: {
+              title: a.title,
+              priority: a.priority || "medium",
+              project_id: projectId || undefined,
+              source: "whatsapp_extract",
+              source_context_id: waState.chatKey,
+              dedupe_key: dedupeKey,
+            },
+          });
+          if (actionResult.action === "merged") { merged++; } else { created++; }
+        }
+
+        if (statusEl) {
+          statusEl.textContent = actionResult.action === "merged" ? "🔄 merged" : "✅ created";
+          statusEl.style.color = actionResult.action === "merged" ? "#f59e0b" : "#22c55e";
+        }
+
+        // Log each action
+        chrome.runtime.sendMessage({
+          type: "LOG_WHATSAPP_ACTION",
+          chat_key: waState.chatKey,
+          chat_title: waState.chatTitle,
+          action_type: a.action_type || "task",
+          related_id: actionResult.task_id || actionResult.meeting_id || actionResult.reminder_id,
+          meta: { title: a.title },
+        }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
+      } catch (e) {
+        failed++;
+        if (statusEl) { statusEl.textContent = "❌ failed"; statusEl.style.color = "#ef4444"; }
+      }
+    }
+
+    // D) Show receipt
+    const receiptEl = document.getElementById("wa-apply-receipt");
+    receiptEl.style.display = "block";
+
+    const receiptParts = [];
+    if (noteResult) receiptParts.push(`📝 Note ${noteResult.action}`);
+    if (created) receiptParts.push(`${created} created`);
+    if (merged) receiptParts.push(`${merged} merged`);
+    if (failed) receiptParts.push(`${failed} failed`);
+
+    document.getElementById("wa-receipt-text").innerHTML = `✅ Saved to VantoOS`;
+    document.getElementById("wa-receipt-details").textContent = receiptParts.join(" · ");
+
+    const openPlanBtn = document.getElementById("wa-btn-open-plan");
+    const planUrl = noteResult?.plan_url || (projectId ? `${APP_URL}/projects/${projectId}` : `${APP_URL}/plan`);
+    openPlanBtn.style.display = "block";
+    openPlanBtn.onclick = () => chrome.tabs.create({ url: planUrl });
+
+    showToast(`✅ Saved to VantoOS: ${receiptParts.join(", ")}`);
+
+    // Update handled stamp
+    chrome.runtime.sendMessage({ type: "GET_WHATSAPP_HANDLED", chat_key: waState.chatKey }, (res) => {
+      if (res?.actions) updateWaHandledUI(res.actions);
+    });
+
+  } catch (e) {
+    showToast(`❌ ${e.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🚀 Send to VantoOS";
   }
-
-  const receipt = [];
-  if (created) receipt.push(`${created} created`);
-  if (merged) receipt.push(`${merged} merged`);
-  if (failed) receipt.push(`${failed} failed`);
-
-  document.getElementById("wa-apply-receipt").style.display = "block";
-  document.getElementById("wa-receipt-text").textContent = `✅ ${receipt.join(", ")}`;
-  showToast(`✅ Applied: ${receipt.join(", ")}`);
-
-  btn.disabled = false;
-  btn.textContent = "Apply Selected";
 });
 
 // Insert draft reply into WhatsApp composer (NEVER auto-sends)
@@ -1315,10 +1484,9 @@ document.getElementById("wa-btn-insert-reply")?.addEventListener("click", () => 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "WHATSAPP_SMART_RESULT" && msg.result) {
     waState.smartResult = msg.result;
-    // Use chat_key from the message (originated from content script)
     if (msg.chat_key) waState.chatKey = msg.chat_key;
     if (msg.chat_title) waState.chatTitle = msg.chat_title;
-    renderWaSmartResults(msg.result);
+    renderWaPhDResults(msg.result);
     switchToTab("capture");
   }
   if (msg?.type === "WHATSAPP_PREFILL_ACTION") {
@@ -1340,7 +1508,6 @@ function pollWhatsAppMode() {
   }
 }
 
-// Poll every 3 seconds for WhatsApp context updates
 setInterval(pollWhatsAppMode, 3000);
 
 // ── Init ──────────────────────────────────────────────
