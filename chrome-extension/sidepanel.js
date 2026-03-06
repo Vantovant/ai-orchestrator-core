@@ -852,7 +852,7 @@ document.getElementById("wa-btn-refresh-context")?.addEventListener("click", asy
       chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, resolve)
     );
     if (tabInfo?.tabId) {
-      chrome.tabs.sendMessage(tabInfo.tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 30 }, (res) => {
+      chrome.tabs.sendMessage(tabInfo.tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 40 }, (res) => {
         if (chrome.runtime.lastError || !res) return;
         const msgCount = res.messages?.length || 0;
         const meta = document.getElementById("wa-chat-meta");
@@ -994,7 +994,7 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
 
     // Step 2: Request snapshot from content script (single source of truth)
     const snapshot = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 30 }, (res) => {
+      chrome.tabs.sendMessage(tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 40 }, (res) => {
         if (chrome.runtime.lastError) {
           reject(new Error("Content script not responding — refresh WhatsApp and try again."));
           return;
@@ -1007,19 +1007,40 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     const chatTitle = snapshot?.chat_title || waState.chatTitle;
     const chatKey = snapshot?.chat_key || waState.chatKey;
 
-    // Step 3: Show debug info if 0 messages
+    // Step 3: Validate + show what we captured (so you can trust it)
+    const debugEl = document.getElementById("wa-debug-info");
+
+    const renderDebug = () => {
+      if (!debugEl) return;
+      const dbg = snap?.debug || {};
+      const countsLine =
+        `selectors: prePlain=${dbg.prePlain ?? 0}, copyable=${dbg.copyable ?? 0}, msgContainer=${dbg.msgContainer ?? 0}, selectable=${dbg.selectable ?? 0}, ltr=${dbg.ltr ?? 0}`;
+
+      const sampleLines = (messages || [])
+        .slice(-3)
+        .map((m) => `- ${(m.direction || "?").padEnd(4)} | ${(m.timestamp || "").slice(0, 20)} | ${(m.text || "").slice(0, 120)}`)
+        .join("\n");
+
+      debugEl.style.display = "block";
+      debugEl.textContent = countsLine + (sampleLines ? `\nSample:\n${sampleLines}` : "");
+    };
+
+    // If no messages, show debug and give a clear instruction
     if (!messages.length) {
-      const dbg = snapshot?.debug || {};
-      if (debugEl) {
-        debugEl.style.display = "block";
-        debugEl.textContent = `Debug: data-pre-plain-text=${dbg["data-pre-plain-text"]||0}, span[dir=ltr]=${dbg["span-dir-ltr"]||0}, selectable-text=${dbg["selectable-text"]||0}`;
-      }
-      throw new Error("No text messages found. Open a chat, scroll a little, then retry.");
+      renderDebug();
+      throw new Error("No messages found in this chat. Scroll a little in the chat (up/down) then press Smart Extract again.");
     }
 
-    // Update UI with snapshot info
-    document.getElementById("wa-chat-title-display").textContent = chatTitle || "WhatsApp Chat";
-    document.getElementById("wa-chat-meta").textContent = `${messages.length} messages captured`;
+    // Update UI
+    document.getElementById("wa-chat-title-display").textContent = chatTitle;
+
+    const lastMsg = messages[messages.length - 1]?.text || "";
+    const lastSnippet = lastMsg ? lastMsg.slice(0, 60) + (lastMsg.length > 60 ? "…" : "") : "";
+    document.getElementById("wa-chat-meta").textContent =
+      `${messages.length} messages captured` + (lastSnippet ? ` · last: "${lastSnippet}"` : "");
+
+    // Always show debug (WhatsApp DOM changes often)
+    renderDebug();
 
     // Step 4: Call AI
     const result = await apiCall("smart-capture-whatsapp", {
@@ -1035,6 +1056,15 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
 
     waState.smartResult = result;
     renderWaSmartResults(result);
+
+    const looksFallback =
+      (result?.confidence ?? 0) <= 0.35 &&
+      ((result?.extracted_actions || []).length === 0) &&
+      String(result?.summary || "").startsWith("WhatsApp chat:");
+    if (looksFallback) {
+      showToast("ℹ️ Messages were captured, but the AI response came back empty. This usually means the backend 'smart-capture-whatsapp' parser needs a fix. (Your capture is OK — see the sample above.)", "info");
+    }
+
 
     if (result.redaction_toast) showToast("🔒 PII scrubbed before AI processing.", "info");
     if (result.mode === "assisted" && result.assisted_remaining !== undefined) showAssistedReminder(result.assisted_remaining);

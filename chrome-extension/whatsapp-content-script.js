@@ -73,48 +73,86 @@
     return null;
   }
 
-  function extractMsgText(row) {
-    const t =
-      row.querySelector('span.selectable-text')?.innerText ||
-      row.querySelector('span[dir="ltr"]')?.innerText ||
-      row.querySelector('[dir="ltr"]')?.innerText ||
-      row.innerText ||
-      '';
-    return t.trim();
+  function normalizeMsgText(t) {
+    return (t || "")
+      .replace(/\xa0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
+
+  // WhatsApp changes DOM a lot. We try multiple places (row + its closest message container)
+  // to reliably get the visible message text.
+  function extractMsgText(row) {
+    const container =
+      row.closest('[data-testid="msg-container"], .message-in, .message-out, div[role="row"]') ||
+      row.parentElement ||
+      row;
+
+    const candidates = [
+      row.querySelector('span.selectable-text')?.innerText,
+      row.querySelector('span[dir="ltr"]')?.innerText,
+      row.querySelector('span[dir="auto"]')?.innerText,
+      container.querySelector('span.selectable-text')?.innerText,
+      container.querySelector('span[dir="ltr"]')?.innerText,
+      container.querySelector('span[dir="auto"]')?.innerText,
+      row.querySelector('[dir="ltr"]')?.innerText,
+      row.querySelector('[dir="auto"]')?.innerText,
+      row.innerText,
+      container.innerText,
+    ];
+
+    const picked = candidates.find((x) => x && String(x).trim().length > 0) || "";
+    return normalizeMsgText(String(picked));
+  }
+
 
   function getMessages(count = CAPTURE_COUNT) {
     const msgs = [];
 
-    // Primary: nodes with data-pre-plain-text (most reliable in current WhatsApp UI)
-    let nodes = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
+    // WhatsApp DOM is volatile. Prefer the most stable message anchor first.
+    let rows = Array.from(document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]'));
 
-    // Fallback: msg-container or copyable-text
-    if (nodes.length === 0) {
-      nodes = Array.from(document.querySelectorAll('#main [data-testid="msg-container"], #main .message-in, #main .message-out, #main div.copyable-text[data-pre-plain-text]'));
-    }
+    // Fallbacks if WA changes classnames
+    if (rows.length === 0) rows = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
+    if (rows.length === 0) rows = Array.from(document.querySelectorAll('#main [data-testid="msg-container"]'));
+    if (rows.length === 0) rows = Array.from(document.querySelectorAll('#main .message-in, #main .message-out'));
 
-    const slice = nodes.slice(-count);
+    const slice = rows.slice(-count);
 
-    for (const node of slice) {
-      const pre = node.getAttribute("data-pre-plain-text") || "";
-      const text = extractMsgText(node);
+    for (const row of slice) {
+      const text = extractMsgText(row);
       if (!text) continue;
 
-      let direction = "unknown";
-      if (node.closest('.message-out')) direction = "me";
-      else if (node.closest('.message-in')) direction = "them";
+      const container =
+        row.closest('[data-testid="msg-container"], .message-in, .message-out, div[role="row"]') || row;
 
+      // Direction (best-effort)
+      let direction = "unknown";
+      const classes = String(container.className || "") + " " + String(row.className || "");
+      if (classes.includes("message-out")) direction = "me";
+      else if (classes.includes("message-in")) direction = "them";
+
+      // Timestamp from data-pre-plain-text like "[12:34, 05/03/2026] Name:"
       let timestamp = null;
-      const match = pre.match(/\[([^\]]+)\]/);
-      if (match) timestamp = match[1];
+      const preAttr =
+        row.getAttribute("data-pre-plain-text") ||
+        container.getAttribute("data-pre-plain-text") ||
+        row.querySelector("[data-pre-plain-text]")?.getAttribute("data-pre-plain-text") ||
+        null;
+
+      if (preAttr) {
+        const match = String(preAttr).match(/\[([^\]]+)\]/);
+        if (match) timestamp = match[1];
+      }
 
       msgs.push({ text, direction, timestamp });
     }
+
     return msgs;
   }
 
-  async function computeChatKey(title) {
+  async function computeChatKey
+(title) {
     const hash = window.location.hash;
     if (hash && hash.includes("/chat/")) {
       const chatId = hash.split("/chat/")[1]?.split("/")[0]?.split("?")[0];
@@ -393,10 +431,17 @@
 
       // If 0 messages, do one scroll nudge to force lazy-render, then retry
       if (messages.length === 0) {
-        const scroller = document.querySelector('#main [role="application"]')
-          || document.querySelector('#main div[tabindex="-1"]')
-          || document.querySelector('#main');
-        if (scroller) scroller.scrollBy(0, 200);
+        const scroller =
+          document.querySelector('#main [data-testid="conversation-panel-messages"]') ||
+          document.querySelector('#main [role="application"]') ||
+          document.querySelector('#main div[tabindex="-1"]') ||
+          document.querySelector('#main');
+
+        // Nudge the conversation scroller (WhatsApp virtualizes message rows)
+        try {
+          scroller?.scrollBy?.(0, 300);
+          scroller?.scrollBy?.(0, -300);
+        } catch (_) {}
 
         setTimeout(() => {
           messages = getMessages(count);
@@ -407,9 +452,9 @@
             chat_key: currentChatKey,
             chat_title: title || currentChatTitle,
             messages,
-            debug: debugCounts,
+            debug: { ...debugCounts, message_count: messages.length, sample: messages.slice(-3).map(m => ({ direction: m.direction, timestamp: m.timestamp, text: (m.text || "").slice(0, 120) })) },
           });
-        }, 300);
+        }, 350);;
         return true; // async sendResponse
       }
 
@@ -417,7 +462,7 @@
         chat_key: currentChatKey,
         chat_title: title || currentChatTitle,
         messages,
-        debug: debugCounts,
+        debug: { ...debugCounts, message_count: messages.length, sample: messages.slice(-3).map(m => ({ direction: m.direction, timestamp: m.timestamp, text: (m.text || "").slice(0, 120) })) },
       });
       return true;
     }
