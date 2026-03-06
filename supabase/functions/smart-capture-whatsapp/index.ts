@@ -61,6 +61,44 @@ function hasMoneySignals(text: string): boolean {
   return MONEY_PATTERNS.some(p => p.test(text));
 }
 
+/**
+ * Robust tool-output parser: tries multiple shapes that ai-gateway may return.
+ */
+function extractToolArgs(aiData: any): any {
+  // 1) aiData.result is already a parsed object with summary
+  if (aiData.result && typeof aiData.result === "object" && aiData.result.summary) {
+    return aiData.result;
+  }
+  // 2) aiData.result is a JSON string
+  if (typeof aiData.result === "string") {
+    try { const parsed = JSON.parse(aiData.result); if (parsed.summary) return parsed; } catch { /* continue */ }
+  }
+  // 3) aiData.tool_calls[0].function.arguments
+  try {
+    const args = aiData.tool_calls?.[0]?.function?.arguments;
+    if (args) { const parsed = typeof args === "string" ? JSON.parse(args) : args; if (parsed.summary) return parsed; }
+  } catch { /* continue */ }
+  // 4) aiData.choices[0].message.tool_calls[0].function.arguments
+  try {
+    const args = aiData.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (args) { const parsed = typeof args === "string" ? JSON.parse(args) : args; if (parsed.summary) return parsed; }
+  } catch { /* continue */ }
+  // 5) aiData.message.tool_calls[0].function.arguments
+  try {
+    const args = aiData.message?.tool_calls?.[0]?.function?.arguments;
+    if (args) { const parsed = typeof args === "string" ? JSON.parse(args) : args; if (parsed.summary) return parsed; }
+  } catch { /* continue */ }
+  // 6) aiData.result is an object without summary but has nested result
+  if (aiData.result && typeof aiData.result === "object") {
+    // Maybe the tool args are inside result directly
+    try {
+      const keys = Object.keys(aiData.result);
+      if (keys.includes("key_points") || keys.includes("evidence")) return aiData.result;
+    } catch { /* continue */ }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -250,28 +288,26 @@ CRITICAL ANTI-HALLUCINATION RULES:
       }),
     });
 
-    const aiData = await aiResponse.json();
-    let aiResult: any = null;
-    if (aiData.result && typeof aiData.result === "object") {
-      aiResult = aiData.result;
-    } else if (typeof aiData.result === "string") {
-      try { aiResult = JSON.parse(aiData.result); } catch { /* fallback */ }
+    if (!aiResponse.ok) {
+      const errBody = await aiResponse.text();
+      return new Response(JSON.stringify({
+        error: "ai_provider_failed",
+        message: "AI provider failed. Try again or check AI Keys.",
+        debug: { status: aiResponse.status, body: errBody.slice(0, 500) },
+      }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    const aiData = await aiResponse.json();
+
+    // Robust tool-output extraction
+    const aiResult = extractToolArgs(aiData);
+
     if (!aiResult) {
-      aiResult = {
-        summary: `WhatsApp chat: ${chat_title || "Unknown"}`,
-        key_points: [],
-        sentiment: "Unable to analyze",
-        stakeholders: [],
-        risks: [],
-        opportunities: [],
-        confidence: 0.3,
-        needs_verification: true,
-        evidence: [],
-        extracted_actions: [],
-        money_direction: { transaction_type: "unknown", ui_action: "none", confidence: 0 },
-      };
+      return new Response(JSON.stringify({
+        error: "ai_provider_failed",
+        message: "AI analysis returned no usable output. Try again or check AI Keys.",
+        debug: { keys: Object.keys(aiData || {}), hasResult: !!aiData?.result, resultType: typeof aiData?.result },
+      }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // HARD GATE: enforce money_direction rules
@@ -299,7 +335,7 @@ CRITICAL ANTI-HALLUCINATION RULES:
       needs_verification: aiResult.needs_verification ?? true,
       evidence: aiResult.evidence || [],
       extracted_actions: aiResult.extracted_actions || [],
-      money_direction: aiResult.money_direction,
+      money_direction: aiResult.money_direction || { transaction_type: "unknown", ui_action: "none", confidence: 0 },
       draft_reply: aiResult.draft_reply || null,
       redaction_toast: redactionToast,
       ai_status: aiData.ai_status || "ok",

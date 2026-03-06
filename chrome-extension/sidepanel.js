@@ -1082,16 +1082,38 @@ document.getElementById("wa-btn-analyze")?.addEventListener("click", async () =>
   try {
     const { messages, chatTitle, chatKey } = _waTranscriptCache;
 
-    const result = await apiCall("smart-capture-whatsapp", {
+    const url = new URL(`${API_BASE}/smart-capture-whatsapp`);
+    const headers = { "Content-Type": "application/json", "apikey": ANON_KEY };
+    if (state.token) headers["x-extension-token"] = state.token;
+
+    const rawRes = await fetch(url.toString(), {
       method: "POST",
-      body: {
+      headers,
+      body: JSON.stringify({
         chat_key: chatKey,
         chat_title: chatTitle,
         messages,
         selected_text: "",
         user_context: { locale: "ZA", currency_default: "ZAR" },
-      },
+      }),
     });
+
+    const result = await rawRes.json();
+
+    if (!rawRes.ok) {
+      // Show clear error — never render placeholder analysis
+      const errMsg = result.message || result.error || `AI failed (HTTP ${rawRes.status})`;
+      const errorBanner = document.getElementById("wa-smart-results");
+      errorBanner.style.display = "block";
+      errorBanner.innerHTML = `
+        <div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:8px;padding:16px;text-align:center">
+          <div style="font-size:14px;font-weight:700;color:#fca5a5;margin-bottom:8px">❌ AI Analysis Failed</div>
+          <div style="font-size:12px;color:#fca5a5;margin-bottom:12px">${escapeHtml(errMsg)}</div>
+          ${rawRes.status === 402 ? `<button onclick="window.open('${APP_URL}/settings','_blank')" style="background:#4ade80;color:#000;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">Open Settings → AI Keys</button>` : `<button onclick="document.getElementById('wa-btn-analyze').click()" style="background:#3b82f6;color:#fff;border:none;border-radius:6px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer">Retry</button>`}
+        </div>
+      `;
+      return;
+    }
 
     waState.smartResult = result;
 
@@ -1102,11 +1124,7 @@ document.getElementById("wa-btn-analyze")?.addEventListener("click", async () =>
     if (result.mode === "assisted" && result.assisted_remaining !== undefined) showAssistedReminder(result.assisted_remaining);
 
   } catch (e) {
-    if (e.message.includes("ai_keys") || e.message.includes("data sovereignty")) {
-      showToast("🔒 Connect AI keys in Settings → AI Keys.", "error");
-    } else {
-      showToast(`❌ ${e.message}`, "error");
-    }
+    showToast(`❌ ${e.message}`, "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "🔬 Analyze";
