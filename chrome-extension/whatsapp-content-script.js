@@ -425,13 +425,15 @@
       const count = msg.count || CAPTURE_COUNT;
       const title = getChatTitle();
 
-      // Debug counts
-      const debugCounts = {
-        "data-pre-plain-text": document.querySelectorAll('#main [data-pre-plain-text]').length,
-        "selectable-text": document.querySelectorAll('#main span.selectable-text').length,
-        "span-dir-auto": document.querySelectorAll('#main span[dir="auto"]').length,
-        "span-dir-ltr": document.querySelectorAll('#main span[dir="ltr"]').length,
-      };
+      function collectDebugCounts() {
+        return {
+          "prePlain": document.querySelectorAll('#main [data-pre-plain-text]').length,
+          "selectable": document.querySelectorAll('#main span.selectable-text').length,
+          "dirAuto": document.querySelectorAll('#main span[dir="auto"]').length,
+          "dirLtr": document.querySelectorAll('#main span[dir="ltr"]').length,
+          "msgText": document.querySelectorAll('#main [data-testid="msg-text"]').length,
+        };
+      }
 
       let transcript = buildTranscript(count);
 
@@ -450,18 +452,19 @@
 
         setTimeout(() => {
           transcript = buildTranscript(count);
-          debugCounts["after-retry"] = document.querySelectorAll('#main [data-pre-plain-text]').length;
+          const debugCounts = collectDebugCounts();
           sendResponse({
             chat_key: currentChatKey,
             chat_title: title || currentChatTitle,
             transcript,
             messages: transcript.map(m => ({ text: m.text, direction: m.direction, timestamp: m.ts })),
-            debug: { ...debugCounts, message_count: transcript.length },
+            debug: { ...debugCounts, message_count: transcript.length, retried: true },
           });
-        }, 350);
+        }, 400);
         return true; // async sendResponse
       }
 
+      const debugCounts = collectDebugCounts();
       sendResponse({
         chat_key: currentChatKey,
         chat_title: title || currentChatTitle,
