@@ -62,7 +62,7 @@ async function hashString(input: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
 }
 
-async function resolveUser(req: Request): Promise<{ userId: string }> {
+async function resolveUser(req: Request): Promise<{ userId: string; isExtensionAuth: boolean }> {
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -82,7 +82,7 @@ async function resolveUser(req: Request): Promise<{ userId: string }> {
       .gt("expires_at", new Date().toISOString())
       .maybeSingle();
 
-    if (data) return { userId: data.user_id };
+    if (data) return { userId: data.user_id, isExtensionAuth: true };
     throw new Error("Unauthorized");
   }
 
@@ -94,10 +94,40 @@ async function resolveUser(req: Request): Promise<{ userId: string }> {
       { global: { headers: { Authorization: authHeader } } }
     );
     const { data: { user }, error } = await supabaseUser.auth.getUser();
-    if (user && !error) return { userId: user.id };
+    if (user && !error) return { userId: user.id, isExtensionAuth: false };
   }
 
   throw new Error("Unauthorized");
+}
+
+/**
+ * Robust tool-output parser: tries multiple shapes that ai providers may return.
+ */
+function extractToolArgs(aiData: any): any {
+  // 1) aiData.result is already a parsed object with summary
+  if (aiData.result && typeof aiData.result === "object" && aiData.result.summary) {
+    return aiData.result;
+  }
+  // 2) aiData.result is a JSON string
+  if (typeof aiData.result === "string") {
+    try { const parsed = JSON.parse(aiData.result); if (parsed.summary) return parsed; } catch { /* continue */ }
+  }
+  // 3) aiData.tool_calls[0].function.arguments
+  try {
+    const args = aiData.tool_calls?.[0]?.function?.arguments;
+    if (args) { const parsed = typeof args === "string" ? JSON.parse(args) : args; if (parsed.summary) return parsed; }
+  } catch { /* continue */ }
+  // 4) aiData.choices[0].message.tool_calls[0].function.arguments
+  try {
+    const args = aiData.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    if (args) { const parsed = typeof args === "string" ? JSON.parse(args) : args; if (parsed.summary) return parsed; }
+  } catch { /* continue */ }
+  // 5) aiData.message.tool_calls[0].function.arguments
+  try {
+    const args = aiData.message?.tool_calls?.[0]?.function?.arguments;
+    if (args) { const parsed = typeof args === "string" ? JSON.parse(args) : args; if (parsed.summary) return parsed; }
+  } catch { /* continue */ }
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -106,7 +136,8 @@ Deno.serve(async (req) => {
   try {
     if (req.method !== "POST") throw new Error("POST only");
 
-    const { userId } = await resolveUser(req);
+    const originalAuthHeader = req.headers.get("Authorization") ?? "";
+    const { userId, isExtensionAuth } = await resolveUser(req);
     const { url, title, snapshot, project_id, metadata } = await req.json();
 
     if (!url || !snapshot) throw new Error("url and snapshot required");
@@ -204,102 +235,173 @@ Deno.serve(async (req) => {
       truncated.entities?.length ? `Detected entities: ${JSON.stringify(truncated.entities).slice(0, 500)}` : "",
     ].filter(Boolean).join("\n\n");
 
-    // Call AI gateway
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const systemPrompt = `You are a smart web capture assistant for VantoOS (executive OS for South African entrepreneurs). Analyze the captured web page and return structured insights. Be concise and actionable.
 
-    const aiResponse = await fetch(`${supabaseUrl}/functions/v1/ai-gateway`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({
-        calling_function: "smart-capture-web",
-        workspace_type: "private",
-        beta_assist_mode: isBetaAssist,
-        beta_user_id: isBetaAssist ? userId : undefined,
-        messages: [
-          {
-            role: "system",
-            content: `You are a smart web capture assistant for VantoOS (executive OS for South African entrepreneurs). Analyze the captured web page and return structured insights. Be concise and actionable.
+CRITICAL: Every claim in your summary MUST be backed by a direct quote from the page content. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true and provide only what is directly evidenced.`;
 
-CRITICAL: Every claim in your summary MUST be backed by a direct quote from the page content. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true and provide only what is directly evidenced.`,
-          },
-          {
-            role: "user",
-            content: `Analyze this captured web page and extract:\n1. A 2-3 sentence summary (each statement must reference specific page content)\n2. Evidence quotes backing each summary statement\n3. Any actionable tasks (max 5)\n4. If I have projects, suggest which project this relates to\n\nPage data:\n${snapshotText.slice(0, 3000)}`,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "smart_capture_result",
-              description: "Return structured smart capture analysis with evidence",
-              parameters: {
+    const userPrompt = `Analyze this captured web page and extract:\n1. A 2-3 sentence summary (each statement must reference specific page content)\n2. Evidence quotes backing each summary statement\n3. Any actionable tasks (max 5)\n4. If I have projects, suggest which project this relates to\n\nPage data:\n${snapshotText.slice(0, 3000)}`;
+
+    const toolDef = {
+      type: "function" as const,
+      function: {
+        name: "smart_capture_result",
+        description: "Return structured smart capture analysis with evidence",
+        parameters: {
+          type: "object",
+          properties: {
+            summary: { type: "string", description: "2-3 sentence summary of the page, each statement backed by evidence" },
+            evidence: {
+              type: "array",
+              items: {
                 type: "object",
                 properties: {
-                  summary: { type: "string", description: "2-3 sentence summary of the page, each statement backed by evidence" },
-                  evidence: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        claim: { type: "string", description: "A specific claim from the summary" },
-                        quote: { type: "string", description: "Direct quote from the page content supporting this claim" },
-                        source: { type: "string", description: "Where on the page (heading, paragraph, etc)" },
-                      },
-                      required: ["claim", "quote"],
-                    },
-                    description: "Evidence backing each summary claim",
-                  },
-                  extracted_actions: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string" },
-                        priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
-                        category: { type: "string" },
-                      },
-                      required: ["title", "priority"],
-                    },
-                    description: "Actionable tasks extracted from the page (max 5)",
-                  },
-                  suggested_project_name: { type: "string", description: "Name of project this might relate to, or empty" },
-                  confidence: { type: "number", description: "0-1 confidence in suggestion" },
-                  needs_verification: { type: "boolean", description: "Whether info needs human verification (true if any claim lacks direct evidence)" },
-                  verification_reasons: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "Why verification is needed",
-                  },
+                  claim: { type: "string", description: "A specific claim from the summary" },
+                  quote: { type: "string", description: "Direct quote from the page content supporting this claim" },
+                  source: { type: "string", description: "Where on the page (heading, paragraph, etc)" },
                 },
-                required: ["summary", "evidence", "extracted_actions", "needs_verification"],
+                required: ["claim", "quote"],
               },
+              description: "Evidence backing each summary claim",
+            },
+            extracted_actions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                  category: { type: "string" },
+                },
+                required: ["title", "priority"],
+              },
+              description: "Actionable tasks extracted from the page (max 5)",
+            },
+            suggested_project_name: { type: "string", description: "Name of project this might relate to, or empty" },
+            confidence: { type: "number", description: "0-1 confidence in suggestion" },
+            needs_verification: { type: "boolean", description: "Whether info needs human verification (true if any claim lacks direct evidence)" },
+            verification_reasons: {
+              type: "array",
+              items: { type: "string" },
+              description: "Why verification is needed",
             },
           },
-        ],
-        tool_choice: { type: "function", function: { name: "smart_capture_result" } },
-      }),
-    });
+          required: ["summary", "evidence", "extracted_actions", "needs_verification"],
+        },
+      },
+    };
 
-    const aiData = await aiResponse.json();
+    const messages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ];
 
+    // ── AI Call: Extension-token path (direct provider) vs JWT path (ai-gateway) ──
     let aiResult: any = null;
-    if (aiData.result && typeof aiData.result === "object") {
-      aiResult = aiData.result;
-    } else if (typeof aiData.result === "string") {
-      try { aiResult = JSON.parse(aiData.result); } catch { /* fallback */ }
+    let providerUsed = "unknown";
+    let aiMode = "byok";
+    let assistedRemaining: number | undefined;
+    let aiProviderFailed = false;
+
+    if (isExtensionAuth) {
+      // Extension auth: call providers directly (same pattern as smart-capture-whatsapp)
+      const openaiKey = keyData?.use_own_keys ? keyData?.openai_key_encrypted : null;
+      const geminiKey = keyData?.use_own_keys ? keyData?.gemini_key_encrypted : null;
+
+      if (!openaiKey && !geminiKey && !isBetaAssist) {
+        return new Response(JSON.stringify({
+          error: "ai_keys_missing",
+          message: "Connect your personal OpenAI or Gemini key in Settings → AI Keys.",
+          ai_status: "blocked",
+        }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      let providerUrl: string;
+      let providerHeaders: Record<string, string>;
+
+      const requestBody: any = {
+        model: geminiKey ? "gemini-2.5-flash" : "gpt-4o-mini",
+        messages,
+        tools: [toolDef],
+        tool_choice: { type: "function", function: { name: "smart_capture_result" } },
+      };
+
+      if (geminiKey) {
+        providerUrl = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+        providerHeaders = { Authorization: `Bearer ${geminiKey}`, "Content-Type": "application/json" };
+        providerUsed = "gemini";
+      } else if (openaiKey) {
+        providerUrl = "https://api.openai.com/v1/chat/completions";
+        providerHeaders = { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" };
+        providerUsed = "openai";
+      } else {
+        // Beta assist — would need Lovable AI. For now, graceful degrade.
+        aiProviderFailed = true;
+        providerUrl = "";
+        providerHeaders = {};
+        providerUsed = "none";
+      }
+
+      if (!aiProviderFailed && providerUrl) {
+        const directRes = await fetch(providerUrl, {
+          method: "POST",
+          headers: providerHeaders,
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!directRes.ok) {
+          const errBody = await directRes.text();
+          console.error(`[smart-capture-web] Direct ${providerUsed} failed: ${directRes.status}`, errBody.slice(0, 300));
+          // Graceful degradation: still save the capture
+          aiProviderFailed = true;
+        } else {
+          const directData = await directRes.json();
+          const toolCall = directData?.choices?.[0]?.message?.tool_calls?.[0];
+          if (toolCall) {
+            try { aiResult = JSON.parse(toolCall.function.arguments); } catch { /* continue */ }
+          }
+          if (!aiResult) aiResult = extractToolArgs(directData);
+        }
+      }
+    } else {
+      // Standard JWT auth path: forward to ai-gateway
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const aiResponse = await fetch(`${supabaseUrl}/functions/v1/ai-gateway`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: originalAuthHeader,
+        },
+        body: JSON.stringify({
+          calling_function: "smart-capture-web",
+          workspace_type: "private",
+          beta_assist_mode: isBetaAssist,
+          beta_user_id: isBetaAssist ? userId : undefined,
+          messages,
+          tools: [toolDef],
+          tool_choice: { type: "function", function: { name: "smart_capture_result" } },
+        }),
+      });
+
+      const aiData = await aiResponse.json();
+
+      if (aiResponse.ok) {
+        aiResult = extractToolArgs(aiData);
+        providerUsed = aiData.provider_used || "unknown";
+        aiMode = aiData.mode || "byok";
+        assistedRemaining = aiData.assisted_remaining;
+      } else {
+        console.error("[smart-capture-web] ai-gateway failed:", aiResponse.status);
+        aiProviderFailed = true;
+      }
     }
 
     // Graceful degradation: if AI failed, still save the capture
-    const aiProviderFailed = !aiResult || aiData.ai_status === "error" || aiData.all_providers_failed;
     if (!aiResult) {
+      aiProviderFailed = true;
       aiResult = {
         summary: `Captured page: ${title || url}`,
         extracted_actions: [],
+        evidence: [],
         needs_verification: true,
         verification_reasons: ["AI analysis unavailable — basic context captured"],
       };
@@ -415,10 +517,10 @@ CRITICAL: Every claim in your summary MUST be backed by a direct quote from the 
       verification_reasons: aiResult.verification_reasons || [],
       recommended_destination: recommendedDestination,
       redaction_toast: redactionToast,
-      ai_status: aiData.ai_status || "ok",
-      provider_used: aiData.provider_used || "unknown",
-      mode: aiData.mode || "byok",
-      assisted_remaining: aiData.assisted_remaining,
+      ai_status: aiProviderFailed ? "degraded" : "ok",
+      provider_used: providerUsed,
+      mode: aiMode,
+      assisted_remaining: assistedRemaining,
       ai_provider_failed: aiProviderFailed,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
