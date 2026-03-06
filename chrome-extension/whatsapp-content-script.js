@@ -34,7 +34,9 @@
 
   // ── Chat detection (robust, proven selectors) ─────
   function getChatTitle() {
-    const selected = document.querySelector('#pane-side [aria-selected="true"] span[title]');
+    // Use unquoted attribute selector first to avoid escape issues
+    const selected = document.querySelector('#pane-side [aria-selected=true] span[title]')
+      || document.querySelector('#pane-side [aria-selected="true"] span[title]');
     if (selected) {
       const t = selected.getAttribute("title");
       if (t) return t;
@@ -368,6 +370,8 @@
         type: "WHATSAPP_CHAT_CONTEXT",
         chat_key: null,
         chat_title: null,
+      }, () => {
+        if (chrome.runtime.lastError) console.warn('[VantoOS] context send error (null)', chrome.runtime.lastError);
       });
       return;
     }
@@ -380,6 +384,8 @@
       type: "WHATSAPP_CHAT_CONTEXT",
       chat_key: currentChatKey,
       chat_title: currentChatTitle,
+    }, () => {
+      if (chrome.runtime.lastError) console.warn('[VantoOS] context send error', chrome.runtime.lastError);
     });
 
     chrome.runtime.sendMessage({
@@ -409,6 +415,9 @@
     });
     const app = document.getElementById("app") || document.body;
     obs.observe(app, { childList: true, subtree: true, attributes: true, attributeFilter: ["title", "aria-selected"] });
+
+    // Also listen for clicks on pane-side (chat list) to detect changes faster
+    document.getElementById('pane-side')?.addEventListener('click', () => setTimeout(onChatChange, 200), true);
   }
 
   // Listen for messages from background / sidepanel
