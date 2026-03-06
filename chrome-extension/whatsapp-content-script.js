@@ -2,6 +2,10 @@
 // Injected only when web.whatsapp.com is allowed + granted
 
 (function () {
+  // Injection guard — never inject twice
+  if (window.__vantoos_wa_injected) return;
+  window.__vantoos_wa_injected = true;
+
   if (document.getElementById("vantoos-wa-bar")) return;
 
   const CAPTURE_COUNT = 25;
@@ -16,25 +20,57 @@
       .then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join(""));
   }
 
-  function waitFor(selector, timeout = 15000) {
+  function waitForAll(selectors, timeout = 20000) {
     return new Promise((resolve, reject) => {
-      const el = document.querySelector(selector);
-      if (el) return resolve(el);
+      const check = () => selectors.every(s => document.querySelector(s));
+      if (check()) return resolve();
       const obs = new MutationObserver(() => {
-        const found = document.querySelector(selector);
-        if (found) { obs.disconnect(); resolve(found); }
+        if (check()) { obs.disconnect(); resolve(); }
       });
       obs.observe(document.body, { childList: true, subtree: true });
       setTimeout(() => { obs.disconnect(); reject(new Error("timeout")); }, timeout);
     });
   }
 
-  // ── Chat detection ────────────────────────────────
+  // ── Chat detection (robust, proven selectors) ─────
   function getChatTitle() {
-    const headerEl = document.querySelector('header span[dir="auto"][title]')
-      || document.querySelector('header [data-testid="conversation-info-header"] span[dir="auto"]')
-      || document.querySelector('#main header span[title]');
-    return headerEl?.getAttribute("title") || headerEl?.textContent?.trim() || null;
+    // Primary: selected chat in side pane (most reliable)
+    const selected = document.querySelector('#pane-side [aria-selected="true"] span[title]');
+    if (selected) {
+      const t = selected.getAttribute("title");
+      if (t) return t;
+    }
+
+    // Fallback: selected chat dir=auto
+    const selectedAuto = document.querySelector('#pane-side [aria-selected="true"] span[dir="auto"]');
+    if (selectedAuto) {
+      const t = selectedAuto.textContent?.trim();
+      if (t) return t;
+    }
+
+    // Fallback: #main header first line of innerText
+    const mainHeader = document.querySelector('#main header');
+    if (mainHeader) {
+      const lines = mainHeader.innerText?.split('\n');
+      const first = lines?.[0]?.trim();
+      if (first && first.length > 0 && first.length < 200) return first;
+    }
+
+    // Fallback: header span[title]
+    const headerSpan = document.querySelector('#main header span[title]');
+    if (headerSpan) {
+      const t = headerSpan.getAttribute("title");
+      if (t) return t;
+    }
+
+    // Fallback: header span[dir="auto"][title]
+    const headerAutoTitle = document.querySelector('header span[dir="auto"][title]');
+    if (headerAutoTitle) {
+      const t = headerAutoTitle.getAttribute("title");
+      if (t) return t;
+    }
+
+    return null;
   }
 
   function getMessages(count = CAPTURE_COUNT) {
@@ -260,6 +296,8 @@
   // ── Chat change observer ──────────────────────────
   async function onChatChange() {
     const title = getChatTitle();
+    console.log("[VantoOS] ChatChange title:", title);
+
     if (!title) {
       currentChatKey = null;
       currentChatTitle = null;
@@ -312,7 +350,7 @@
       requestAnimationFrame(check);
     });
     const app = document.getElementById("app") || document.body;
-    obs.observe(app, { childList: true, subtree: true, attributes: true, attributeFilter: ["title"] });
+    obs.observe(app, { childList: true, subtree: true, attributes: true, attributeFilter: ["title", "aria-selected"] });
   }
 
   // Listen for handled stamp updates from background
@@ -328,12 +366,23 @@
   // ── Init ──────────────────────────────────────────
   async function init() {
     try {
-      await waitFor('#app [data-testid="chat-list"], #app .two, #app [role="application"]', 20000);
+      // Wait for BOTH pane-side and main to be present
+      await waitForAll(["#pane-side", "#main"], 20000);
       createBar();
       observeChatChanges();
-      setTimeout(onChatChange, 1000);
+      // Initial chat detection after short delay
+      setTimeout(onChatChange, 800);
     } catch {
-      console.warn("[VantoOS] WhatsApp Web not ready");
+      console.warn("[VantoOS] WhatsApp Web not ready — retrying with fallback");
+      // Fallback: try with just #pane-side or #app
+      try {
+        await waitForAll(["#pane-side"], 10000);
+        createBar();
+        observeChatChanges();
+        setTimeout(onChatChange, 800);
+      } catch {
+        console.warn("[VantoOS] WhatsApp Web not ready at all");
+      }
     }
   }
 
