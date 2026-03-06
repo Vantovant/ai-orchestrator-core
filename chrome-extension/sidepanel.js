@@ -793,5 +793,419 @@ document.querySelectorAll(".tab").forEach(tab => {
   });
 });
 
+// ── WhatsApp Mode ─────────────────────────────────────
+let waState = {
+  chatKey: null, chatTitle: null, smartResult: null, handledActions: [],
+  isWhatsAppTab: false,
+};
+
+async function checkWhatsAppMode() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, (res) => {
+      const isWA = res?.url?.includes("web.whatsapp.com");
+      waState.isWhatsAppTab = isWA;
+      const webMode = document.getElementById("web-capture-mode");
+      const waMode = document.getElementById("whatsapp-mode");
+      if (webMode && waMode) {
+        webMode.style.display = isWA ? "none" : "block";
+        waMode.style.display = isWA ? "block" : "none";
+      }
+      if (isWA) {
+        const waSelect = document.getElementById("wa-capture-project");
+        if (waSelect && state.projects.length) {
+          waSelect.innerHTML = '<option value="">No project</option>' +
+            state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+        }
+      }
+      resolve(isWA);
+    });
+  });
+}
+
+function updateWaHandledUI(actions) {
+  waState.handledActions = actions || [];
+  const icon = document.getElementById("wa-handled-icon");
+  const text = document.getElementById("wa-handled-text");
+  const count = document.getElementById("wa-handled-count");
+  const list = document.getElementById("wa-handled-list");
+
+  if (!actions || actions.length === 0) {
+    if (icon) icon.textContent = "⬜";
+    if (text) { text.textContent = "Not handled yet"; text.style.color = "#666"; }
+    if (count) count.style.display = "none";
+    if (list) list.style.display = "none";
+  } else {
+    if (icon) icon.textContent = "✅";
+    if (text) { text.textContent = "Handled"; text.style.color = "#22c55e"; }
+    if (count) { count.textContent = `${actions.length} action${actions.length > 1 ? "s" : ""}`; count.style.display = ""; }
+    if (list) {
+      list.style.display = "block";
+      const typeLabels = { task: "✓ Task", meeting: "📅 Meeting", reminder: "🔔 Reminder", notes: "📝 Notes",
+        finance_income: "💰 Income", finance_expense: "💸 Expense", smart_extract: "✨ Extract" };
+      list.innerHTML = actions.map(a => {
+        const label = typeLabels[a.action_type] || a.action_type;
+        const time = new Date(a.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        return `<div style="display:flex;justify-content:space-between;padding:2px 0">${label}<span style="color:#555">${time}</span></div>`;
+      }).join("");
+    }
+  }
+}
+
+async function hashForDedupe(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+}
+
+// WhatsApp manual action buttons
+["task", "meeting", "reminder", "notes"].forEach(action => {
+  const btn = document.getElementById(`wa-btn-${action}-sp`);
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      if (!waState.chatKey && !waState.isWhatsAppTab) {
+        showToast("Open a WhatsApp chat first", "error");
+        return;
+      }
+      if (!waState.chatKey) {
+        waState.chatKey = "wa:manual-" + Date.now();
+        waState.chatTitle = "WhatsApp Chat";
+      }
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+
+      try {
+        const projectId = document.getElementById("wa-capture-project")?.value;
+        const title = `[WhatsApp] ${waState.chatTitle || "Chat"}: ${action}`;
+        const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|${title.toLowerCase().replace(/\s+/g, " ")}`);
+
+        if (action === "task") {
+          const result = await apiCall("extension-task-create", {
+            method: "POST",
+            body: { title, priority: "medium", project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
+          });
+          showToast(`✅ Task ${result.action}!`);
+        } else if (action === "notes") {
+          await apiCall("capture-web", {
+            method: "POST",
+            body: {
+              url: "https://web.whatsapp.com",
+              title: `WhatsApp: ${waState.chatTitle || "Chat"}`,
+              selected_text: `Chat notes from ${waState.chatTitle || "WhatsApp"}`,
+              project_id: projectId || undefined,
+              metadata: { source: "whatsapp" },
+            },
+          });
+          showToast("✅ Sent to Notes!");
+        } else if (action === "meeting") {
+          const result = await apiCall("extension-task-create", {
+            method: "POST",
+            body: { title: `📅 Meeting: ${waState.chatTitle || "Chat"}`, priority: "high", project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
+          });
+          showToast(`✅ Meeting task ${result.action}!`);
+        } else if (action === "reminder") {
+          const result = await apiCall("extension-task-create", {
+            method: "POST",
+            body: { title: `🔔 Reminder: ${waState.chatTitle || "Chat"}`, priority: "high", project_id: projectId || undefined, source: "whatsapp", dedupe_key: dedupeKey },
+          });
+          showToast(`✅ Reminder ${result.action}!`);
+        }
+
+        chrome.runtime.sendMessage({
+          type: "LOG_WHATSAPP_ACTION",
+          chat_key: waState.chatKey,
+          chat_title: waState.chatTitle,
+          action_type: action,
+        }, (res) => {
+          if (res?.actions) updateWaHandledUI(res.actions);
+        });
+      } catch (e) {
+        showToast(`❌ ${e.message}`, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = { task: "✓ Task", meeting: "📅 Meeting", reminder: "🔔 Reminder", notes: "📝 Notes" }[action];
+      }
+    });
+  }
+});
+
+// WhatsApp Smart Extract button
+document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async () => {
+  if (!state.token) {
+    showToast("Connect to VantoOS first", "error");
+    return;
+  }
+  const btn = document.getElementById("wa-btn-smart-extract");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Extracting…';
+
+  try {
+    const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
+    const tab = tabs?.[0];
+    if (!tab?.id) throw new Error("No active tab");
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (count) => {
+        const headerEl = document.querySelector('header span[dir="auto"][title]')
+          || document.querySelector('#main header span[title]');
+        const chatTitle = headerEl?.getAttribute("title") || headerEl?.textContent?.trim() || "Unknown";
+        const msgs = [];
+        const containers = document.querySelectorAll('[data-testid="msg-container"], .message-in, .message-out');
+        const msgEls = containers.length ? containers : document.querySelectorAll('div.copyable-text[data-pre-plain-text]');
+        const allMsgEls = Array.from(msgEls).slice(-count);
+        for (const el of allMsgEls) {
+          const textEl = el.querySelector('span.selectable-text') || el.querySelector('[class*="selectable-text"]');
+          const text = textEl?.innerText?.trim();
+          if (!text) continue;
+          let direction = "unknown";
+          const classes = el.className + " " + (el.closest("[class*='message-']")?.className || "");
+          if (classes.includes("message-out")) direction = "me";
+          else if (classes.includes("message-in")) direction = "them";
+          let timestamp = null;
+          const preAttr = el.getAttribute("data-pre-plain-text") || el.querySelector("[data-pre-plain-text]")?.getAttribute("data-pre-plain-text");
+          if (preAttr) { const match = preAttr.match(/\[([^\]]+)\]/); if (match) timestamp = match[1]; }
+          msgs.push({ text, direction, timestamp });
+        }
+        const hash = window.location.hash;
+        let chatKeyHint = "";
+        if (hash && hash.includes("/chat/")) {
+          chatKeyHint = "wa:" + (hash.split("/chat/")[1]?.split("/")[0]?.split("?")[0] || "");
+        }
+        return { chatTitle, messages: msgs, chatKeyHint };
+      },
+      args: [25],
+    });
+
+    const { chatTitle, messages, chatKeyHint } = results?.[0]?.result || {};
+    if (!messages?.length) throw new Error("No messages found in chat");
+
+    waState.chatTitle = chatTitle || "WhatsApp Chat";
+    waState.chatKey = chatKeyHint || ("wa:sp-" + await hashForDedupe(chatTitle + messages[0]?.text));
+    document.getElementById("wa-chat-title-display").textContent = waState.chatTitle;
+    document.getElementById("wa-chat-meta").textContent = `${messages.length} messages captured`;
+
+    const result = await apiCall("smart-capture-whatsapp", {
+      method: "POST",
+      body: {
+        chat_key: waState.chatKey,
+        chat_title: waState.chatTitle,
+        messages,
+        selected_text: "",
+        user_context: { locale: "ZA", currency_default: "ZAR" },
+      },
+    });
+
+    waState.smartResult = result;
+    renderWaSmartResults(result);
+
+    if (result.redaction_toast) showToast("🔒 PII scrubbed before AI processing.", "info");
+    if (result.mode === "assisted" && result.assisted_remaining !== undefined) showAssistedReminder(result.assisted_remaining);
+  } catch (e) {
+    if (e.message.includes("ai_keys") || e.message.includes("data sovereignty")) {
+      showToast("🔒 Connect AI keys in Settings → AI Keys.", "error");
+    } else {
+      showToast(`❌ ${e.message}`, "error");
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ Smart Extract Chat";
+  }
+});
+
+function renderWaSmartResults(result) {
+  document.getElementById("wa-smart-results").style.display = "block";
+  document.getElementById("wa-smart-summary").textContent = result.summary || "No summary";
+
+  const confChip = document.getElementById("wa-confidence-chip");
+  const conf = Math.round((result.confidence || 0) * 100);
+  confChip.textContent = `${conf}% conf`;
+  confChip.title = `AI confidence: ${conf}%`;
+
+  const verifyChip = document.getElementById("wa-verify-chip");
+  if (result.requires_user_confirmation) {
+    verifyChip.style.display = "";
+    verifyChip.textContent = "⚠ Verify";
+    verifyChip.title = "This analysis needs your verification before acting";
+  } else {
+    verifyChip.style.display = "none";
+  }
+
+  const moneyBadge = document.getElementById("wa-money-badge");
+  const md = result.money_direction;
+  if (md && md.transaction_type !== "unknown" && md.ui_action !== "none" && md.confidence >= 0.75) {
+    moneyBadge.style.display = "block";
+    const isIncome = md.ui_action === "create_income";
+    document.getElementById("wa-money-icon").textContent = isIncome ? "💰" : "💸";
+    document.getElementById("wa-money-label").textContent = isIncome ? "INCOME" : "EXPENSE";
+    document.getElementById("wa-money-label").style.color = isIncome ? "#22c55e" : "#ef4444";
+    document.getElementById("wa-money-amount").textContent = md.amount ? `${md.currency || "ZAR"} ${md.amount}` : "";
+
+    const finBtn = document.getElementById("wa-btn-create-finance");
+    finBtn.style.display = "block";
+    finBtn.textContent = isIncome ? "Create Income" : "Create Expense";
+    finBtn.onclick = async () => {
+      finBtn.disabled = true;
+      finBtn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|finance|${md.description || ""}`);
+        await apiCall("extension-task-create", {
+          method: "POST",
+          body: {
+            title: `${isIncome ? "💰" : "💸"} ${md.description || (isIncome ? "Income" : "Expense")}: ${md.currency || "ZAR"} ${md.amount || ""}`,
+            priority: "high",
+            source: "whatsapp-finance",
+            dedupe_key: dedupeKey,
+          },
+        });
+        chrome.runtime.sendMessage({
+          type: "LOG_WHATSAPP_ACTION",
+          chat_key: waState.chatKey,
+          chat_title: waState.chatTitle,
+          action_type: isIncome ? "finance_income" : "finance_expense",
+          meta: { amount: md.amount, currency: md.currency, description: md.description },
+        }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
+        showToast(`✅ ${isIncome ? "Income" : "Expense"} created!`);
+        finBtn.textContent = "✅ Created";
+      } catch (e) {
+        showToast(`❌ ${e.message}`, "error");
+        finBtn.textContent = isIncome ? "Create Income" : "Create Expense";
+      }
+      finBtn.disabled = false;
+    };
+  } else {
+    moneyBadge.style.display = "none";
+  }
+
+  const actions = result.extracted_actions || [];
+  if (actions.length) {
+    document.getElementById("wa-actions-container").style.display = "block";
+    document.getElementById("wa-actions-count").textContent = `${actions.length} action(s)`;
+    const prioColor = (p) => p === "critical" ? "#dc2626" : p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
+    const typeIcon = (t) => t === "meeting" ? "📅" : t === "reminder" ? "🔔" : t === "notes" ? "📝" : "✓";
+    document.getElementById("wa-actions-list").innerHTML = actions.map((a, i) => `
+      <div class="action-item">
+        <input type="checkbox" id="wa-action-${i}" checked data-index="${i}" />
+        <label for="wa-action-${i}">${typeIcon(a.action_type)} ${escapeHtml(a.title)}</label>
+        <span class="action-priority" style="color:${prioColor(a.priority)}">${a.priority}</span>
+      </div>
+    `).join("");
+  } else {
+    document.getElementById("wa-actions-container").style.display = "none";
+  }
+
+  if (result.draft_reply) {
+    document.getElementById("wa-draft-reply-container").style.display = "block";
+    document.getElementById("wa-draft-reply-text").value = result.draft_reply;
+  } else {
+    document.getElementById("wa-draft-reply-container").style.display = "none";
+  }
+}
+
+// Apply WhatsApp extracted actions
+document.getElementById("wa-btn-apply-actions")?.addEventListener("click", async () => {
+  if (!waState.smartResult?.extracted_actions?.length) return;
+  const actions = waState.smartResult.extracted_actions;
+  const checkboxes = document.querySelectorAll('#wa-actions-list input[type="checkbox"]');
+  const selected = [];
+  checkboxes.forEach(cb => { if (cb.checked) selected.push(parseInt(cb.dataset.index)); });
+  if (!selected.length) { showToast("Select at least one action", "error"); return; }
+
+  const btn = document.getElementById("wa-btn-apply-actions");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Applying…';
+
+  let created = 0, merged = 0, failed = 0;
+  const projectId = document.getElementById("wa-capture-project")?.value;
+
+  for (const idx of selected) {
+    const a = actions[idx];
+    if (!a) continue;
+    try {
+      const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|${a.title.toLowerCase().replace(/\s+/g, " ")}`);
+      const result = await apiCall("extension-task-create", {
+        method: "POST",
+        body: {
+          title: a.title,
+          priority: a.priority || "medium",
+          project_id: projectId || undefined,
+          source: "whatsapp",
+          dedupe_key: dedupeKey,
+        },
+      });
+      if (result.action === "merged") merged++;
+      else created++;
+
+      chrome.runtime.sendMessage({
+        type: "LOG_WHATSAPP_ACTION",
+        chat_key: waState.chatKey,
+        chat_title: waState.chatTitle,
+        action_type: a.action_type || "task",
+        related_id: result.task_id,
+        meta: { title: a.title },
+      }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
+    } catch {
+      failed++;
+    }
+  }
+
+  const receipt = [];
+  if (created) receipt.push(`${created} created`);
+  if (merged) receipt.push(`${merged} merged`);
+  if (failed) receipt.push(`${failed} failed`);
+
+  document.getElementById("wa-apply-receipt").style.display = "block";
+  document.getElementById("wa-receipt-text").textContent = `✅ ${receipt.join(", ")}`;
+  showToast(`✅ Applied: ${receipt.join(", ")}`);
+
+  btn.disabled = false;
+  btn.textContent = "Apply Selected";
+});
+
+// Insert draft reply into WhatsApp composer (NEVER auto-sends)
+document.getElementById("wa-btn-insert-reply")?.addEventListener("click", () => {
+  const text = document.getElementById("wa-draft-reply-text")?.value;
+  if (!text) return;
+  chrome.runtime.sendMessage({ type: "DRAFT_WHATSAPP_REPLY", text }, (res) => {
+    if (res?.ok) showToast("💬 Inserted into composer (won't auto-send)");
+    else showToast("❌ Could not insert reply", "error");
+  });
+});
+
+// Listen for WhatsApp messages from background/content script
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "WHATSAPP_SMART_RESULT" && msg.result) {
+    waState.smartResult = msg.result;
+    waState.chatKey = msg.result.chat_key;
+    waState.chatTitle = msg.result.chat_title;
+    renderWaSmartResults(msg.result);
+    switchToTab("capture");
+  }
+  if (msg?.type === "WHATSAPP_PREFILL_ACTION") {
+    waState.chatKey = msg.chat_key;
+    waState.chatTitle = msg.chat_title;
+    switchToTab("capture");
+    checkWhatsAppMode().then(() => {
+      document.getElementById("wa-chat-title-display").textContent = msg.chat_title || "WhatsApp Chat";
+      document.getElementById("wa-chat-meta").textContent = `Chat key: ${msg.chat_key?.slice(0, 12)}…`;
+      const actionBtn = document.getElementById(`wa-btn-${msg.action_type}-sp`);
+      if (actionBtn) setTimeout(() => actionBtn.click(), 300);
+    });
+  }
+});
+
+function pollWhatsAppMode() {
+  if (state.currentTab === "capture") {
+    checkWhatsAppMode().then(isWA => {
+      if (isWA && waState.chatKey) {
+        chrome.runtime.sendMessage({ type: "GET_WHATSAPP_HANDLED", chat_key: waState.chatKey }, (res) => {
+          if (res?.actions) updateWaHandledUI(res.actions);
+        });
+      }
+    });
+  }
+}
+
+setInterval(pollWhatsAppMode, 5000);
+
 // ── Init ──────────────────────────────────────────────
 loadAuth();
+setTimeout(checkWhatsAppMode, 1000);
