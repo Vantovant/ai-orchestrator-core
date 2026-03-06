@@ -176,6 +176,19 @@
         <div id="wa-debug-info" style="display:none;margin-top:6px;font-size:10px;color:#666;background:#111;border:1px solid #262626;border-radius:4px;padding:6px;white-space:pre-wrap;font-family:monospace;max-height:80px;overflow-y:auto"></div>
       </div>
 
+      <!-- Transcript Preview (shown before AI call) -->
+      <div id="wa-transcript-preview" style="display:none;margin-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <span style="font-size:11px;font-weight:600;color:#ccc">📝 Transcript Preview</span>
+          <span id="wa-transcript-count" style="font-size:10px;color:#888"></span>
+        </div>
+        <div id="wa-transcript-lines" style="background:#111;border:1px solid #262626;border-radius:6px;padding:8px;max-height:240px;overflow-y:auto;font-size:11px;line-height:1.6;color:#d4d4d4;font-family:monospace;white-space:pre-wrap"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btn-ai" id="wa-btn-send-to-ai" style="flex:1">🚀 Send to AI</button>
+          <button class="btn btn-secondary" id="wa-btn-cancel-extract" style="flex:0 0 auto">Cancel</button>
+        </div>
+      </div>
+
       <!-- Smart Extract Results -->
       <div id="wa-smart-results" style="display:none;margin-top:12px">
         <div class="summary-card">
