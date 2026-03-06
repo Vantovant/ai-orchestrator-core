@@ -966,35 +966,35 @@ async function hashForDedupe(str) {
   }
 });
 
-// WhatsApp Smart Extract button — uses content script snapshot (no executeScript scraping)
+// ── WhatsApp Smart Extract: Step 1 — fetch transcript & show preview ──
+let _waTranscriptCache = null; // holds snapshot between preview and send-to-AI
+
 document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async () => {
-  if (!state.token) {
-    showToast("Connect to VantoOS first", "error");
-    return;
-  }
-  if (!waState.chatKey) {
-    showToast("Open a WhatsApp chat first", "error");
-    return;
-  }
+  if (!state.token) { showToast("Connect to VantoOS first", "error"); return; }
+  if (!waState.chatKey) { showToast("Open a WhatsApp chat first", "error"); return; }
+
   const btn = document.getElementById("wa-btn-smart-extract");
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Extracting…';
+  btn.innerHTML = '<span class="spinner"></span> Reading chat…';
 
-  // Hide previous debug info
   const debugEl = document.getElementById("wa-debug-info");
   if (debugEl) debugEl.style.display = "none";
 
+  // Hide previous results & preview
+  document.getElementById("wa-smart-results").style.display = "none";
+  document.getElementById("wa-transcript-preview").style.display = "none";
+
   try {
-    // Step 1: Get active tab ID
+    // Get active tab
     const tabInfo = await new Promise(resolve =>
       chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, resolve)
     );
     const tabId = tabInfo?.tabId;
     if (!tabId) throw new Error("No active WhatsApp tab found");
 
-    // Step 2: Request snapshot from content script (single source of truth)
+    // Request snapshot from content script
     const snapshot = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 40 }, (res) => {
+      chrome.tabs.sendMessage(tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 25 }, (res) => {
         if (chrome.runtime.lastError) {
           reject(new Error("Content script not responding — refresh WhatsApp and try again."));
           return;
@@ -1003,46 +1003,74 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
       });
     });
 
+    const transcript = snapshot?.transcript || [];
     const messages = snapshot?.messages || [];
     const chatTitle = snapshot?.chat_title || waState.chatTitle;
     const chatKey = snapshot?.chat_key || waState.chatKey;
 
-    // Step 3: Validate + show what we captured (so you can trust it)
-    const debugEl = document.getElementById("wa-debug-info");
-
-    const renderDebug = () => {
-      if (!debugEl) return;
+    // Show debug counts
+    if (debugEl) {
       const dbg = snapshot?.debug || {};
-      const countsLine =
-        `selectors: prePlain=${dbg.prePlain ?? 0}, copyable=${dbg.copyable ?? 0}, msgContainer=${dbg.msgContainer ?? 0}, selectable=${dbg.selectable ?? 0}, ltr=${dbg.ltr ?? 0}`;
-
-      const sampleLines = (messages || [])
-        .slice(-3)
-        .map((m) => `- ${(m.direction || "?").padEnd(4)} | ${(m.timestamp || "").slice(0, 20)} | ${(m.text || "").slice(0, 120)}`)
-        .join("\n");
-
       debugEl.style.display = "block";
-      debugEl.textContent = countsLine + (sampleLines ? `\nSample:\n${sampleLines}` : "");
-    };
-
-    // If no messages, show debug and give a clear instruction
-    if (!messages.length) {
-      renderDebug();
-      throw new Error("No messages found in this chat. Scroll a little in the chat (up/down) then press Smart Extract again.");
+      debugEl.textContent = Object.entries(dbg).map(([k,v]) => `${k}=${v}`).join(', ');
     }
 
-    // Update UI
+    // If no messages, show actionable error
+    if (!transcript.length && !messages.length) {
+      throw new Error("No text messages found. Open a chat and scroll up once, then retry.");
+    }
+
+    // Cache for send-to-AI step
+    _waTranscriptCache = { transcript, messages, chatTitle, chatKey };
+
+    // Render transcript preview
+    const previewEl = document.getElementById("wa-transcript-preview");
+    const linesEl = document.getElementById("wa-transcript-lines");
+    const countEl = document.getElementById("wa-transcript-count");
+
+    const displayItems = transcript.length ? transcript : messages.map(m => ({
+      ts: m.timestamp, sender: m.direction === 'me' ? 'You' : 'Them', direction: m.direction, text: m.text
+    }));
+
+    countEl.textContent = `${displayItems.length} message(s)`;
+    linesEl.innerHTML = displayItems.map(m => {
+      const tsStr = m.ts ? `<span style="color:#555">${escapeHtml(m.ts)}</span>` : '';
+      const senderStr = m.sender ? `<span style="color:${m.direction === 'me' ? '#22c55e' : '#60a5fa'}">${escapeHtml(m.sender)}</span>` : '';
+      const textStr = escapeHtml(m.text);
+      return `<div style="margin-bottom:4px">${tsStr}${tsStr && senderStr ? ' • ' : ''}${senderStr}${(tsStr || senderStr) ? ': ' : ''}${textStr}</div>`;
+    }).join('');
+
+    previewEl.style.display = "block";
+
+    // Update chat info
     document.getElementById("wa-chat-title-display").textContent = chatTitle;
+    document.getElementById("wa-chat-meta").textContent = `${displayItems.length} messages ready for AI`;
 
-    const lastMsg = messages[messages.length - 1]?.text || "";
-    const lastSnippet = lastMsg ? lastMsg.slice(0, 60) + (lastMsg.length > 60 ? "…" : "") : "";
-    document.getElementById("wa-chat-meta").textContent =
-      `${messages.length} messages captured` + (lastSnippet ? ` · last: "${lastSnippet}"` : "");
+  } catch (e) {
+    showToast(`❌ ${e.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "✨ Smart Extract Chat";
+  }
+});
 
-    // Always show debug (WhatsApp DOM changes often)
-    renderDebug();
+// ── Step 2: Cancel ──
+document.getElementById("wa-btn-cancel-extract")?.addEventListener("click", () => {
+  document.getElementById("wa-transcript-preview").style.display = "none";
+  _waTranscriptCache = null;
+});
 
-    // Step 4: Call AI
+// ── Step 2: Send to AI ──
+document.getElementById("wa-btn-send-to-ai")?.addEventListener("click", async () => {
+  if (!_waTranscriptCache) { showToast("No transcript to send", "error"); return; }
+
+  const btn = document.getElementById("wa-btn-send-to-ai");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Analyzing…';
+
+  try {
+    const { messages, chatTitle, chatKey } = _waTranscriptCache;
+
     const result = await apiCall("smart-capture-whatsapp", {
       method: "POST",
       body: {
@@ -1055,19 +1083,14 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     });
 
     waState.smartResult = result;
+
+    // Hide preview, show results
+    document.getElementById("wa-transcript-preview").style.display = "none";
     renderWaSmartResults(result);
-
-    const looksFallback =
-      (result?.confidence ?? 0) <= 0.35 &&
-      ((result?.extracted_actions || []).length === 0) &&
-      String(result?.summary || "").startsWith("WhatsApp chat:");
-    if (looksFallback) {
-      showToast("ℹ️ Messages were captured, but the AI response came back empty. This usually means the backend 'smart-capture-whatsapp' parser needs a fix. (Your capture is OK — see the sample above.)", "info");
-    }
-
 
     if (result.redaction_toast) showToast("🔒 PII scrubbed before AI processing.", "info");
     if (result.mode === "assisted" && result.assisted_remaining !== undefined) showAssistedReminder(result.assisted_remaining);
+
   } catch (e) {
     if (e.message.includes("ai_keys") || e.message.includes("data sovereignty")) {
       showToast("🔒 Connect AI keys in Settings → AI Keys.", "error");
@@ -1076,7 +1099,8 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     }
   } finally {
     btn.disabled = false;
-    btn.textContent = "✨ Smart Extract Chat";
+    btn.textContent = "🚀 Send to AI";
+    _waTranscriptCache = null;
   }
 });
 
