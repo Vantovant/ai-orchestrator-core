@@ -31,7 +31,6 @@
 
   // ── Chat detection ────────────────────────────────
   function getChatTitle() {
-    // WhatsApp Web chat header contains the contact/group name
     const headerEl = document.querySelector('header span[dir="auto"][title]')
       || document.querySelector('header [data-testid="conversation-info-header"] span[dir="auto"]')
       || document.querySelector('#main header span[title]');
@@ -40,10 +39,8 @@
 
   function getMessages(count = CAPTURE_COUNT) {
     const msgs = [];
-    // WhatsApp uses [data-testid="msg-container"] or similar for message rows
     const containers = document.querySelectorAll('[data-testid="msg-container"], .message-in, .message-out, [class*="message-"]');
     const msgEls = containers.length ? containers : document.querySelectorAll('div.copyable-text[data-pre-plain-text]');
-
     const allMsgEls = Array.from(msgEls).slice(-count);
 
     for (const el of allMsgEls) {
@@ -51,13 +48,11 @@
       const text = textEl?.innerText?.trim();
       if (!text) continue;
 
-      // Direction: "message-out" class or data-testid="msg-container" parent classes
       let direction = "unknown";
       const classes = el.className + " " + (el.closest("[class*='message-']")?.className || "");
       if (classes.includes("message-out")) direction = "me";
       else if (classes.includes("message-in")) direction = "them";
 
-      // Timestamp from data-pre-plain-text attribute like "[12:34, 05/03/2026] Name:"
       let timestamp = null;
       const preAttr = el.getAttribute("data-pre-plain-text") || el.querySelector("[data-pre-plain-text]")?.getAttribute("data-pre-plain-text");
       if (preAttr) {
@@ -71,13 +66,11 @@
   }
 
   async function computeChatKey(title) {
-    // Try to find WhatsApp internal thread id from URL hash or data attributes
-    const hash = window.location.hash; // e.g. #/chat/27...
+    const hash = window.location.hash;
     if (hash && hash.includes("/chat/")) {
       const chatId = hash.split("/chat/")[1]?.split("/")[0]?.split("?")[0];
       if (chatId) return "wa:" + chatId;
     }
-    // Fallback: hash of title + account hint
     const accountHint = document.querySelector('[data-testid="menu-bar-user-avatar"]')?.getAttribute("title") || "default";
     const msgs = getMessages(1);
     const firstTs = msgs[0]?.timestamp || "unknown";
@@ -86,7 +79,7 @@
     return "wa:" + hash256.slice(0, 24);
   }
 
-  // ── Vanto Bar UI ──────────────────────────────────
+  // ── Vanto Bar UI (fixed overlay, NO body shift) ───
   function createBar() {
     if (barEl) return;
 
@@ -97,7 +90,7 @@
       top: "0",
       left: "0",
       right: "0",
-      height: "42px",
+      height: "36px",
       background: "linear-gradient(135deg, #0a0a0a 0%, #111 100%)",
       borderBottom: "1px solid #262626",
       display: "flex",
@@ -109,6 +102,7 @@
       fontSize: "11px",
       color: "#e5e5e5",
       gap: "6px",
+      pointerEvents: "auto",
     });
 
     // Left: Vanto logo + chat title
@@ -184,9 +178,7 @@
     barEl.appendChild(right);
     document.body.appendChild(barEl);
 
-    // Push WhatsApp content down
-    document.body.style.marginTop = "42px";
-    document.body.style.height = "calc(100vh - 42px)";
+    // DO NOT modify body layout — bar is a fixed overlay only
   }
 
   function updateBarTitle(title) {
@@ -234,7 +226,7 @@
       action_type: action,
       chat_key: currentChatKey,
       chat_title: currentChatTitle,
-      messages: messages.slice(-5), // last 5 for context
+      messages: messages.slice(-5),
       selected_text: selectedText,
     });
 
@@ -248,7 +240,7 @@
     toast.id = "vantoos-wa-toast";
     Object.assign(toast.style, {
       position: "fixed",
-      top: "50px",
+      top: "44px",
       left: "50%",
       transform: "translateX(-50%)",
       background: "#052e16",
@@ -273,12 +265,25 @@
       currentChatTitle = null;
       updateBarTitle(null);
       updateHandledStamp([]);
+      // Broadcast null context
+      chrome.runtime.sendMessage({
+        type: "WHATSAPP_CHAT_CONTEXT",
+        chat_key: null,
+        chat_title: null,
+      });
       return;
     }
 
     currentChatTitle = title;
     currentChatKey = await computeChatKey(title);
     updateBarTitle(title);
+
+    // Broadcast context to background (single source of truth)
+    chrome.runtime.sendMessage({
+      type: "WHATSAPP_CHAT_CONTEXT",
+      chat_key: currentChatKey,
+      chat_title: currentChatTitle,
+    });
 
     // Fetch handled status
     chrome.runtime.sendMessage({
@@ -301,10 +306,8 @@
       }
     };
 
-    // Check periodically as WhatsApp uses complex virtual DOM
     setInterval(check, 1500);
 
-    // Also observe DOM mutations for faster detection
     const obs = new MutationObserver(() => {
       requestAnimationFrame(check);
     });
@@ -328,7 +331,6 @@
       await waitFor('#app [data-testid="chat-list"], #app .two, #app [role="application"]', 20000);
       createBar();
       observeChatChanges();
-      // Trigger initial check
       setTimeout(onChatChange, 1000);
     } catch {
       console.warn("[VantoOS] WhatsApp Web not ready");

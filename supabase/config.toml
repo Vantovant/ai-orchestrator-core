@@ -128,3 +128,6 @@ verify_jwt = false
 
 [functions.whatsapp-action-log]
 verify_jwt = false
+
+[functions.extension-finance-create]
+verify_jwt = false
