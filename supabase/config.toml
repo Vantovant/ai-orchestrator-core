@@ -122,3 +122,9 @@ verify_jwt = false
 
 [functions.gmail-get]
 verify_jwt = false
+
+[functions.smart-capture-whatsapp]
+verify_jwt = false
+
+[functions.whatsapp-action-log]
+verify_jwt = false
