@@ -12,7 +12,7 @@ interface GatewayRequest {
   tool_choice?: any;
   model?: string;
   preference?: "fastest" | "quality";
-  workspace_type?: "private" | "nm" | "gov";
+  workspace_type?: "private" | "nm" | "gov" | "nda";
   calling_function?: string;
 }
 
