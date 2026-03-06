@@ -422,7 +422,6 @@ function checkCapturePermissions(captureData) {
 }
 
 document.getElementById("btn-quick-capture").addEventListener("click", () => {
-  // Reset smart capture results
   document.getElementById("smart-capture-results").style.display = "none";
   document.getElementById("capture-deep-link").style.display = "none";
   const assistedBanner = document.getElementById("assisted-reminder-banner");
@@ -493,7 +492,6 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
     return;
   }
 
-  // Reset previous results
   document.getElementById("smart-capture-results").style.display = "none";
   document.getElementById("capture-deep-link").style.display = "none";
   document.getElementById("btn-send-capture").style.display = "none";
@@ -519,7 +517,6 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
     document.getElementById("capture-title").textContent = res.data.title;
     document.getElementById("capture-snippet").textContent = res.data.selectedText || "(full page analyzed)";
 
-    // Check domain permissions first
     if (!checkCapturePermissions(res.data)) {
       btn.disabled = false;
       btn.textContent = "✨ Smart Capture";
@@ -527,7 +524,6 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
       return;
     }
 
-    // Call smart-capture-web
     try {
       const projectId = document.getElementById("capture-project").value;
       const result = await apiCall("smart-capture-web", {
@@ -551,27 +547,22 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
 
       state.smartCaptureResult = result;
 
-      // Show assisted mode reminder if applicable
       if (result.mode === "assisted" && result.assisted_remaining !== undefined) {
         showAssistedReminder(result.assisted_remaining);
       }
 
-      // Show redaction toast
       if (result.redaction_toast) {
         showToast("🔒 Sensitive PII scrubbed prior to AI processing.", "info");
       }
 
-      // Show graceful degradation message if AI failed but capture saved
       if (result.ai_provider_failed) {
         showToast("AI provider unreachable — basic context captured. Update keys in Settings → AI Keys to resume Smart Capture.", "error");
       }
 
-      // Show summary
       const resultsEl = document.getElementById("smart-capture-results");
       resultsEl.style.display = "block";
       document.getElementById("smart-summary").textContent = result.summary || "No summary available.";
 
-      // Verification badge
       const badgeEl = document.getElementById("smart-verification-badge");
       if (result.needs_verification) {
         badgeEl.innerHTML = '<span class="badge badge-warning">⚠ Needs verification</span>';
@@ -579,7 +570,6 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
         badgeEl.innerHTML = '<span class="badge badge-info">✓ Grounded</span>';
       }
 
-      // Suggested project
       if (result.suggested_project_id && !projectId) {
         const proj = state.projects.find(p => p.id === result.suggested_project_id);
         if (proj) {
@@ -590,7 +580,6 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
         }
       }
 
-      // Extracted actions
       const actions = result.extracted_actions || [];
       if (actions.length) {
         document.getElementById("smart-actions-container").style.display = "block";
@@ -609,7 +598,6 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
         document.getElementById("smart-actions-container").style.display = "none";
       }
 
-      // Deep link
       if (result.deep_link_url) {
         document.getElementById("capture-deep-link").style.display = "block";
         document.getElementById("btn-view-vantoos").onclick = () => {
@@ -730,7 +718,6 @@ document.getElementById("btn-ask-assistant").addEventListener("click", async () 
   btn.innerHTML = '<span class="spinner"></span>';
 
   try {
-    // Collect minimal context
     let minimalSnapshot = null;
     if (state.captureData) {
       minimalSnapshot = {
@@ -755,7 +742,6 @@ document.getElementById("btn-ask-assistant").addEventListener("click", async () 
     document.getElementById("help-answer-text").textContent = result.answer;
     document.getElementById("help-ai-gate").style.display = "none";
 
-    // Show assisted mode reminder if applicable
     if (result.mode === "assisted" && result.assisted_remaining !== undefined) {
       showAssistedReminder(result.assisted_remaining);
     }
@@ -811,14 +797,43 @@ async function checkWhatsAppMode() {
         waMode.style.display = isWA ? "block" : "none";
       }
       if (isWA) {
-        const waSelect = document.getElementById("wa-capture-project");
-        if (waSelect && state.projects.length) {
-          waSelect.innerHTML = '<option value="">No project</option>' +
-            state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
-        }
+        // Populate project dropdown with proper options
+        updateWaProjectDropdown();
+        // Fetch context from content script (single source of truth)
+        fetchWaContext();
       }
       resolve(isWA);
     });
+  });
+}
+
+function updateWaProjectDropdown() {
+  const waSelect = document.getElementById("wa-capture-project");
+  if (waSelect) {
+    waSelect.innerHTML = '<option value="">No project</option>' +
+      state.projects.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
+  }
+}
+
+function fetchWaContext() {
+  chrome.runtime.sendMessage({ type: "GET_WHATSAPP_CONTEXT" }, (res) => {
+    if (res?.chat_key) {
+      waState.chatKey = res.chat_key;
+      waState.chatTitle = res.chat_title;
+      document.getElementById("wa-chat-title-display").textContent = res.chat_title || "No chat open";
+      document.getElementById("wa-chat-meta").textContent = `Key: ${res.chat_key.slice(0, 16)}…`;
+      // Fetch handled status with the authoritative key
+      chrome.runtime.sendMessage({ type: "GET_WHATSAPP_HANDLED", chat_key: res.chat_key }, (hRes) => {
+        if (hRes?.actions) updateWaHandledUI(hRes.actions);
+        else updateWaHandledUI([]);
+      });
+    } else {
+      waState.chatKey = null;
+      waState.chatTitle = null;
+      document.getElementById("wa-chat-title-display").textContent = "No chat detected";
+      document.getElementById("wa-chat-meta").textContent = "Open a WhatsApp chat to begin";
+      updateWaHandledUI([]);
+    }
   });
 }
 
@@ -856,18 +871,15 @@ async function hashForDedupe(str) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
 }
 
-// WhatsApp manual action buttons
+// WhatsApp manual action buttons — NEVER invent chat keys
 ["task", "meeting", "reminder", "notes"].forEach(action => {
   const btn = document.getElementById(`wa-btn-${action}-sp`);
   if (btn) {
     btn.addEventListener("click", async () => {
-      if (!waState.chatKey && !waState.isWhatsAppTab) {
+      // Must have authoritative chat key from content script
+      if (!waState.chatKey) {
         showToast("Open a WhatsApp chat first", "error");
         return;
-      }
-      if (!waState.chatKey) {
-        waState.chatKey = "wa:manual-" + Date.now();
-        waState.chatTitle = "WhatsApp Chat";
       }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
@@ -933,6 +945,10 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     showToast("Connect to VantoOS first", "error");
     return;
   }
+  if (!waState.chatKey) {
+    showToast("Open a WhatsApp chat first", "error");
+    return;
+  }
   const btn = document.getElementById("wa-btn-smart-extract");
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Extracting…';
@@ -965,29 +981,23 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
           if (preAttr) { const match = preAttr.match(/\[([^\]]+)\]/); if (match) timestamp = match[1]; }
           msgs.push({ text, direction, timestamp });
         }
-        const hash = window.location.hash;
-        let chatKeyHint = "";
-        if (hash && hash.includes("/chat/")) {
-          chatKeyHint = "wa:" + (hash.split("/chat/")[1]?.split("/")[0]?.split("?")[0] || "");
-        }
-        return { chatTitle, messages: msgs, chatKeyHint };
+        return { chatTitle, messages: msgs };
       },
       args: [25],
     });
 
-    const { chatTitle, messages, chatKeyHint } = results?.[0]?.result || {};
+    const { chatTitle, messages } = results?.[0]?.result || {};
     if (!messages?.length) throw new Error("No messages found in chat");
 
-    waState.chatTitle = chatTitle || "WhatsApp Chat";
-    waState.chatKey = chatKeyHint || ("wa:sp-" + await hashForDedupe(chatTitle + messages[0]?.text));
-    document.getElementById("wa-chat-title-display").textContent = waState.chatTitle;
+    // Use authoritative chat_key from content script, don't invent one
+    document.getElementById("wa-chat-title-display").textContent = waState.chatTitle || chatTitle;
     document.getElementById("wa-chat-meta").textContent = `${messages.length} messages captured`;
 
     const result = await apiCall("smart-capture-whatsapp", {
       method: "POST",
       body: {
         chat_key: waState.chatKey,
-        chat_title: waState.chatTitle,
+        chat_title: waState.chatTitle || chatTitle,
         messages,
         selected_text: "",
         user_context: { locale: "ZA", currency_default: "ZAR" },
@@ -1029,6 +1039,7 @@ function renderWaSmartResults(result) {
     verifyChip.style.display = "none";
   }
 
+  // Money direction badge
   const moneyBadge = document.getElementById("wa-money-badge");
   const md = result.money_direction;
   if (md && md.transaction_type !== "unknown" && md.ui_action !== "none" && md.confidence >= 0.75) {
@@ -1046,25 +1057,32 @@ function renderWaSmartResults(result) {
       finBtn.disabled = true;
       finBtn.innerHTML = '<span class="spinner"></span>';
       try {
-        const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|finance|${md.description || ""}`);
-        await apiCall("extension-task-create", {
+        const sourceMessageHash = await hashForDedupe(`${waState.chatKey}|${md.description || ""}|${md.amount || ""}`);
+        const result = await apiCall("extension-finance-create", {
           method: "POST",
           body: {
-            title: `${isIncome ? "💰" : "💸"} ${md.description || (isIncome ? "Income" : "Expense")}: ${md.currency || "ZAR"} ${md.amount || ""}`,
-            priority: "high",
-            source: "whatsapp-finance",
-            dedupe_key: dedupeKey,
+            type: isIncome ? "income" : "expense",
+            amount: parseFloat(md.amount) || 0,
+            category: md.category || "general",
+            entry_date: new Date().toISOString().split("T")[0],
+            notes: `WhatsApp: ${waState.chatTitle || "Chat"} — ${md.description || ""}`,
+            source_chat_key: waState.chatKey,
+            source_message_hash: sourceMessageHash,
           },
         });
+
         chrome.runtime.sendMessage({
           type: "LOG_WHATSAPP_ACTION",
           chat_key: waState.chatKey,
           chat_title: waState.chatTitle,
           action_type: isIncome ? "finance_income" : "finance_expense",
+          related_id: result.finance_entry_id,
           meta: { amount: md.amount, currency: md.currency, description: md.description },
         }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
-        showToast(`✅ ${isIncome ? "Income" : "Expense"} created!`);
-        finBtn.textContent = "✅ Created";
+
+        const actionText = result.action === "merged" ? "Already exists" : "Created";
+        showToast(`✅ ${isIncome ? "Income" : "Expense"} ${actionText}!`);
+        finBtn.textContent = `✅ ${actionText}`;
       } catch (e) {
         showToast(`❌ ${e.message}`, "error");
         finBtn.textContent = isIncome ? "Create Income" : "Create Expense";
@@ -1075,6 +1093,7 @@ function renderWaSmartResults(result) {
     moneyBadge.style.display = "none";
   }
 
+  // Extracted actions with checkboxes and per-item status
   const actions = result.extracted_actions || [];
   if (actions.length) {
     document.getElementById("wa-actions-container").style.display = "block";
@@ -1082,10 +1101,11 @@ function renderWaSmartResults(result) {
     const prioColor = (p) => p === "critical" ? "#dc2626" : p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
     const typeIcon = (t) => t === "meeting" ? "📅" : t === "reminder" ? "🔔" : t === "notes" ? "📝" : "✓";
     document.getElementById("wa-actions-list").innerHTML = actions.map((a, i) => `
-      <div class="action-item">
+      <div class="action-item" id="wa-action-row-${i}">
         <input type="checkbox" id="wa-action-${i}" checked data-index="${i}" />
         <label for="wa-action-${i}">${typeIcon(a.action_type)} ${escapeHtml(a.title)}</label>
         <span class="action-priority" style="color:${prioColor(a.priority)}">${a.priority}</span>
+        <span id="wa-action-status-${i}" style="font-size:9px;color:#555;margin-left:4px"></span>
       </div>
     `).join("");
   } else {
@@ -1100,9 +1120,14 @@ function renderWaSmartResults(result) {
   }
 }
 
-// Apply WhatsApp extracted actions
+// Apply WhatsApp extracted actions with per-item status
 document.getElementById("wa-btn-apply-actions")?.addEventListener("click", async () => {
   if (!waState.smartResult?.extracted_actions?.length) return;
+  if (!waState.chatKey) {
+    showToast("No chat key — open a WhatsApp chat first", "error");
+    return;
+  }
+
   const actions = waState.smartResult.extracted_actions;
   const checkboxes = document.querySelectorAll('#wa-actions-list input[type="checkbox"]');
   const selected = [];
@@ -1116,9 +1141,16 @@ document.getElementById("wa-btn-apply-actions")?.addEventListener("click", async
   let created = 0, merged = 0, failed = 0;
   const projectId = document.getElementById("wa-capture-project")?.value;
 
+  // Mark all selected as queued
+  for (const idx of selected) {
+    const statusEl = document.getElementById(`wa-action-status-${idx}`);
+    if (statusEl) { statusEl.textContent = "⏳ queued"; statusEl.style.color = "#888"; }
+  }
+
   for (const idx of selected) {
     const a = actions[idx];
     if (!a) continue;
+    const statusEl = document.getElementById(`wa-action-status-${idx}`);
     try {
       const dedupeKey = await hashForDedupe(`${state.userId}|${waState.chatKey}|${a.title.toLowerCase().replace(/\s+/g, " ")}`);
       const result = await apiCall("extension-task-create", {
@@ -1131,8 +1163,13 @@ document.getElementById("wa-btn-apply-actions")?.addEventListener("click", async
           dedupe_key: dedupeKey,
         },
       });
-      if (result.action === "merged") merged++;
-      else created++;
+      if (result.action === "merged") {
+        merged++;
+        if (statusEl) { statusEl.textContent = "🔄 merged"; statusEl.style.color = "#f59e0b"; }
+      } else {
+        created++;
+        if (statusEl) { statusEl.textContent = "✅ created"; statusEl.style.color = "#22c55e"; }
+      }
 
       chrome.runtime.sendMessage({
         type: "LOG_WHATSAPP_ACTION",
@@ -1144,6 +1181,7 @@ document.getElementById("wa-btn-apply-actions")?.addEventListener("click", async
       }, (res) => { if (res?.actions) updateWaHandledUI(res.actions); });
     } catch {
       failed++;
+      if (statusEl) { statusEl.textContent = "❌ failed"; statusEl.style.color = "#ef4444"; }
     }
   }
 
@@ -1174,8 +1212,9 @@ document.getElementById("wa-btn-insert-reply")?.addEventListener("click", () => 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "WHATSAPP_SMART_RESULT" && msg.result) {
     waState.smartResult = msg.result;
-    waState.chatKey = msg.result.chat_key;
-    waState.chatTitle = msg.result.chat_title;
+    // Use chat_key from the message (originated from content script)
+    if (msg.chat_key) waState.chatKey = msg.chat_key;
+    if (msg.chat_title) waState.chatTitle = msg.chat_title;
     renderWaSmartResults(msg.result);
     switchToTab("capture");
   }
@@ -1185,7 +1224,7 @@ chrome.runtime.onMessage.addListener((msg) => {
     switchToTab("capture");
     checkWhatsAppMode().then(() => {
       document.getElementById("wa-chat-title-display").textContent = msg.chat_title || "WhatsApp Chat";
-      document.getElementById("wa-chat-meta").textContent = `Chat key: ${msg.chat_key?.slice(0, 12)}…`;
+      document.getElementById("wa-chat-meta").textContent = `Key: ${msg.chat_key?.slice(0, 16)}…`;
       const actionBtn = document.getElementById(`wa-btn-${msg.action_type}-sp`);
       if (actionBtn) setTimeout(() => actionBtn.click(), 300);
     });
@@ -1194,13 +1233,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 function pollWhatsAppMode() {
   if (state.currentTab === "capture") {
-    checkWhatsAppMode().then(isWA => {
-      if (isWA && waState.chatKey) {
-        chrome.runtime.sendMessage({ type: "GET_WHATSAPP_HANDLED", chat_key: waState.chatKey }, (res) => {
-          if (res?.actions) updateWaHandledUI(res.actions);
-        });
-      }
-    });
+    checkWhatsAppMode();
   }
 }
 
