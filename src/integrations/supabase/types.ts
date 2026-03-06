@@ -3279,6 +3279,42 @@ export type Database = {
           },
         ]
       }
+      whatsapp_action_log: {
+        Row: {
+          action_type: string
+          chat_key: string
+          chat_title: string | null
+          created_at: string
+          deleted_at: string | null
+          id: string
+          meta_json: Json
+          related_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          chat_key: string
+          chat_title?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          meta_json?: Json
+          related_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          chat_key?: string
+          chat_title?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          meta_json?: Json
+          related_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
