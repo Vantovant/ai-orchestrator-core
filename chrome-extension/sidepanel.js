@@ -1335,7 +1335,7 @@ document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", asy
 
   const projectId = document.getElementById("wa-capture-project")?.value;
   const result = waState.smartResult;
-  let noteResult = null;
+  let projectNoteResult = null;
   let created = 0, merged = 0, failed = 0;
 
   try {
