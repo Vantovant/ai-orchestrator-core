@@ -73,23 +73,32 @@
     return null;
   }
 
+  function extractMsgText(row) {
+    const t =
+      row.querySelector('span.selectable-text')?.innerText ||
+      row.querySelector('span[dir="ltr"]')?.innerText ||
+      row.querySelector('[dir="ltr"]')?.innerText ||
+      row.innerText ||
+      '';
+    return t.trim();
+  }
+
   function getMessages(count = CAPTURE_COUNT) {
     const msgs = [];
 
     // Primary: nodes with data-pre-plain-text (most reliable in current WhatsApp UI)
     let nodes = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
 
-    // Fallback: msg-container with selectable text
+    // Fallback: msg-container or copyable-text
     if (nodes.length === 0) {
-      nodes = Array.from(document.querySelectorAll('#main [data-testid="msg-container"]'));
+      nodes = Array.from(document.querySelectorAll('#main [data-testid="msg-container"], #main .message-in, #main .message-out, #main div.copyable-text[data-pre-plain-text]'));
     }
 
     const slice = nodes.slice(-count);
 
     for (const node of slice) {
       const pre = node.getAttribute("data-pre-plain-text") || "";
-      const text = (node.querySelector('span.selectable-text')?.innerText?.trim())
-                || node.innerText?.trim();
+      const text = extractMsgText(node);
       if (!text) continue;
 
       let direction = "unknown";
