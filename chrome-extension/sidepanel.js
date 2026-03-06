@@ -1344,6 +1344,7 @@ document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", asy
       `${m.ts || ""} • ${m.sender || m.direction}: ${m.text}`
     ).join("\n") || result.summary || "";
 
+    let noteResult = null;
     try {
       noteResult = await apiCall("capture-whatsapp", {
         method: "POST",
@@ -1359,7 +1360,28 @@ document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", asy
         },
       });
     } catch (e) {
-      console.error("Note creation failed:", e);
+      console.error("Plan note creation failed:", e);
+    }
+
+    // A2) Also create project capture if project selected
+    let projectNoteResult = null;
+    if (projectId) {
+      try {
+        const today = new Date().toISOString().split("T")[0];
+        projectNoteResult = await apiCall("capture-web", {
+          method: "POST",
+          body: {
+            url: "https://web.whatsapp.com",
+            title: `WhatsApp — ${waState.chatTitle || "Chat"} — ${today}`,
+            selected_text: transcriptText,
+            page_summary: result.summary || "",
+            project_id: projectId,
+            metadata: { source: "whatsapp_extract", chat_key: waState.chatKey, message_count: _waTranscriptCache?.messages?.length || 0, extracted_actions_count: (result.extracted_actions || []).length },
+          },
+        });
+      } catch (e) {
+        console.error("Project capture failed:", e);
+      }
     }
 
     // Log smart_extract action
