@@ -69,6 +69,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 // Clean up context when tab closes
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete waContextByTabId[tabId];
+  // Also clean session storage
+  try { chrome.storage.session.remove([`wa_ctx_${tabId}`]); } catch (_) {}
 });
 
 // ── Message handler ───────────────────────────────────
@@ -79,11 +81,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "OPEN_SIDE_PANEL") {
     const tabId = sender.tab?.id;
     if (!tabId) {
-      sendResponse({ error: "Pair extension in Settings first" });
+      try { sendResponse({ error: "Pair extension in Settings first" }); } catch (_) {}
       return true;
     }
-    chrome.sidePanel.open({ tabId }).then(() => sendResponse({ ok: true }))
-      .catch((err) => sendResponse({ error: err?.message || "Failed" }));
+    chrome.sidePanel.open({ tabId })
+      .then(() => { try { sendResponse({ ok: true }); } catch (_) {} })
+      .catch((err) => { try { sendResponse({ error: err?.message || "Failed" }); } catch (_) {} });
     return true;
   }
 
@@ -92,7 +95,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       try {
         const tab = tabs?.[0];
-        if (!tab?.id) { sendResponse({ error: "No active tab" }); return; }
+        if (!tab?.id) { try { sendResponse({ error: "No active tab" }); } catch (_) {} return; }
         const results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => ({
@@ -102,9 +105,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             metaDescription: document.querySelector('meta[name="description"]')?.getAttribute("content") || "",
           }),
         });
-        sendResponse({ data: results?.[0]?.result || null });
+        try { sendResponse({ data: results?.[0]?.result || null }); } catch (_) {}
       } catch (e) {
-        sendResponse({ error: e?.message || String(e) });
+        try { sendResponse({ error: e?.message || String(e) }); } catch (_) {}
       }
     });
     return true;
@@ -115,7 +118,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
       try {
         const tab = tabs?.[0];
-        if (!tab?.id) { sendResponse({ error: "No active tab" }); return; }
+        if (!tab?.id) { try { sendResponse({ error: "No active tab" }); } catch (_) {} return; }
         const results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => {
@@ -182,9 +185,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             return { url, title, selectedText, metaDescription, headings, textBlocks, tables, formFields, entities };
           },
         });
-        sendResponse({ data: results?.[0]?.result || null });
+        try { sendResponse({ data: results?.[0]?.result || null }); } catch (_) {}
       } catch (e) {
-        sendResponse({ error: e?.message || String(e) });
+        try { sendResponse({ error: e?.message || String(e) }); } catch (_) {}
       }
     });
     return true;
@@ -193,9 +196,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Request domain permission
   if (msg.type === "REQUEST_DOMAIN_PERMISSION") {
     const domain = String(msg.domain || "").trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-    if (!domain) { sendResponse({ granted: false, error: "Missing domain" }); return true; }
+    if (!domain) { try { sendResponse({ granted: false, error: "Missing domain" }); } catch (_) {} return true; }
     chrome.permissions.request({ origins: [`https://${domain}/*`, `http://${domain}/*`] },
-      (granted) => sendResponse({ granted }));
+      (granted) => { try { sendResponse({ granted }); } catch (_) {} });
     return true;
   }
 
@@ -205,21 +208,46 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "WHATSAPP_CHAT_CONTEXT") {
     const tabId = sender.tab?.id;
     if (tabId) {
-      waContextByTabId[tabId] = {
-        chat_key: msg.chat_key,
-        chat_title: msg.chat_title,
+      const ctx = {
+        chat_key: msg.chat_key || null,
+        chat_title: msg.chat_title || null,
       };
+      waContextByTabId[tabId] = ctx;
+      // Persist to session storage so SW restarts don't lose it
+      try { chrome.storage.session.set({ [`wa_ctx_${tabId}`]: ctx }); } catch (_) {}
     }
-    sendResponse({ ok: true });
+    try { sendResponse({ ok: true }); } catch (_) {}
     return true;
   }
 
   // Sidepanel requests current WhatsApp context
   if (msg.type === "GET_WHATSAPP_CONTEXT") {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const tab = tabs?.[0];
-      const ctx = tab?.id ? waContextByTabId[tab.id] : null;
-      sendResponse(ctx || { chat_key: null, chat_title: null });
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      try {
+        const tab = tabs?.[0];
+        const tabId = tab?.id;
+        // 1) Try in-memory first
+        if (tabId && waContextByTabId[tabId]?.chat_key) {
+          try { sendResponse(waContextByTabId[tabId]); } catch (_) {}
+          return;
+        }
+        // 2) Try session storage (survives SW sleep)
+        if (tabId) {
+          try {
+            const stored = await chrome.storage.session.get([`wa_ctx_${tabId}`]);
+            const ctx = stored[`wa_ctx_${tabId}`];
+            if (ctx?.chat_key) {
+              waContextByTabId[tabId] = ctx; // re-hydrate
+              try { sendResponse(ctx); } catch (_) {}
+              return;
+            }
+          } catch (_) {}
+        }
+        // 3) Nothing found
+        try { sendResponse({ chat_key: null, chat_title: null }); } catch (_) {}
+      } catch (_) {
+        try { sendResponse({ chat_key: null, chat_title: null }); } catch (_e) {}
+      }
     });
     return true;
   }
@@ -228,7 +256,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "GET_ACTIVE_TAB") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs?.[0];
-      sendResponse({ url: tab?.url || "", title: tab?.title || "", tabId: tab?.id });
+      try { sendResponse({ url: tab?.url || "", title: tab?.title || "", tabId: tab?.id }); } catch (_) {}
     });
     return true;
   }
@@ -257,7 +285,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
       }
     })();
-    sendResponse({ ok: true });
+    try { sendResponse({ ok: true }); } catch (_) {}
     return true;
   }
 
@@ -278,7 +306,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }, 500);
       }).catch(() => {});
     }
-    sendResponse({ ok: true });
+    try { sendResponse({ ok: true }); } catch (_) {}
     return true;
   }
 
@@ -290,9 +318,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           method: "GET",
           params: { chat_key: msg.chat_key },
         });
-        sendResponse({ actions: result.actions || [] });
+        try { sendResponse({ actions: result.actions || [] }); } catch (_) {}
       } catch {
-        sendResponse({ actions: [] });
+        try { sendResponse({ actions: [] }); } catch (_) {}
       }
     })();
     return true;
@@ -312,7 +340,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             meta: msg.meta,
           },
         });
-        sendResponse(result);
+        try { sendResponse(result); } catch (_) {}
         chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, (tabs) => {
           for (const tab of tabs) {
             if (tab.id) {
@@ -325,7 +353,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           }
         });
       } catch (e) {
-        sendResponse({ error: e.message });
+        try { sendResponse({ error: e.message }); } catch (_) {}
       }
     })();
     return true;
@@ -345,9 +373,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             dedupe_key: msg.dedupe_key,
           },
         });
-        sendResponse(result);
+        try { sendResponse(result); } catch (_) {}
       } catch (e) {
-        sendResponse({ error: e.message });
+        try { sendResponse({ error: e.message }); } catch (_) {}
       }
     })();
     return true;
@@ -361,9 +389,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           method: "POST",
           body: msg.body,
         });
-        sendResponse(result);
+        try { sendResponse(result); } catch (_) {}
       } catch (e) {
-        sendResponse({ error: e.message });
+        try { sendResponse({ error: e.message }); } catch (_) {}
       }
     })();
     return true;
@@ -373,7 +401,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "DRAFT_WHATSAPP_REPLY") {
     chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, async (tabs) => {
       const tab = tabs?.[0];
-      if (!tab?.id) { sendResponse({ error: "No WhatsApp tab" }); return; }
+      if (!tab?.id) { try { sendResponse({ error: "No WhatsApp tab" }); } catch (_) {} return; }
       try {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
@@ -387,9 +415,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           },
           args: [msg.text],
         });
-        sendResponse({ ok: true });
+        try { sendResponse({ ok: true }); } catch (_) {}
       } catch (e) {
-        sendResponse({ error: e?.message || String(e) });
+        try { sendResponse({ error: e?.message || String(e) }); } catch (_) {}
       }
     });
     return true;

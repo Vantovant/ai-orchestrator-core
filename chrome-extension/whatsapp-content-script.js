@@ -413,6 +413,9 @@
     });
     const app = document.getElementById("app") || document.body;
     obs.observe(app, { childList: true, subtree: true, attributes: true, attributeFilter: ["title", "aria-selected"] });
+
+    // Also listen for clicks on pane-side (chat list) to detect changes faster
+    document.getElementById('pane-side')?.addEventListener('click', () => setTimeout(onChatChange, 200), true);
   }
 
   // Listen for messages from background / sidepanel
