@@ -75,26 +75,30 @@
 
   function getMessages(count = CAPTURE_COUNT) {
     const msgs = [];
-    const containers = document.querySelectorAll('[data-testid="msg-container"], .message-in, .message-out, [class*="message-"]');
-    const msgEls = containers.length ? containers : document.querySelectorAll('div.copyable-text[data-pre-plain-text]');
-    const allMsgEls = Array.from(msgEls).slice(-count);
 
-    for (const el of allMsgEls) {
-      const textEl = el.querySelector('span.selectable-text') || el.querySelector('[class*="selectable-text"]');
-      const text = textEl?.innerText?.trim();
+    // Primary: nodes with data-pre-plain-text (most reliable in current WhatsApp UI)
+    let nodes = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
+
+    // Fallback: msg-container with selectable text
+    if (nodes.length === 0) {
+      nodes = Array.from(document.querySelectorAll('#main [data-testid="msg-container"]'));
+    }
+
+    const slice = nodes.slice(-count);
+
+    for (const node of slice) {
+      const pre = node.getAttribute("data-pre-plain-text") || "";
+      const text = (node.querySelector('span.selectable-text')?.innerText?.trim())
+                || node.innerText?.trim();
       if (!text) continue;
 
       let direction = "unknown";
-      const classes = el.className + " " + (el.closest("[class*='message-']")?.className || "");
-      if (classes.includes("message-out")) direction = "me";
-      else if (classes.includes("message-in")) direction = "them";
+      if (node.closest('.message-out')) direction = "me";
+      else if (node.closest('.message-in')) direction = "them";
 
       let timestamp = null;
-      const preAttr = el.getAttribute("data-pre-plain-text") || el.querySelector("[data-pre-plain-text]")?.getAttribute("data-pre-plain-text");
-      if (preAttr) {
-        const match = preAttr.match(/\[([^\]]+)\]/);
-        if (match) timestamp = match[1];
-      }
+      const match = pre.match(/\[([^\]]+)\]/);
+      if (match) timestamp = match[1];
 
       msgs.push({ text, direction, timestamp });
     }
