@@ -1012,7 +1012,11 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
     if (debugEl) {
       const dbg = snapshot?.debug || {};
       debugEl.style.display = "block";
-      debugEl.textContent = Object.entries(dbg).map(([k,v]) => `${k}=${v}`).join(', ');
+      const parts = Object.entries(dbg).map(([k,v]) => `${k}=${v}`).join(', ');
+      debugEl.textContent = `selectors: ${parts}`;
+      if (dbg.message_count === 0) {
+        debugEl.textContent += '\n⚠ No rows matched. Open a chat, scroll up once, then retry.';
+      }
     }
 
     // If no messages, show actionable error

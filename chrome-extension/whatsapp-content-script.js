@@ -87,40 +87,43 @@
   }
 
   function extractCleanText(row) {
-    // Fallback order: selectable-text → dir=auto → dir=ltr → any [dir] → innerText
-    const candidates = [
-      row.querySelector('span.selectable-text'),
-      row.querySelector('span[dir="auto"]'),
-      row.querySelector('span[dir="ltr"]'),
-      row.querySelector('[dir]'),
+    // Try targeted selectors first (most specific → least specific)
+    const selectors = [
+      'span.selectable-text',
+      'span[dir="auto"]',
+      'span[dir="ltr"]',
+      '[data-testid="msg-text"] span',
+      '[data-testid="msg-text"]',
     ];
 
-    for (const el of candidates) {
+    for (const sel of selectors) {
+      const el = row.querySelector(sel);
       if (!el) continue;
-      const t = el.innerText;
-      if (t && t.trim().length >= 2) {
-        // Normalize: newlines→spaces, collapse whitespace, trim
+      const t = (el.innerText || '').trim();
+      if (t.length >= 2 && !isUINoiseText(t)) {
         return t.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
       }
     }
 
-    // Last resort: row.innerText, but strip the data-pre-plain-text header
-    const raw = row.innerText || '';
+    // Fallback: clone row, strip known noise elements, use remaining text
+    const clone = row.cloneNode(true);
+    clone.querySelectorAll(
+      '[data-testid="msg-meta"], [data-testid="msg-time"], [data-testid="recall-marker"], ' +
+      '[data-testid="forward-context"], [data-testid="quoted-message"], ' +
+      '[data-testid="media-caption"], .quoted-mention, [role="button"]'
+    ).forEach(el => el.remove());
+
+    let text = (clone.innerText || '').trim();
+    // Strip the data-pre-plain-text header that WhatsApp prepends
     const preAttr = row.getAttribute('data-pre-plain-text') || '';
-    // The header text (e.g. "[12:34, 5/3/2026] Name: ") often appears at the start of innerText
-    let cleaned = raw;
     if (preAttr) {
-      // Remove the bracket portion that WhatsApp prepends
       const bracketMatch = preAttr.match(/\[([^\]]+)\]\s*([^:]*):?\s*/);
-      if (bracketMatch) {
-        const headerText = bracketMatch[0];
-        if (cleaned.startsWith(headerText)) {
-          cleaned = cleaned.slice(headerText.length);
-        }
+      if (bracketMatch && text.startsWith(bracketMatch[0])) {
+        text = text.slice(bracketMatch[0].length);
       }
     }
-    cleaned = cleaned.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-    return cleaned.length >= 2 ? cleaned : '';
+    text = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    return text.length >= 2 ? text : '';
   }
 
   function parsePrePlainText(attr) {
@@ -422,13 +425,15 @@
       const count = msg.count || CAPTURE_COUNT;
       const title = getChatTitle();
 
-      // Debug counts
-      const debugCounts = {
-        "data-pre-plain-text": document.querySelectorAll('#main [data-pre-plain-text]').length,
-        "selectable-text": document.querySelectorAll('#main span.selectable-text').length,
-        "span-dir-auto": document.querySelectorAll('#main span[dir="auto"]').length,
-        "span-dir-ltr": document.querySelectorAll('#main span[dir="ltr"]').length,
-      };
+      function collectDebugCounts() {
+        return {
+          "prePlain": document.querySelectorAll('#main [data-pre-plain-text]').length,
+          "selectable": document.querySelectorAll('#main span.selectable-text').length,
+          "dirAuto": document.querySelectorAll('#main span[dir="auto"]').length,
+          "dirLtr": document.querySelectorAll('#main span[dir="ltr"]').length,
+          "msgText": document.querySelectorAll('#main [data-testid="msg-text"]').length,
+        };
+      }
 
       let transcript = buildTranscript(count);
 
@@ -447,18 +452,19 @@
 
         setTimeout(() => {
           transcript = buildTranscript(count);
-          debugCounts["after-retry"] = document.querySelectorAll('#main [data-pre-plain-text]').length;
+          const debugCounts = collectDebugCounts();
           sendResponse({
             chat_key: currentChatKey,
             chat_title: title || currentChatTitle,
             transcript,
             messages: transcript.map(m => ({ text: m.text, direction: m.direction, timestamp: m.ts })),
-            debug: { ...debugCounts, message_count: transcript.length },
+            debug: { ...debugCounts, message_count: transcript.length, retried: true },
           });
-        }, 350);
+        }, 400);
         return true; // async sendResponse
       }
 
+      const debugCounts = collectDebugCounts();
       sendResponse({
         chat_key: currentChatKey,
         chat_title: title || currentChatTitle,
