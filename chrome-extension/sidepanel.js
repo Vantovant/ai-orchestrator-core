@@ -817,6 +817,10 @@ function updateWaProjectDropdown() {
 
 function fetchWaContext() {
   chrome.runtime.sendMessage({ type: "GET_WHATSAPP_CONTEXT" }, (res) => {
+    if (chrome.runtime.lastError) {
+      console.warn("[VantoOS SP] fetchWaContext error:", chrome.runtime.lastError);
+      return;
+    }
     if (res?.chat_key) {
       waState.chatKey = res.chat_key;
       waState.chatTitle = res.chat_title;
@@ -831,11 +835,17 @@ function fetchWaContext() {
       waState.chatKey = null;
       waState.chatTitle = null;
       document.getElementById("wa-chat-title-display").textContent = "No chat detected";
-      document.getElementById("wa-chat-meta").textContent = "Open a WhatsApp chat to begin";
+      document.getElementById("wa-chat-meta").textContent = "Open a WhatsApp chat — then press 🔄";
       updateWaHandledUI([]);
     }
   });
 }
+
+// Refresh Chat Context button
+document.getElementById("wa-btn-refresh-context")?.addEventListener("click", () => {
+  fetchWaContext();
+  showToast("Refreshing chat context…", "info");
+});
 
 function updateWaHandledUI(actions) {
   waState.handledActions = actions || [];
