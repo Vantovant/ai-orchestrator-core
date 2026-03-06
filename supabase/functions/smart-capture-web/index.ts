@@ -222,11 +222,13 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `You are a smart web capture assistant for VantoOS (executive OS for South African entrepreneurs). Analyze the captured web page and return structured insights. Be concise and actionable.`,
+            content: `You are a smart web capture assistant for VantoOS (executive OS for South African entrepreneurs). Analyze the captured web page and return structured insights. Be concise and actionable.
+
+CRITICAL: Every claim in your summary MUST be backed by a direct quote from the page content. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true and provide only what is directly evidenced.`,
           },
           {
             role: "user",
-            content: `Analyze this captured web page and extract:\n1. A 2-3 sentence summary\n2. Any actionable tasks (max 5)\n3. If I have projects, suggest which project this relates to\n\nPage data:\n${snapshotText.slice(0, 3000)}`,
+            content: `Analyze this captured web page and extract:\n1. A 2-3 sentence summary (each statement must reference specific page content)\n2. Evidence quotes backing each summary statement\n3. Any actionable tasks (max 5)\n4. If I have projects, suggest which project this relates to\n\nPage data:\n${snapshotText.slice(0, 3000)}`,
           },
         ],
         tools: [
@@ -234,11 +236,24 @@ Deno.serve(async (req) => {
             type: "function",
             function: {
               name: "smart_capture_result",
-              description: "Return structured smart capture analysis",
+              description: "Return structured smart capture analysis with evidence",
               parameters: {
                 type: "object",
                 properties: {
-                  summary: { type: "string", description: "2-3 sentence summary of the page" },
+                  summary: { type: "string", description: "2-3 sentence summary of the page, each statement backed by evidence" },
+                  evidence: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        claim: { type: "string", description: "A specific claim from the summary" },
+                        quote: { type: "string", description: "Direct quote from the page content supporting this claim" },
+                        source: { type: "string", description: "Where on the page (heading, paragraph, etc)" },
+                      },
+                      required: ["claim", "quote"],
+                    },
+                    description: "Evidence backing each summary claim",
+                  },
                   extracted_actions: {
                     type: "array",
                     items: {
@@ -254,14 +269,14 @@ Deno.serve(async (req) => {
                   },
                   suggested_project_name: { type: "string", description: "Name of project this might relate to, or empty" },
                   confidence: { type: "number", description: "0-1 confidence in suggestion" },
-                  needs_verification: { type: "boolean", description: "Whether info needs human verification" },
+                  needs_verification: { type: "boolean", description: "Whether info needs human verification (true if any claim lacks direct evidence)" },
                   verification_reasons: {
                     type: "array",
                     items: { type: "string" },
                     description: "Why verification is needed",
                   },
                 },
-                required: ["summary", "extracted_actions", "needs_verification"],
+                required: ["summary", "evidence", "extracted_actions", "needs_verification"],
               },
             },
           },
@@ -394,6 +409,7 @@ Deno.serve(async (req) => {
       suggested_project_id: suggestedProjectId,
       deep_link_url: deepLinkUrl,
       summary: aiResult.summary,
+      evidence: aiResult.evidence || [],
       extracted_actions: aiResult.extracted_actions || [],
       needs_verification: aiResult.needs_verification ?? true,
       verification_reasons: aiResult.verification_reasons || [],

@@ -34,125 +34,138 @@
 
   // ── Chat detection (robust, proven selectors) ─────
   function getChatTitle() {
-    // Primary: selected chat in side pane (most reliable)
     const selected = document.querySelector('#pane-side [aria-selected="true"] span[title]');
     if (selected) {
       const t = selected.getAttribute("title");
       if (t) return t;
     }
-
-    // Fallback: selected chat dir=auto
     const selectedAuto = document.querySelector('#pane-side [aria-selected="true"] span[dir="auto"]');
     if (selectedAuto) {
       const t = selectedAuto.textContent?.trim();
       if (t) return t;
     }
-
-    // Fallback: #main header first line of innerText
     const mainHeader = document.querySelector('#main header');
     if (mainHeader) {
       const lines = mainHeader.innerText?.split('\n');
       const first = lines?.[0]?.trim();
       if (first && first.length > 0 && first.length < 200) return first;
     }
-
-    // Fallback: header span[title]
     const headerSpan = document.querySelector('#main header span[title]');
     if (headerSpan) {
       const t = headerSpan.getAttribute("title");
       if (t) return t;
     }
-
-    // Fallback: header span[dir="auto"][title]
     const headerAutoTitle = document.querySelector('header span[dir="auto"][title]');
     if (headerAutoTitle) {
       const t = headerAutoTitle.getAttribute("title");
       if (t) return t;
     }
-
     return null;
   }
 
-  function normalizeMsgText(t) {
-    return (t || "")
-      .replace(/\xa0/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+  // ── Transcript Builder ────────────────────────────
+  // ONLY processes rows with [data-pre-plain-text], producing clean transcript lines.
+  // Filters out UI meta (reactions, forwarded labels, timestamps, voice call, etc.)
+
+  const UI_NOISE_PATTERNS = [
+    /^voice call$/i,
+    /^video call$/i,
+    /^missed voice call$/i,
+    /^missed video call$/i,
+    /^this message was deleted$/i,
+    /^waiting for this message/i,
+    /^you deleted this message$/i,
+    /^\d{1,2}:\d{2}\s*(am|pm)?$/i,        // bare timestamps
+    /^forwarded$/i,
+    /^(\d+)\s*(unread|new)\s*message/i,
+    /^tap to learn more$/i,
+    /^reply$/i,
+  ];
+
+  function isUINoiseText(text) {
+    return UI_NOISE_PATTERNS.some(p => p.test(text));
   }
 
-  // WhatsApp changes DOM a lot. We try multiple places (row + its closest message container)
-  // to reliably get the visible message text.
-  function extractMsgText(row) {
-    const container =
-      row.closest('[data-testid="msg-container"], .message-in, .message-out, div[role="row"]') ||
-      row.parentElement ||
-      row;
-
+  function extractCleanText(row) {
+    // Fallback order: selectable-text → dir=auto → dir=ltr → any [dir] → innerText
     const candidates = [
-      row.querySelector('span.selectable-text')?.innerText,
-      row.querySelector('span[dir="ltr"]')?.innerText,
-      row.querySelector('span[dir="auto"]')?.innerText,
-      container.querySelector('span.selectable-text')?.innerText,
-      container.querySelector('span[dir="ltr"]')?.innerText,
-      container.querySelector('span[dir="auto"]')?.innerText,
-      row.querySelector('[dir="ltr"]')?.innerText,
-      row.querySelector('[dir="auto"]')?.innerText,
-      row.innerText,
-      container.innerText,
+      row.querySelector('span.selectable-text'),
+      row.querySelector('span[dir="auto"]'),
+      row.querySelector('span[dir="ltr"]'),
+      row.querySelector('[dir]'),
     ];
 
-    const picked = candidates.find((x) => x && String(x).trim().length > 0) || "";
-    return normalizeMsgText(String(picked));
-  }
-
-
-  function getMessages(count = CAPTURE_COUNT) {
-    const msgs = [];
-
-    // WhatsApp DOM is volatile. Prefer the most stable message anchor first.
-    let rows = Array.from(document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]'));
-
-    // Fallbacks if WA changes classnames
-    if (rows.length === 0) rows = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
-    if (rows.length === 0) rows = Array.from(document.querySelectorAll('#main [data-testid="msg-container"]'));
-    if (rows.length === 0) rows = Array.from(document.querySelectorAll('#main .message-in, #main .message-out'));
-
-    const slice = rows.slice(-count);
-
-    for (const row of slice) {
-      const text = extractMsgText(row);
-      if (!text) continue;
-
-      const container =
-        row.closest('[data-testid="msg-container"], .message-in, .message-out, div[role="row"]') || row;
-
-      // Direction (best-effort)
-      let direction = "unknown";
-      const classes = String(container.className || "") + " " + String(row.className || "");
-      if (classes.includes("message-out")) direction = "me";
-      else if (classes.includes("message-in")) direction = "them";
-
-      // Timestamp from data-pre-plain-text like "[12:34, 05/03/2026] Name:"
-      let timestamp = null;
-      const preAttr =
-        row.getAttribute("data-pre-plain-text") ||
-        container.getAttribute("data-pre-plain-text") ||
-        row.querySelector("[data-pre-plain-text]")?.getAttribute("data-pre-plain-text") ||
-        null;
-
-      if (preAttr) {
-        const match = String(preAttr).match(/\[([^\]]+)\]/);
-        if (match) timestamp = match[1];
+    for (const el of candidates) {
+      if (!el) continue;
+      const t = el.innerText;
+      if (t && t.trim().length >= 2) {
+        // Normalize: newlines→spaces, collapse whitespace, trim
+        return t.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
       }
-
-      msgs.push({ text, direction, timestamp });
     }
 
-    return msgs;
+    // Last resort: row.innerText, but strip the data-pre-plain-text header
+    const raw = row.innerText || '';
+    const preAttr = row.getAttribute('data-pre-plain-text') || '';
+    // The header text (e.g. "[12:34, 5/3/2026] Name: ") often appears at the start of innerText
+    let cleaned = raw;
+    if (preAttr) {
+      // Remove the bracket portion that WhatsApp prepends
+      const bracketMatch = preAttr.match(/\[([^\]]+)\]\s*([^:]*):?\s*/);
+      if (bracketMatch) {
+        const headerText = bracketMatch[0];
+        if (cleaned.startsWith(headerText)) {
+          cleaned = cleaned.slice(headerText.length);
+        }
+      }
+    }
+    cleaned = cleaned.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+    return cleaned.length >= 2 ? cleaned : '';
   }
 
-  async function computeChatKey
-(title) {
+  function parsePrePlainText(attr) {
+    // Format: "[12:34, 05/03/2026] Sender Name: " or "[12:34 pm, 05/03/2026] Sender: "
+    const match = String(attr || '').match(/\[([^\]]+)\]\s*([^:]*?):\s*$/);
+    if (!match) return { ts: null, sender: null };
+    return { ts: match[1].trim(), sender: match[2].trim() || null };
+  }
+
+  function buildTranscript(count = CAPTURE_COUNT) {
+    const rows = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
+    const slice = rows.slice(-count);
+    const transcript = [];
+
+    for (const row of slice) {
+      const preAttr = row.getAttribute('data-pre-plain-text');
+      const { ts, sender } = parsePrePlainText(preAttr);
+      const text = extractCleanText(row);
+
+      if (!text || text.length < 2) continue;
+      if (isUINoiseText(text)) continue;
+
+      // Direction
+      const container = row.closest('.message-in, .message-out, [data-testid="msg-container"]') || row;
+      const classes = String(container.className || '') + ' ' + String(row.className || '');
+      let direction = 'unknown';
+      if (classes.includes('message-out')) direction = 'me';
+      else if (classes.includes('message-in')) direction = 'them';
+
+      transcript.push({ ts, sender, direction, text });
+    }
+
+    return transcript;
+  }
+
+  // Legacy compat: getMessages returns the same shape the bar actions expect
+  function getMessages(count = CAPTURE_COUNT) {
+    return buildTranscript(count).map(m => ({
+      text: m.text,
+      direction: m.direction,
+      timestamp: m.ts,
+    }));
+  }
+
+  async function computeChatKey(title) {
     const hash = window.location.hash;
     if (hash && hash.includes("/chat/")) {
       const chatId = hash.split("/chat/")[1]?.split("/")[0]?.split("?")[0];
@@ -192,13 +205,11 @@
       pointerEvents: "auto",
     });
 
-    // Left: Vanto logo + chat title
     const left = document.createElement("div");
     left.style.cssText = "display:flex;align-items:center;gap:6px;min-width:0;flex-shrink:1;overflow:hidden;";
     left.innerHTML = `<span style="color:#22c55e;font-weight:700;font-size:13px;flex-shrink:0;">V</span>
       <span id="vantoos-wa-chat-title" style="color:#888;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></span>`;
 
-    // Center: Action buttons
     const center = document.createElement("div");
     center.style.cssText = "display:flex;align-items:center;gap:4px;flex-shrink:0;";
     const btns = [
@@ -230,7 +241,6 @@
       center.appendChild(btn);
     }
 
-    // Right: Handled stamp + Open Panel
     const right = document.createElement("div");
     right.style.cssText = "display:flex;align-items:center;gap:6px;flex-shrink:0;";
 
@@ -264,8 +274,6 @@
     barEl.appendChild(center);
     barEl.appendChild(right);
     document.body.appendChild(barEl);
-
-    // DO NOT modify body layout — bar is a fixed overlay only
   }
 
   function updateBarTitle(title) {
@@ -307,7 +315,6 @@
       return;
     }
 
-    // Manual actions: open side panel with pre-filled data
     chrome.runtime.sendMessage({
       type: "WHATSAPP_MANUAL_ACTION",
       action_type: action,
@@ -354,7 +361,6 @@
       currentChatTitle = null;
       updateBarTitle(null);
       updateHandledStamp([]);
-      // Broadcast null context
       chrome.runtime.sendMessage({
         type: "WHATSAPP_CHAT_CONTEXT",
         chat_key: null,
@@ -367,14 +373,12 @@
     currentChatKey = await computeChatKey(title);
     updateBarTitle(title);
 
-    // Broadcast context to background (single source of truth)
     chrome.runtime.sendMessage({
       type: "WHATSAPP_CHAT_CONTEXT",
       chat_key: currentChatKey,
       chat_title: currentChatTitle,
     });
 
-    // Fetch handled status
     chrome.runtime.sendMessage({
       type: "GET_WHATSAPP_HANDLED",
       chat_key: currentChatKey,
@@ -413,56 +417,54 @@
       showBarToast(msg.message);
     }
 
-    // ── Snapshot API: sidepanel requests messages from content script ──
+    // ── Snapshot API: sidepanel requests transcript from content script ──
     if (msg?.type === "WA_GET_CHAT_SNAPSHOT") {
-      const count = msg.count || 30;
+      const count = msg.count || CAPTURE_COUNT;
       const title = getChatTitle();
 
-      // Debug counts for each selector strategy
+      // Debug counts
       const debugCounts = {
         "data-pre-plain-text": document.querySelectorAll('#main [data-pre-plain-text]').length,
-        "div.copyable-text[data-pre-plain-text]": document.querySelectorAll('#main div.copyable-text[data-pre-plain-text]').length,
-        "msg-container": document.querySelectorAll('#main [data-testid="msg-container"]').length,
         "selectable-text": document.querySelectorAll('#main span.selectable-text').length,
+        "span-dir-auto": document.querySelectorAll('#main span[dir="auto"]').length,
         "span-dir-ltr": document.querySelectorAll('#main span[dir="ltr"]').length,
       };
 
-      let messages = getMessages(count);
+      let transcript = buildTranscript(count);
 
       // If 0 messages, do one scroll nudge to force lazy-render, then retry
-      if (messages.length === 0) {
+      if (transcript.length === 0) {
         const scroller =
           document.querySelector('#main [data-testid="conversation-panel-messages"]') ||
           document.querySelector('#main [role="application"]') ||
           document.querySelector('#main div[tabindex="-1"]') ||
           document.querySelector('#main');
 
-        // Nudge the conversation scroller (WhatsApp virtualizes message rows)
         try {
           scroller?.scrollBy?.(0, 300);
           scroller?.scrollBy?.(0, -300);
         } catch (_) {}
 
         setTimeout(() => {
-          messages = getMessages(count);
-          // Update debug counts after retry
-          debugCounts["after-retry-data-pre-plain-text"] = document.querySelectorAll('#main [data-pre-plain-text]').length;
-          debugCounts["after-retry-selectable-text"] = document.querySelectorAll('#main span.selectable-text').length;
+          transcript = buildTranscript(count);
+          debugCounts["after-retry"] = document.querySelectorAll('#main [data-pre-plain-text]').length;
           sendResponse({
             chat_key: currentChatKey,
             chat_title: title || currentChatTitle,
-            messages,
-            debug: { ...debugCounts, message_count: messages.length, sample: messages.slice(-3).map(m => ({ direction: m.direction, timestamp: m.timestamp, text: (m.text || "").slice(0, 120) })) },
+            transcript,
+            messages: transcript.map(m => ({ text: m.text, direction: m.direction, timestamp: m.ts })),
+            debug: { ...debugCounts, message_count: transcript.length },
           });
-        }, 350);;
+        }, 350);
         return true; // async sendResponse
       }
 
       sendResponse({
         chat_key: currentChatKey,
         chat_title: title || currentChatTitle,
-        messages,
-        debug: { ...debugCounts, message_count: messages.length, sample: messages.slice(-3).map(m => ({ direction: m.direction, timestamp: m.timestamp, text: (m.text || "").slice(0, 120) })) },
+        transcript,
+        messages: transcript.map(m => ({ text: m.text, direction: m.direction, timestamp: m.ts })),
+        debug: { ...debugCounts, message_count: transcript.length },
       });
       return true;
     }
@@ -473,22 +475,19 @@
   // ── Init ──────────────────────────────────────────
   async function init() {
     try {
-      // Wait for BOTH pane-side and main to be present
       await waitForAll(["#pane-side", "#main"], 20000);
       createBar();
       observeChatChanges();
-      // Initial chat detection after short delay
       setTimeout(onChatChange, 800);
     } catch {
       console.warn("[VantoOS] WhatsApp Web not ready — retrying with fallback");
-      // Fallback: try with just #pane-side or #app
       try {
         await waitForAll(["#pane-side"], 10000);
         createBar();
         observeChatChanges();
-        setTimeout(onChatChange, 800);
+        setTimeout(onChatChange, 1000);
       } catch {
-        console.warn("[VantoOS] WhatsApp Web not ready at all");
+        console.warn("[VantoOS] WhatsApp Web init failed — bar not injected");
       }
     }
   }
