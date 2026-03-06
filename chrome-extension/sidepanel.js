@@ -949,7 +949,7 @@ async function hashForDedupe(str) {
   }
 });
 
-// WhatsApp Smart Extract button
+// WhatsApp Smart Extract button — uses content script snapshot (no executeScript scraping)
 document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async () => {
   if (!state.token) {
     showToast("Connect to VantoOS first", "error");
@@ -963,65 +963,52 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Extracting…';
 
+  // Hide previous debug info
+  const debugEl = document.getElementById("wa-debug-info");
+  if (debugEl) debugEl.style.display = "none";
+
   try {
-    const tabs = await new Promise(resolve => chrome.tabs.query({ active: true, currentWindow: true }, resolve));
-    const tab = tabs?.[0];
-    if (!tab?.id) throw new Error("No active tab");
+    // Step 1: Get active tab ID
+    const tabInfo = await new Promise(resolve =>
+      chrome.runtime.sendMessage({ type: "GET_ACTIVE_TAB" }, resolve)
+    );
+    const tabId = tabInfo?.tabId;
+    if (!tabId) throw new Error("No active WhatsApp tab found");
 
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: async (count) => {
-        const headerEl = document.querySelector('#pane-side [aria-selected="true"] span[title]')
-          || document.querySelector('#main header span[title]')
-          || document.querySelector('header span[dir="auto"][title]');
-        const chatTitle = headerEl?.getAttribute("title") || document.querySelector('#main header')?.innerText?.split('\n')[0]?.trim() || "Unknown";
-
-        function scrapeMessages(n) {
-          const msgs = [];
-          let nodes = Array.from(document.querySelectorAll('#main [data-pre-plain-text]'));
-          if (nodes.length === 0) {
-            nodes = Array.from(document.querySelectorAll('#main [data-testid="msg-container"]'));
-          }
-          for (const node of nodes.slice(-n)) {
-            const pre = node.getAttribute("data-pre-plain-text") || "";
-            const text = (node.querySelector('span.selectable-text')?.innerText?.trim()) || node.innerText?.trim();
-            if (!text) continue;
-            let direction = "unknown";
-            if (node.closest('.message-out')) direction = "me";
-            else if (node.closest('.message-in')) direction = "them";
-            let timestamp = null;
-            const match = pre.match(/\[([^\]]+)\]/);
-            if (match) timestamp = match[1];
-            msgs.push({ text, direction, timestamp });
-          }
-          return msgs;
+    // Step 2: Request snapshot from content script (single source of truth)
+    const snapshot = await new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tabId, { type: "WA_GET_CHAT_SNAPSHOT", count: 30 }, (res) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error("Content script not responding — refresh WhatsApp and try again."));
+          return;
         }
-
-        let messages = scrapeMessages(count);
-        if (messages.length === 0) {
-          // Retry: scroll to force render, wait, re-scrape
-          const scroller = document.querySelector('#main [role="application"]') || document.querySelector('#main');
-          scroller?.scrollBy(0, 200);
-          await new Promise(r => setTimeout(r, 250));
-          messages = scrapeMessages(count);
-        }
-        return { chatTitle, messages };
-      },
-      args: [25],
+        resolve(res);
+      });
     });
 
-    const { chatTitle, messages } = results?.[0]?.result || {};
-    if (!messages?.length) throw new Error("No readable text messages found (try scrolling the chat a bit, then retry).");
+    const messages = snapshot?.messages || [];
+    const chatTitle = snapshot?.chat_title || waState.chatTitle;
+    const chatKey = snapshot?.chat_key || waState.chatKey;
 
-    // Use authoritative chat_key from content script, don't invent one
-    document.getElementById("wa-chat-title-display").textContent = waState.chatTitle || chatTitle;
+    // Step 3: Show debug info if 0 messages
+    if (!messages.length) {
+      if (debugEl) {
+        debugEl.style.display = "block";
+        debugEl.textContent = "Debug selectors: " + JSON.stringify(snapshot?.debug || {}, null, 1);
+      }
+      throw new Error("No text messages found. Scroll the chat a bit, then press 🔄 and try again.");
+    }
+
+    // Update UI with snapshot info
+    document.getElementById("wa-chat-title-display").textContent = chatTitle || "WhatsApp Chat";
     document.getElementById("wa-chat-meta").textContent = `${messages.length} messages captured`;
 
+    // Step 4: Call AI
     const result = await apiCall("smart-capture-whatsapp", {
       method: "POST",
       body: {
-        chat_key: waState.chatKey,
-        chat_title: waState.chatTitle || chatTitle,
+        chat_key: chatKey,
+        chat_title: chatTitle,
         messages,
         selected_text: "",
         user_context: { locale: "ZA", currency_default: "ZAR" },
