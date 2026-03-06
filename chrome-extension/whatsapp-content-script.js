@@ -380,6 +380,8 @@
       type: "WHATSAPP_CHAT_CONTEXT",
       chat_key: currentChatKey,
       chat_title: currentChatTitle,
+    }, () => {
+      if (chrome.runtime.lastError) console.warn('[VantoOS] context send error', chrome.runtime.lastError);
     });
 
     chrome.runtime.sendMessage({
