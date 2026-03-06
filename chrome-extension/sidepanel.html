@@ -140,8 +140,13 @@
 
       <!-- Chat info -->
       <div class="card" id="wa-chat-info">
-        <div class="card-title" id="wa-chat-title-display">No chat detected</div>
-        <div class="card-meta" id="wa-chat-meta">Open a WhatsApp chat to begin</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="card-title" id="wa-chat-title-display">No chat detected</div>
+            <div class="card-meta" id="wa-chat-meta">Open a WhatsApp chat to begin</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="wa-btn-refresh-context" title="Refresh Chat Context" style="flex-shrink:0;font-size:10px;padding:4px 8px">🔄</button>
+        </div>
       </div>
 
       <!-- Handled Stamp -->

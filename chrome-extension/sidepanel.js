@@ -1247,7 +1247,8 @@ function pollWhatsAppMode() {
   }
 }
 
-setInterval(pollWhatsAppMode, 5000);
+// Poll every 3 seconds for WhatsApp context updates
+setInterval(pollWhatsAppMode, 3000);
 
 // ── Init ──────────────────────────────────────────────
 loadAuth();
