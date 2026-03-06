@@ -1482,7 +1482,8 @@ document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", asy
     receiptEl.style.display = "block";
 
     const receiptParts = [];
-    if (noteResult) receiptParts.push(`📝 Note ${noteResult.action}`);
+    if (noteResult) receiptParts.push(`📝 Plan Note ${noteResult.action}`);
+    if (projectNoteResult) receiptParts.push(`📁 Project Note ${projectNoteResult.action || "saved"}`);
     if (created) receiptParts.push(`${created} created`);
     if (merged) receiptParts.push(`${merged} merged`);
     if (failed) receiptParts.push(`${failed} failed`);
@@ -1491,9 +1492,27 @@ document.getElementById("wa-btn-send-to-vantoos")?.addEventListener("click", asy
     document.getElementById("wa-receipt-details").textContent = receiptParts.join(" · ");
 
     const openPlanBtn = document.getElementById("wa-btn-open-plan");
-    const planUrl = noteResult?.plan_url || (projectId ? `${APP_URL}/projects/${projectId}` : `${APP_URL}/plan`);
+    const planUrl = noteResult?.plan_url || `${APP_URL}/plan`;
     openPlanBtn.style.display = "block";
+    openPlanBtn.textContent = "📋 Open Plan";
     openPlanBtn.onclick = () => chrome.tabs.create({ url: planUrl });
+
+    // Show "Open Project" button if project was selected
+    let openProjectBtn = document.getElementById("wa-btn-open-project");
+    if (!openProjectBtn) {
+      openProjectBtn = document.createElement("button");
+      openProjectBtn.id = "wa-btn-open-project";
+      openProjectBtn.className = "btn btn-sm btn-secondary";
+      openProjectBtn.style.cssText = "margin-left:6px";
+      openPlanBtn.parentNode.appendChild(openProjectBtn);
+    }
+    if (projectId) {
+      openProjectBtn.style.display = "inline-flex";
+      openProjectBtn.textContent = "📁 Open Project";
+      openProjectBtn.onclick = () => chrome.tabs.create({ url: `${APP_URL}/projects?id=${projectId}` });
+    } else {
+      openProjectBtn.style.display = "none";
+    }
 
     showToast(`✅ Saved to VantoOS: ${receiptParts.join(", ")}`);
 
