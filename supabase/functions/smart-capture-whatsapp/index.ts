@@ -132,24 +132,39 @@ Deno.serve(async (req) => {
 Analyze the WhatsApp conversation and extract structured insights. Be concise and actionable.
 Locale: ${locale}, Default currency: ${currency}.
 
-CRITICAL RULES for money_direction:
-- ONLY set money_direction if you detect CLEAR money patterns (amounts with currency symbols, bank keywords like paid/credited/debited/fee/commission, or explicit transaction references).
-- If no money patterns exist, money_direction MUST be: {"transaction_type":"unknown","ui_action":"none","confidence":0}
-- transaction_type can be: "income", "expense", "bank_fee", "transfer", "commission", "unknown"
-- ui_action can be: "create_income", "create_expense", "none"
-- NEVER guess or infer financial transactions from non-financial context.`;
+CRITICAL RULES:
+1. EVIDENCE-BASED OUTPUT: Every claim in your summary MUST be backed by a direct quote from the transcript. If you cannot find a supporting quote, do NOT make the claim. Set needs_verification=true and provide a minimal factual summary only.
+2. For money_direction: ONLY set it if you detect CLEAR money patterns (amounts with currency symbols, bank keywords like paid/credited/debited/fee/commission, or explicit transaction references). If no money patterns exist, money_direction MUST be: {"transaction_type":"unknown","ui_action":"none","confidence":0}
+3. transaction_type can be: "income", "expense", "bank_fee", "transfer", "commission", "unknown"
+4. ui_action can be: "create_income", "create_expense", "none"
+5. NEVER guess or infer financial transactions from non-financial context.
+6. NEVER invent facts not present in the transcript.`;
 
     const toolDef = {
       type: "function" as const,
       function: {
         name: "whatsapp_extract_result",
-        description: "Return structured WhatsApp chat analysis",
+        description: "Return structured WhatsApp chat analysis with evidence",
         parameters: {
           type: "object",
           properties: {
-            summary: { type: "string", description: "2-3 sentence summary of the conversation" },
+            summary: { type: "string", description: "2-3 sentence summary of the conversation, each statement backed by evidence" },
             confidence: { type: "number", description: "0-1 confidence in analysis" },
             requires_user_confirmation: { type: "boolean" },
+            needs_verification: { type: "boolean", description: "True if any claim lacks direct evidence from the transcript" },
+            evidence: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  claim: { type: "string", description: "A specific claim from the summary" },
+                  quote: { type: "string", description: "Direct quote from the transcript supporting this claim" },
+                  source: { type: "string", description: "Who said it (sender name or direction)" },
+                },
+                required: ["claim", "quote"],
+              },
+              description: "Evidence backing each summary claim. Every summary statement must have a corresponding evidence entry.",
+            },
             extracted_actions: {
               type: "array",
               items: {
@@ -177,7 +192,7 @@ CRITICAL RULES for money_direction:
             },
             draft_reply: { type: "string", description: "Optional suggested reply text" },
           },
-          required: ["summary", "confidence", "requires_user_confirmation", "extracted_actions", "money_direction"],
+          required: ["summary", "confidence", "requires_user_confirmation", "needs_verification", "evidence", "extracted_actions", "money_direction"],
         },
       },
     };
