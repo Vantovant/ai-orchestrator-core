@@ -570,6 +570,36 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
         badgeEl.innerHTML = '<span class="badge badge-info">✓ Grounded</span>';
       }
 
+      // Web evidence display
+      const webEvidenceEl = document.getElementById("smart-evidence-list");
+      const webEvidence = result.evidence || [];
+      if (webEvidence.length > 0) {
+        webEvidenceEl.style.display = "block";
+        webEvidenceEl.innerHTML = '<div style="font-size:10px;font-weight:600;color:#888;margin-bottom:4px">📎 Evidence</div>' +
+          webEvidence.map(e =>
+            `<div style="margin-bottom:6px;padding:4px 6px;background:#0a0a0a;border-radius:4px;border-left:2px solid #4ade80">` +
+            `<div style="color:#d4d4d4;font-size:11px">${escapeHtml(e.claim || '')}</div>` +
+            `<div style="color:#666;font-size:10px;font-style:italic;margin-top:2px">"${escapeHtml(e.quote || '')}"</div>` +
+            `</div>`
+          ).join('');
+      } else {
+        webEvidenceEl.style.display = "none";
+      }
+
+      // Web confirmation gate
+      const webGate = document.getElementById("smart-confirm-gate");
+      const webConfirmCb = document.getElementById("smart-confirm-checkbox");
+      const applyTasksBtn = document.getElementById("btn-apply-tasks");
+      if (result.needs_verification) {
+        webGate.style.display = "block";
+        if (applyTasksBtn) applyTasksBtn.disabled = true;
+        webConfirmCb.checked = false;
+        webConfirmCb.onchange = () => { if (applyTasksBtn) applyTasksBtn.disabled = !webConfirmCb.checked; };
+      } else {
+        webGate.style.display = "none";
+        if (applyTasksBtn) applyTasksBtn.disabled = false;
+      }
+
       if (result.suggested_project_id && !projectId) {
         const proj = state.projects.find(p => p.id === result.suggested_project_id);
         if (proj) {
@@ -584,9 +614,7 @@ document.getElementById("btn-smart-capture").addEventListener("click", () => {
       if (actions.length) {
         document.getElementById("smart-actions-container").style.display = "block";
         document.getElementById("smart-actions-count").textContent = `${actions.length} task(s)`;
-
         const prioColor = (p) => p === "critical" ? "#dc2626" : p === "high" ? "#ef4444" : p === "medium" ? "#f59e0b" : "#6b7280";
-
         document.getElementById("smart-actions-list").innerHTML = actions.map((a, i) => `
           <div class="action-item">
             <input type="checkbox" id="action-${i}" checked data-index="${i}" />
