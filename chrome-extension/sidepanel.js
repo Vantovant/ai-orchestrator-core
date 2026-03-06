@@ -1114,12 +1114,28 @@ function renderWaSmartResults(result) {
   confChip.title = `AI confidence: ${conf}%`;
 
   const verifyChip = document.getElementById("wa-verify-chip");
-  if (result.requires_user_confirmation) {
+  if (result.requires_user_confirmation || result.needs_verification) {
     verifyChip.style.display = "";
     verifyChip.textContent = "⚠ Verify";
     verifyChip.title = "This analysis needs your verification before acting";
   } else {
     verifyChip.style.display = "none";
+  }
+
+  // Evidence quotes
+  const evidenceEl = document.getElementById("wa-evidence-list");
+  const evidence = result.evidence || [];
+  if (evidence.length > 0) {
+    evidenceEl.style.display = "block";
+    evidenceEl.innerHTML = '<div style="font-size:10px;font-weight:600;color:#888;margin-bottom:4px">📎 Evidence</div>' +
+      evidence.map(e =>
+        `<div style="margin-bottom:6px;padding:4px 6px;background:#0a0a0a;border-radius:4px;border-left:2px solid #4ade80">` +
+        `<div style="color:#d4d4d4;font-size:11px">${escapeHtml(e.claim || '')}</div>` +
+        `<div style="color:#666;font-size:10px;font-style:italic;margin-top:2px">"${escapeHtml(e.quote || '')}"</div>` +
+        `</div>`
+      ).join('');
+  } else {
+    evidenceEl.style.display = "none";
   }
 
   // Money direction badge

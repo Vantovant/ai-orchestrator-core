@@ -245,6 +245,8 @@ CRITICAL RULES:
       summary: aiResult.summary,
       confidence: aiResult.confidence,
       requires_user_confirmation: aiResult.requires_user_confirmation ?? true,
+      needs_verification: aiResult.needs_verification ?? true,
+      evidence: aiResult.evidence || [],
       extracted_actions: aiResult.extracted_actions || [],
       money_direction: aiResult.money_direction,
       draft_reply: aiResult.draft_reply || null,
