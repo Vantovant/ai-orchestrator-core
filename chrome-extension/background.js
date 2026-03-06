@@ -3,6 +3,9 @@
 const API_BASE = "https://zsvaqtlomgofwqkpwxeh.supabase.co/functions/v1";
 const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzdmFxdGxvbWdvZndxa3B3eGVoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyNzI1OTgsImV4cCI6MjA4Nzg0ODU5OH0.Hcxiwb9kZGuoB_VjbQIRQQICJJGkZcfxsbU3LunM510";
 
+// ── WhatsApp context store (per tab) ──────────────────
+const waContextByTabId = {};
+
 // ── Helpers ───────────────────────────────────────────
 async function getToken() {
   const stored = await chrome.storage.local.get(["vantoos_token"]);
@@ -49,20 +52,23 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const allowed = stored.vantoos_allowed_domains || [];
     if (!allowed.includes(hostname)) return;
 
-    // Inject WhatsApp-specific content script for web.whatsapp.com
     if (hostname === "web.whatsapp.com") {
       await chrome.scripting.executeScript({
         target: { tabId },
         files: ["whatsapp-content-script.js"],
       });
     } else {
-      // Standard FAB content script
       await chrome.scripting.executeScript({
         target: { tabId },
         files: ["content-script.js"],
       });
     }
-  } catch (_) { /* ignore non-injectable tabs like chrome:// */ }
+  } catch (_) { /* ignore non-injectable tabs */ }
+});
+
+// Clean up context when tab closes
+chrome.tabs.onRemoved.addListener((tabId) => {
+  delete waContextByTabId[tabId];
 });
 
 // ── Message handler ───────────────────────────────────
@@ -195,11 +201,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── WhatsApp-specific messages ──────────────────────
 
+  // Content script broadcasts chat context on every chat change
+  if (msg.type === "WHATSAPP_CHAT_CONTEXT") {
+    const tabId = sender.tab?.id;
+    if (tabId) {
+      waContextByTabId[tabId] = {
+        chat_key: msg.chat_key,
+        chat_title: msg.chat_title,
+      };
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+
+  // Sidepanel requests current WhatsApp context
+  if (msg.type === "GET_WHATSAPP_CONTEXT") {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs?.[0];
+      const ctx = tab?.id ? waContextByTabId[tab.id] : null;
+      sendResponse(ctx || { chat_key: null, chat_title: null });
+    });
+    return true;
+  }
+
   // Get active tab info (for sidepanel to detect WhatsApp)
   if (msg.type === "GET_ACTIVE_TAB") {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs?.[0];
-      sendResponse({ url: tab?.url || "", title: tab?.title || "" });
+      sendResponse({ url: tab?.url || "", title: tab?.title || "", tabId: tab?.id });
     });
     return true;
   }
@@ -218,9 +247,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             user_context: { locale: "ZA", currency_default: "ZAR" },
           },
         });
-        // Forward result to sidepanel
-        chrome.runtime.sendMessage({ type: "WHATSAPP_SMART_RESULT", result });
-        // Notify content script
+        chrome.runtime.sendMessage({ type: "WHATSAPP_SMART_RESULT", result, chat_key: msg.chat_key, chat_title: msg.chat_title });
         if (sender.tab?.id) {
           chrome.tabs.sendMessage(sender.tab.id, { type: "WHATSAPP_TOAST", message: "✨ Smart Extract complete — check side panel" });
         }
@@ -236,11 +263,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Manual action from WhatsApp bar (forwarded to sidepanel)
   if (msg.type === "WHATSAPP_MANUAL_ACTION") {
-    // Open side panel first, then forward
     const tabId = sender.tab?.id;
     if (tabId) {
       chrome.sidePanel.open({ tabId }).then(() => {
-        // Small delay to let sidepanel load
         setTimeout(() => {
           chrome.runtime.sendMessage({
             type: "WHATSAPP_PREFILL_ACTION",
@@ -257,7 +282,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // Get WhatsApp handled status (from content script)
+  // Get WhatsApp handled status (from content script or sidepanel)
   if (msg.type === "GET_WHATSAPP_HANDLED") {
     (async () => {
       try {
@@ -288,7 +313,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           },
         });
         sendResponse(result);
-        // Notify content script to update stamp
         chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, (tabs) => {
           for (const tab of tabs) {
             if (tab.id) {
@@ -329,6 +353,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // Create finance entry for WhatsApp
+  if (msg.type === "CREATE_WHATSAPP_FINANCE") {
+    (async () => {
+      try {
+        const result = await apiCall("extension-finance-create", {
+          method: "POST",
+          body: msg.body,
+        });
+        sendResponse(result);
+      } catch (e) {
+        sendResponse({ error: e.message });
+      }
+    })();
+    return true;
+  }
+
   // Draft reply into WhatsApp composer
   if (msg.type === "DRAFT_WHATSAPP_REPLY") {
     chrome.tabs.query({ url: "https://web.whatsapp.com/*" }, async (tabs) => {
@@ -338,12 +378,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: (text) => {
-            // Find the WhatsApp composer input
             const composer = document.querySelector('[data-testid="conversation-compose-box-input"]')
               || document.querySelector('footer [contenteditable="true"]')
               || document.querySelector('[role="textbox"][contenteditable="true"]');
             if (!composer) return;
-            // Insert text (does NOT send)
             composer.focus();
             document.execCommand("insertText", false, text);
           },
