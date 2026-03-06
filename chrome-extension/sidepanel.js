@@ -1009,11 +1009,12 @@ document.getElementById("wa-btn-smart-extract")?.addEventListener("click", async
 
     // Step 3: Show debug info if 0 messages
     if (!messages.length) {
+      const dbg = snapshot?.debug || {};
       if (debugEl) {
         debugEl.style.display = "block";
-        debugEl.textContent = "Debug selectors: " + JSON.stringify(snapshot?.debug || {}, null, 1);
+        debugEl.textContent = `Debug: data-pre-plain-text=${dbg["data-pre-plain-text"]||0}, span[dir=ltr]=${dbg["span-dir-ltr"]||0}, selectable-text=${dbg["selectable-text"]||0}`;
       }
-      throw new Error("No text messages found. Scroll the chat a bit, then press 🔄 and try again.");
+      throw new Error("No text messages found. Open a chat, scroll a little, then retry.");
     }
 
     // Update UI with snapshot info
