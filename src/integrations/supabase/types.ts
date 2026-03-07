@@ -2020,9 +2020,11 @@ export type Database = {
         Row: {
           attendees: Json | null
           created_at: string
+          dedupe_key: string | null
           deleted_at: string | null
           description: string | null
           end_time: string
+          external_id: string | null
           id: string
           location: string | null
           notes: string | null
@@ -2035,9 +2037,11 @@ export type Database = {
         Insert: {
           attendees?: Json | null
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
           description?: string | null
           end_time: string
+          external_id?: string | null
           id?: string
           location?: string | null
           notes?: string | null
@@ -2050,9 +2054,11 @@ export type Database = {
         Update: {
           attendees?: Json | null
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
           description?: string | null
           end_time?: string
+          external_id?: string | null
           id?: string
           location?: string | null
           notes?: string | null
@@ -2109,7 +2115,9 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          dedupe_key: string | null
           deleted_at: string | null
+          external_id: string | null
           id: string
           links_json: Json
           note_date: string
@@ -2121,7 +2129,9 @@ export type Database = {
         Insert: {
           content?: string
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
+          external_id?: string | null
           id?: string
           links_json?: Json
           note_date?: string
@@ -2133,7 +2143,9 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
+          external_id?: string | null
           id?: string
           links_json?: Json
           note_date?: string
@@ -2456,7 +2468,9 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          dedupe_key: string | null
           deleted_at: string | null
+          external_id: string | null
           id: string
           note_date: string
           project_id: string
@@ -2467,7 +2481,9 @@ export type Database = {
         Insert: {
           content?: string
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
+          external_id?: string | null
           id?: string
           note_date?: string
           project_id: string
@@ -2478,7 +2494,9 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
+          external_id?: string | null
           id?: string
           note_date?: string
           project_id?: string
@@ -2668,8 +2686,10 @@ export type Database = {
       reminders: {
         Row: {
           created_at: string
+          dedupe_key: string | null
           deleted_at: string | null
           description: string | null
+          external_id: string | null
           id: string
           is_done: boolean
           project_id: string | null
@@ -2681,8 +2701,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
           description?: string | null
+          external_id?: string | null
           id?: string
           is_done?: boolean
           project_id?: string | null
@@ -2694,8 +2716,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          dedupe_key?: string | null
           deleted_at?: string | null
           description?: string | null
+          external_id?: string | null
           id?: string
           is_done?: boolean
           project_id?: string | null
@@ -2803,6 +2827,7 @@ export type Database = {
           description: string | null
           due_date: string | null
           estimated_minutes: number | null
+          external_id: string | null
           id: string
           last_touched_at: string
           note_id: string | null
@@ -2824,6 +2849,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
+          external_id?: string | null
           id?: string
           last_touched_at?: string
           note_id?: string | null
@@ -2845,6 +2871,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           estimated_minutes?: number | null
+          external_id?: string | null
           id?: string
           last_touched_at?: string
           note_id?: string | null
