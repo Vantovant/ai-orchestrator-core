@@ -1894,6 +1894,65 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_docs: {
+        Row: {
+          created_at: string
+          dedupe_key: string | null
+          deleted_at: string | null
+          external_id: string | null
+          id: string
+          project_id: string | null
+          raw_text: string | null
+          source_type: string
+          source_url: string | null
+          status: string
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key?: string | null
+          deleted_at?: string | null
+          external_id?: string | null
+          id?: string
+          project_id?: string | null
+          raw_text?: string | null
+          source_type?: string
+          source_url?: string | null
+          status?: string
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string | null
+          deleted_at?: string | null
+          external_id?: string | null
+          id?: string
+          project_id?: string | null
+          raw_text?: string | null
+          source_type?: string
+          source_url?: string | null
+          status?: string
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_docs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_news_cache: {
         Row: {
           created_at: string
