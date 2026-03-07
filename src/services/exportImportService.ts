@@ -132,19 +132,23 @@ async function upsertRows(table: string, rows: Record<string, any>[], titleKey =
       // Try to find existing by external_id or dedupe_key
       let existing: any = null;
       if (externalId) {
-        const { data } = await supabase.from(table as any).select("id").eq("user_id", user.id).eq("external_id" as any, externalId).is("deleted_at", null).maybeSingle();
+        const q = supabase.from(table as any).select("id") as any;
+        const { data } = await q.eq("user_id", user.id).eq("external_id", externalId).is("deleted_at", null).maybeSingle();
         existing = data;
       }
       if (!existing && dedupeKey) {
-        const { data } = await supabase.from(table as any).select("id").eq("user_id", user.id).eq("dedupe_key" as any, dedupeKey).is("deleted_at", null).maybeSingle();
+        const q = supabase.from(table as any).select("id") as any;
+        const { data } = await q.eq("user_id", user.id).eq("dedupe_key", dedupeKey).is("deleted_at", null).maybeSingle();
         existing = data;
       }
 
       if (existing) {
-        await supabase.from(table as any).update({ ...cleanRow, external_id: externalId, dedupe_key: dedupeKey } as any).eq("id", existing.id);
+        const q = supabase.from(table as any) as any;
+        await q.update({ ...cleanRow, external_id: externalId, dedupe_key: dedupeKey }).eq("id", existing.id);
         result.updated++;
       } else {
-        await supabase.from(table as any).insert({ ...cleanRow, user_id: user.id, external_id: externalId, dedupe_key: dedupeKey } as any);
+        const q = supabase.from(table as any) as any;
+        await q.insert({ ...cleanRow, user_id: user.id, external_id: externalId, dedupe_key: dedupeKey });
         result.created++;
       }
     } catch (e: any) {
