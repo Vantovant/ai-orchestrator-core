@@ -555,11 +555,14 @@ export default function SettingsPage() {
       {/* BYOK Settings */}
       <AIKeysSettings />
 
-      {/* Data Export */}
+      {/* Data Export & Import */}
+      <ExportImportCard />
+
+      {/* Legacy Finance Export */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2"><Download className="h-4 w-4" /> Data Export</CardTitle>
-          <CardDescription>Export your data as CSV files.</CardDescription>
+          <CardTitle className="text-base flex items-center gap-2"><Download className="h-4 w-4" /> Finance Export</CardTitle>
+          <CardDescription>Export finance-specific data as CSV.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
