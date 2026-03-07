@@ -557,6 +557,11 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
           />
         </TabsContent>
 
+        {/* KNOWLEDGE */}
+        <TabsContent value="knowledge">
+          <ProjectKnowledgeTab projectId={projectId} projectName={p.name} />
+        </TabsContent>
+
         {/* AI PARTNER */}
         <TabsContent value="ai_partner">
           <AIPartnerTab projectId={projectId} projectName={p.name} />
