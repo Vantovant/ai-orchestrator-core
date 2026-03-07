@@ -30,6 +30,7 @@ import TasksTimelineView from "@/components/projects/TasksTimelineView";
 import AccomplishmentsSection from "@/components/projects/AccomplishmentsSection";
 import BlockedModal from "@/components/projects/BlockedModal";
 import ImportWizard from "@/components/projects/ImportWizard";
+import ProjectKnowledgeTab from "@/components/projects/ProjectKnowledgeTab";
 // Solution tabs
 import BusinessCaseTab from "@/components/solutions/BusinessCaseTab";
 import FinancialModelTab from "@/components/solutions/FinancialModelTab";
