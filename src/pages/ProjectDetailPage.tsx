@@ -30,6 +30,7 @@ import TasksTimelineView from "@/components/projects/TasksTimelineView";
 import AccomplishmentsSection from "@/components/projects/AccomplishmentsSection";
 import BlockedModal from "@/components/projects/BlockedModal";
 import ImportWizard from "@/components/projects/ImportWizard";
+import ProjectKnowledgeTab from "@/components/projects/ProjectKnowledgeTab";
 // Solution tabs
 import BusinessCaseTab from "@/components/solutions/BusinessCaseTab";
 import FinancialModelTab from "@/components/solutions/FinancialModelTab";
@@ -351,6 +352,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             <TabsTrigger value="meetings" className="gap-1 text-xs sm:text-sm"><Calendar className="h-3.5 w-3.5 hidden sm:inline" /> Meetings</TabsTrigger>
             <TabsTrigger value="notes" className="gap-1 text-xs sm:text-sm"><FileText className="h-3.5 w-3.5 hidden sm:inline" /> Notes</TabsTrigger>
             <TabsTrigger value="links" className="gap-1 text-xs sm:text-sm"><Link2 className="h-3.5 w-3.5 hidden sm:inline" /> Links</TabsTrigger>
+            <TabsTrigger value="knowledge" className="gap-1 text-xs sm:text-sm"><BookOpen className="h-3.5 w-3.5 hidden sm:inline" /> Knowledge</TabsTrigger>
             <TabsTrigger value="ai_partner" className="gap-1 text-xs sm:text-sm"><Brain className="h-3.5 w-3.5 hidden sm:inline" /> AI</TabsTrigger>
           </TabsList>
         </div>
@@ -553,6 +555,11 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             onAdd={(label, url) => addLinkMut.mutate({ label, url })}
             onRemove={(id) => removeLinkMut.mutate(id)}
           />
+        </TabsContent>
+
+        {/* KNOWLEDGE */}
+        <TabsContent value="knowledge">
+          <ProjectKnowledgeTab projectId={projectId} projectName={p.name} />
         </TabsContent>
 
         {/* AI PARTNER */}
