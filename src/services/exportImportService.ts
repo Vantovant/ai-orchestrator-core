@@ -39,11 +39,9 @@ function generateDedupe(userId: string, title: string, date: string, projectId: 
 
 // ─── EXPORT ────────────────────────────────────────────────
 async function fetchAll(table: string) {
-  const { data, error } = await supabase
-    .from(table as any)
-    .select("*")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+async function fetchAll(table: string) {
+  const q = supabase.from(table as any).select("*") as any;
+  const { data, error } = await q.is("deleted_at", null).order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
