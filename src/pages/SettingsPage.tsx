@@ -20,6 +20,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import ProfileWizard from "@/components/settings/ProfileWizard";
 import AIKeysSettings from "@/components/settings/AIKeysSettings";
+import ExportImportCard from "@/components/settings/ExportImportCard";
 
 const CONTEXT_CHAR_LIMIT = 500;
 
