@@ -352,6 +352,7 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
             <TabsTrigger value="meetings" className="gap-1 text-xs sm:text-sm"><Calendar className="h-3.5 w-3.5 hidden sm:inline" /> Meetings</TabsTrigger>
             <TabsTrigger value="notes" className="gap-1 text-xs sm:text-sm"><FileText className="h-3.5 w-3.5 hidden sm:inline" /> Notes</TabsTrigger>
             <TabsTrigger value="links" className="gap-1 text-xs sm:text-sm"><Link2 className="h-3.5 w-3.5 hidden sm:inline" /> Links</TabsTrigger>
+            <TabsTrigger value="knowledge" className="gap-1 text-xs sm:text-sm"><BookOpen className="h-3.5 w-3.5 hidden sm:inline" /> Knowledge</TabsTrigger>
             <TabsTrigger value="ai_partner" className="gap-1 text-xs sm:text-sm"><Brain className="h-3.5 w-3.5 hidden sm:inline" /> AI</TabsTrigger>
           </TabsList>
         </div>
