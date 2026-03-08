@@ -476,9 +476,26 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
                   <GanttChart className="h-3.5 w-3.5" /> Timeline
                 </Button>
               </div>
-              <Button variant="outline" size="sm" className="gap-1 text-xs ml-auto" onClick={() => setImportOpen(true)}>
-                <Upload className="h-3.5 w-3.5" /> Import Tasks
-              </Button>
+              <div className="flex items-center gap-2 ml-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1 text-xs" disabled={exportTasksMut.isPending}>
+                      <Download className="h-3.5 w-3.5" /> Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => exportTasksMut.mutate("csv")} className="text-xs">
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => exportTasksMut.mutate("json")} className="text-xs">
+                      Export as JSON
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={() => setImportOpen(true)}>
+                  <Upload className="h-3.5 w-3.5" /> Import
+                </Button>
+              </div>
             </div>
 
             {linkedTasks.isLoading ? <Skeleton className="h-48" /> : (
