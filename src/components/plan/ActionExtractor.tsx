@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Check, ListTodo, Bell, ExternalLink, AlertCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { taskService, makeDedupe, type BulkUpsertResult, type BulkUpsertItemResult } from "@/services/taskService";
+import { taskService, makeDedupe, type BulkUpsertResult, type BulkUpsertItemResult, type BulkUpsertInput } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { useQueryClient } from "@tanstack/react-query";
 import { WriteReceiptBanner, buildReceipt, type WriteReceiptData } from "@/components/ui/WriteReceipt";
