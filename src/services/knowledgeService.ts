@@ -229,6 +229,6 @@ export const knowledgeService = {
       .limit(limit);
 
     if (error) throw error;
-    return (chunks ?? []) as KnowledgeChunk[];
+    return (chunks ?? []) as unknown as KnowledgeChunk[];
   },
 };
