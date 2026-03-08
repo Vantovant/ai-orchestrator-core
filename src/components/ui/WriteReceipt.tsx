@@ -12,6 +12,7 @@ export interface WriteReceiptData {
   source_reference?: string;
   timestamp: string;
   summary: string;
+  verification_message?: string;
 }
 
 interface Props {
