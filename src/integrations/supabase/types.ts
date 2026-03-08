@@ -1894,6 +1894,47 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          content_hash: string
+          created_at: string
+          doc_id: string
+          id: string
+          token_count: number
+          updated_at: string
+        }
+        Insert: {
+          chunk_index?: number
+          content?: string
+          content_hash?: string
+          created_at?: string
+          doc_id: string
+          id?: string
+          token_count?: number
+          updated_at?: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          content_hash?: string
+          created_at?: string
+          doc_id?: string
+          id?: string
+          token_count?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_chunks_doc_id_fkey"
+            columns: ["doc_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_docs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       knowledge_docs: {
         Row: {
           created_at: string
