@@ -8,6 +8,8 @@ import { taskService, makeDedupe, type Task, type TaskInsert } from "@/services/
 import { meetingService, type Meeting, type MeetingInsert } from "@/services/meetingService";
 import { reminderService, type ReminderInsert } from "@/services/reminderService";
 import { activityLogService } from "@/services/activityLogService";
+import { taskExportService } from "@/services/taskExportService";
+import { taskImportService } from "@/services/taskImportService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import TaskDetailDrawer from "@/components/plan/TaskDetailDrawer";
 import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
 import DictationMic from "@/components/plan/DictationMic";
@@ -49,7 +52,7 @@ import {
   Clock, Save, Sparkles, FolderKanban, Loader2, BookOpen, Copy,
   ChevronLeft, ChevronRight, Brain, LayoutList, Kanban, GanttChart,
   Trophy, Upload, Shield, DollarSign, Banknote, Briefcase, Gavel,
-  ClipboardCheck, FileEdit, Send,
+  ClipboardCheck, FileEdit, Send, Download,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
@@ -145,30 +148,34 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
     },
   });
 
-  // Bulk import
+  // Bulk import with upsert
   const importTasksMut = useMutation({
     mutationFn: async (tasks: any[]) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      for (let i = 0; i < tasks.length; i++) {
-        await taskService.create({
-          title: tasks[i].title,
-          status: tasks[i].status,
-          priority: tasks[i].priority,
-          due_date: tasks[i].due_date,
-          start_date: tasks[i].start_date,
-          completed_at: tasks[i].completed_at,
-          order_index: i + 1,
-          project_id: projectId,
-        } as any);
-      }
+      return taskImportService.importTasks(projectId, tasks);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["project_tasks", projectId] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
-      activityLogService.log(projectId, "tasks_imported", {});
+      activityLogService.log(projectId, "tasks_imported", { created: result.created, updated: result.updated });
       setImportOpen(false);
-      toast.success("Tasks imported!");
+      const msg = result.updated > 0
+        ? `Imported: ${result.created} created, ${result.updated} updated`
+        : `Imported ${result.created} tasks`;
+      toast.success(msg);
+      if (result.errors.length > 0) {
+        toast.warning(`${result.errors.length} tasks had errors`);
+      }
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  // Export tasks
+  const exportTasksMut = useMutation({
+    mutationFn: async (format: "csv" | "json") => {
+      return taskExportService.exportTasks(projectId, format);
+    },
+    onSuccess: (result) => {
+      toast.success(`Exported ${result.count} tasks`);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -469,9 +476,26 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
                   <GanttChart className="h-3.5 w-3.5" /> Timeline
                 </Button>
               </div>
-              <Button variant="outline" size="sm" className="gap-1 text-xs ml-auto" onClick={() => setImportOpen(true)}>
-                <Upload className="h-3.5 w-3.5" /> Import Tasks
-              </Button>
+              <div className="flex items-center gap-2 ml-auto">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1 text-xs" disabled={exportTasksMut.isPending}>
+                      <Download className="h-3.5 w-3.5" /> Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => exportTasksMut.mutate("csv")} className="text-xs">
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => exportTasksMut.mutate("json")} className="text-xs">
+                      Export as JSON
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="outline" size="sm" className="gap-1 text-xs" onClick={() => setImportOpen(true)}>
+                  <Upload className="h-3.5 w-3.5" /> Import
+                </Button>
+              </div>
             </div>
 
             {linkedTasks.isLoading ? <Skeleton className="h-48" /> : (
