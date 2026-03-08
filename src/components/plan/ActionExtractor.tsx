@@ -117,11 +117,11 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     const taskItems = toApply.filter(s => s.type === "task");
     const reminderItems = toApply.filter(s => s.type === "reminder");
 
-    // Each task gets a unique dedupe_key; store it on the suggestion for later lookup
+    // Build a stable dedupe map keyed by suggestion title+index (no object mutation)
+    const dedupeByTitle = new Map<string, string>();
     const taskInserts = taskItems.map((s, idx) => {
-      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
-      // Tag suggestion with its dedupe key for result mapping
-      s._dedupeKey = dk;
+      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title + "|" + idx);
+      dedupeByTitle.set(s.title + "|" + idx, dk);
       return {
         title: s.title,
         priority: priorityMap[s.priority || "P2"] || "medium",
