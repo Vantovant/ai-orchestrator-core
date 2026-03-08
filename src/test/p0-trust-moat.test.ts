@@ -46,9 +46,9 @@ describe("BulkUpsertResult items mapping", () => {
       items,
     };
 
-    const map = new Map(result.items.map(i => [i.dedupe_key, i]));
-    expect(map.get("dk-a")?.status).toBe("created");
-    expect(map.get("dk-b")?.status).toBe("merged");
+    const map = new Map(result.items.map(i => [i.client_temp_id, i]));
+    expect(map.get("ctid-0")?.status).toBe("created");
+    expect(map.get("ctid-1")?.status).toBe("merged");
   });
 
   it("partial failure still maps correctly", () => {
