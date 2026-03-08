@@ -25,17 +25,24 @@ export interface Task {
 export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "start_date" | "completed_at" | "order_index" | "source" | "estimated_minutes" | "project_id" | "dedupe_key" | "note_id">>;
 
 export interface BulkUpsertItemResult {
+  /** Caller-provided client_temp_id echoed back for deterministic UI mapping */
+  client_temp_id: string;
   dedupe_key: string;
   status: "created" | "merged" | "failed";
   id?: string;
   reason?: string;
 }
 
+export interface BulkUpsertInput extends TaskInsert {
+  /** Opaque caller ID echoed back in results – NOT stored in DB */
+  client_temp_id: string;
+}
+
 export interface BulkUpsertResult {
   created: string[];
   merged: string[];
   failed: { title: string; reason: string }[];
-  /** Deterministic per-item results keyed by dedupe_key */
+  /** Deterministic per-item results keyed by client_temp_id */
   items: BulkUpsertItemResult[];
 }
 
