@@ -8,7 +8,7 @@ import VerificationBadge from "@/components/ai/VerificationBadge";
 import {
   Zap, RefreshCw, DollarSign, CheckSquare, CalendarPlus, Bell, FileText, AlertTriangle,
   CreditCard, Receipt, Plane, MessageSquare, Info, ShoppingBag, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, HelpCircle, TrendingUp,
-  Database,
+  Database, ShieldAlert,
 } from "lucide-react";
 
 const TYPE_ICONS: Record<string, typeof DollarSign> = {
@@ -33,14 +33,13 @@ const TYPE_COLORS: Record<string, string> = {
   other: "bg-muted text-muted-foreground border-border/50",
 };
 
-// Direction badge config
+// Direction badge config — strong visual signals
 const DIRECTION_BADGE: Record<string, { label: string; icon: typeof ArrowDownLeft; className: string }> = {
   in: { label: "IN", icon: ArrowDownLeft, className: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30" },
   out: { label: "OUT", icon: ArrowUpRight, className: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30" },
   neutral: { label: "TRANSFER", icon: ArrowLeftRight, className: "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30" },
 };
 
-// Dynamic route labels based on money direction
 function getRouteLabel(route: SuggestedRoute, moneyDirection: any): { label: string; icon: typeof DollarSign } {
   if (route.target === "finance_income") {
     return { label: "Create Income", icon: TrendingUp };
@@ -76,17 +75,9 @@ interface Props {
 }
 
 export default function SmartExtractPanel({
-  emailId,
-  emailSubject,
-  emailSender,
-  emailSnippet,
-  selectedAccount,
-  financeCreated,
-  onCreateExpense,
-  onCreateIncome,
-  onCreateTask,
-  onCreateMeeting,
-  onCreateReminder,
+  emailId, emailSubject, emailSender, emailSnippet,
+  selectedAccount, financeCreated,
+  onCreateExpense, onCreateIncome, onCreateTask, onCreateMeeting, onCreateReminder,
 }: Props) {
   const [extract, setExtract] = useState<EmailExtract | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,9 +108,23 @@ export default function SmartExtractPanel({
     setRerunning(false);
   };
 
+  // Re-fetch when account changes (force fresh analysis)
   useEffect(() => {
     fetchExtract();
-  }, [emailId, selectedAccount?.last4]);
+  }, [emailId]);
+
+  // Force re-run when selected account changes
+  useEffect(() => {
+    if (selectedAccount?.last4 && extract) {
+      // Check if the cached extract used a different account
+      const cachedLast4 = (extract as any)?.selected_account_last4;
+      if (cachedLast4 && cachedLast4 !== selectedAccount.last4) {
+        fetchExtract(true);
+      } else if (!cachedLast4 && selectedAccount.last4) {
+        fetchExtract(true);
+      }
+    }
+  }, [selectedAccount?.last4]);
 
   const handleRouteAction = (route: SuggestedRoute) => {
     const moneyDir = (extract?.entities_json as any)?.money_direction;
@@ -137,17 +142,10 @@ export default function SmartExtractPanel({
           onCreateExpense(extract?.entities_json, route);
         }
         break;
-      case "task":
-        onCreateTask();
-        break;
-      case "meeting":
-        onCreateMeeting();
-        break;
-      case "reminder":
-        onCreateReminder();
-        break;
-      default:
-        break;
+      case "task": onCreateTask(); break;
+      case "meeting": onCreateMeeting(); break;
+      case "reminder": onCreateReminder(); break;
+      default: break;
     }
   };
 
@@ -167,10 +165,10 @@ export default function SmartExtractPanel({
 
   if (error) {
     return (
-      <Card className="border-border/50 bg-muted/10 p-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-          <span>{error}</span>
+      <Card className="border-destructive/30 bg-destructive/5 p-3">
+        <div className="flex items-center gap-2 text-xs">
+          <AlertTriangle className="h-3.5 w-3.5 text-destructive shrink-0" />
+          <span className="text-destructive">{error}</span>
           <Button variant="ghost" size="sm" className="h-6 text-[10px] ml-auto" onClick={() => fetchExtract(true)}>
             Retry
           </Button>
@@ -187,9 +185,18 @@ export default function SmartExtractPanel({
   const TypeIcon = TYPE_ICONS[extract.detected_type] || MessageSquare;
   const needsVerification = extract.requires_user_confirmation || extract.confidence < 0.75;
 
-  // Direction badge
+  // Direction state
   const dirBadge = moneyDir?.direction ? DIRECTION_BADGE[moneyDir.direction] : null;
   const DirIcon = dirBadge?.icon || HelpCircle;
+  const isUnknownDirection = moneyDir?.transaction_type === "unknown" || moneyDir?.ui_action === "none";
+
+  // Filter routes: suppress finance actions if direction is unknown
+  const safeRoutes = routes.filter(route => {
+    if (isUnknownDirection && (route.target === "finance_income" || route.target === "finance_expense")) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <Card className="border-border/50 bg-muted/10 p-3 space-y-3">
@@ -209,9 +216,15 @@ export default function SmartExtractPanel({
               {dirBadge.label}
             </Badge>
           )}
+          {/* Unknown direction warning */}
+          {isUnknownDirection && moneyDir && (
+            <Badge variant="outline" className="text-[10px] h-4 px-1.5 py-0 gap-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
+              <HelpCircle className="h-2.5 w-2.5" />
+              UNKNOWN
+            </Badge>
+          )}
           <span className="text-[10px] text-muted-foreground">{Math.round(extract.confidence * 100)}%</span>
           {needsVerification && <VerificationBadge grounded={false} />}
-          {/* Cached indicator */}
           <Badge variant="outline" className={`text-[10px] h-4 px-1.5 py-0 gap-0.5 ${isCached ? "bg-muted text-muted-foreground border-border" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"}`}>
             <Database className="h-2.5 w-2.5" />
             {isCached ? "Cached" : "Fresh"}
@@ -235,6 +248,17 @@ export default function SmartExtractPanel({
       {/* Money direction reason */}
       {moneyDir?.reason && moneyDir.transaction_type !== "unknown" && (
         <p className="text-[10px] text-muted-foreground italic">{moneyDir.reason}</p>
+      )}
+
+      {/* Unknown direction explanation */}
+      {isUnknownDirection && moneyDir && (
+        <div className="flex items-start gap-1.5 p-2 rounded-md bg-amber-500/5 border border-amber-500/20">
+          <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber-800 dark:text-amber-300">
+            Direction unclear — finance actions hidden to protect your ledger. 
+            {selectedAccount ? " Try selecting a different account or re-run analysis." : " Select a bank account above for better accuracy."}
+          </p>
+        </div>
       )}
 
       {/* Extracted entities */}
@@ -281,10 +305,10 @@ export default function SmartExtractPanel({
         </div>
       )}
 
-      {/* Action buttons – dynamic based on money direction */}
-      {routes.length > 0 && (
+      {/* Action buttons */}
+      {safeRoutes.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pt-1">
-          {routes.map((route, i) => {
+          {safeRoutes.map((route, i) => {
             const routeInfo = getRouteLabel(route, moneyDir);
             const RouteIcon = routeInfo.icon;
             const isFinanceRoute = route.target === "finance_income" || route.target === "finance_expense";
@@ -305,6 +329,11 @@ export default function SmartExtractPanel({
             );
           })}
         </div>
+      )}
+
+      {/* No finance actions available message */}
+      {isUnknownDirection && routes.some(r => r.target === "finance_income" || r.target === "finance_expense") && (
+        <p className="text-[10px] text-muted-foreground">Finance actions hidden — direction must be confirmed first.</p>
       )}
     </Card>
   );

@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, Loader2, Check, ListTodo, Bell, ExternalLink, AlertCircle, RefreshCw } from "lucide-react";
+import { Sparkles, Loader2, Check, ListTodo, Bell, ExternalLink, AlertCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { taskService, makeDedupe, type BulkUpsertResult } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { useQueryClient } from "@tanstack/react-query";
+import { WriteReceiptBanner, buildReceipt, type WriteReceiptData } from "@/components/ui/WriteReceipt";
 
 export interface ActionSuggestion {
   type: "task" | "reminder";
@@ -19,7 +20,6 @@ export interface ActionSuggestion {
   priority?: string;
   source: string;
   selected?: boolean;
-  /** per-item apply status */
   applyStatus?: "idle" | "queued" | "created" | "merged" | "failed";
   failReason?: string;
   createdId?: string;
@@ -32,6 +32,7 @@ interface Props {
   noteDate: string;
   projectId?: string | null;
   noteId?: string | null;
+  onApplyComplete?: () => void;
 }
 
 function buildNoteText(content: string, structureJson: Record<string, string>, structuredMode: boolean): string {
@@ -48,11 +49,12 @@ function buildNoteText(content: string, structureJson: Record<string, string>, s
 
 const priorityMap: Record<string, string> = { P1: "high", P2: "medium", P3: "low" };
 
-export default function ActionExtractor({ noteContent, structureJson, structuredMode, noteDate, projectId, noteId }: Props) {
+export default function ActionExtractor({ noteContent, structureJson, structuredMode, noteDate, projectId, noteId, onApplyComplete }: Props) {
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<ActionSuggestion[]>([]);
   const [applying, setApplying] = useState(false);
-  const [lastResult, setLastResult] = useState<BulkUpsertResult | null>(null);
+  const [receipt, setReceipt] = useState<WriteReceiptData | null>(null);
+  const [verifiedCount, setVerifiedCount] = useState<number | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -64,7 +66,8 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     }
     setLoading(true);
     setSuggestions([]);
-    setLastResult(null);
+    setReceipt(null);
+    setVerifiedCount(null);
     try {
       const { data, error } = await supabase.functions.invoke("plan-ai-extract-actions", {
         body: { content: text, note_date: noteDate },
@@ -78,10 +81,12 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       }));
       if (items.length === 0) {
         toast.info("No actionable items found in these notes.");
+      } else {
+        toast.success(`Found ${items.length} actionable item${items.length !== 1 ? "s" : ""} — review and apply.`);
       }
       setSuggestions(items);
     } catch (e: any) {
-      toast.error(e.message || "Failed to extract actions");
+      toast.error(e.message || "Failed to extract actions — check AI keys in Settings.");
     } finally {
       setLoading(false);
     }
@@ -99,6 +104,8 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     if (toApply.length === 0) { toast.info("No items selected."); return; }
 
     setApplying(true);
+    setReceipt(null);
+    setVerifiedCount(null);
 
     // Mark all selected as queued
     setSuggestions(prev => prev.map(s =>
@@ -107,11 +114,9 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         : s
     ));
 
-    // Separate tasks and reminders
     const taskItems = toApply.filter(s => s.type === "task");
     const reminderItems = toApply.filter(s => s.type === "reminder");
 
-    // Build task inserts with dedupe keys
     const taskInserts = taskItems.map(s => ({
       title: s.title,
       priority: priorityMap[s.priority || "P2"] || "medium",
@@ -127,7 +132,6 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       taskResult = await taskService.bulkUpsert(taskInserts);
     }
 
-    // Handle reminders (no dedupe for now, just create)
     let reminderCreated = 0;
     let reminderFailed: { title: string; reason: string }[] = [];
     for (const s of reminderItems) {
@@ -142,51 +146,31 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       }
     }
 
-    // Update suggestion statuses
+    // Update per-item statuses
     const updatedSuggestions = suggestions.map(s => {
       if (!s.selected || s.applyStatus === "created" || s.applyStatus === "merged") return s;
 
       if (s.type === "task") {
-        const dedupeKey = makeDedupe(user.id, projectId || null, noteId || null, s.title);
-        const taskIdx = taskInserts.findIndex(t => t.dedupe_key === dedupeKey);
-        if (taskIdx === -1) return s;
-
-        // Check if this task was created, merged, or failed
-        let createdIdx = 0;
-        let mergedIdx = 0;
-        let failedIdx = 0;
-        for (let i = 0; i <= taskIdx; i++) {
-          const dk = taskInserts[i].dedupe_key;
-          if (taskResult.created.length > createdIdx && i === taskInserts.findIndex((_, j) => j === i)) {
-            // simplified: map by order
-          }
-        }
-
-        // Simpler approach: match by title
         const failedItem = taskResult.failed.find(f => f.title === s.title);
-        if (failedItem) {
-          return { ...s, applyStatus: "failed" as const, failReason: failedItem.reason };
-        }
-        // Check created vs merged by index tracking
-        const insertIndex = taskInserts.findIndex(t => t.title === s.title);
-        if (insertIndex !== -1) {
-          // Count how many before this were created/merged/failed
-          let cIdx = 0, mIdx = 0, fIdx = 0;
+        if (failedItem) return { ...s, applyStatus: "failed" as const, failReason: failedItem.reason };
+        const createdItem = taskResult.created.find((_, ci) => {
+          const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
+          return taskInserts[ci]?.dedupe_key === dk;
+        });
+        // Simple: if not failed, check created vs merged by matching title order
+        const idx = taskInserts.findIndex(t => t.title === s.title);
+        if (idx !== -1) {
+          let cCount = 0, mCount = 0;
           for (let i = 0; i < taskInserts.length; i++) {
-            const fi = taskResult.failed.find(f => f.title === taskInserts[i].title);
-            if (fi) { fIdx++; continue; }
-            if (i === insertIndex) {
-              // This one is either created or merged
-              const remainCreated = taskResult.created.length - cIdx;
-              if (remainCreated > 0) {
-                return { ...s, applyStatus: "created" as const, createdId: taskResult.created[cIdx] };
-              } else {
-                return { ...s, applyStatus: "merged" as const, createdId: taskResult.merged[mIdx] };
+            if (taskResult.failed.find(f => f.title === taskInserts[i].title)) continue;
+            if (i === idx) {
+              if (cCount < taskResult.created.length) {
+                return { ...s, applyStatus: "created" as const, createdId: taskResult.created[cCount] };
               }
+              return { ...s, applyStatus: "merged" as const, createdId: taskResult.merged[mCount] };
             }
-            // Count
-            if (cIdx < taskResult.created.length) cIdx++;
-            else mIdx++;
+            if (cCount < taskResult.created.length) cCount++;
+            else mCount++;
           }
         }
         return { ...s, applyStatus: "created" as const };
@@ -201,29 +185,61 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     });
 
     setSuggestions(updatedSuggestions);
-    setLastResult(taskResult);
-    setApplying(false);
 
-    // Invalidate tasks query
-    qc.invalidateQueries({ queryKey: ["tasks"] });
-
-    // Toast with breakdown
     const totalCreated = taskResult.created.length + reminderCreated;
     const totalMerged = taskResult.merged.length;
     const totalFailed = taskResult.failed.length + reminderFailed.length;
+    const allIds = [...taskResult.created, ...taskResult.merged];
 
-    if (totalFailed > 0) {
-      toast.error(`Applied: ${totalCreated} created, ${totalMerged} merged, ${totalFailed} failed`);
+    // Build receipt
+    const newReceipt = buildReceipt(
+      "note_extract",
+      totalCreated,
+      totalMerged,
+      totalFailed,
+      allIds,
+      noteId || undefined,
+    );
+    setReceipt(newReceipt);
+
+    // Post-apply verification: count open tasks in this project
+    if (projectId && (totalCreated > 0 || totalMerged > 0)) {
+      try {
+        const { count, error: countError } = await supabase
+          .from("tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("project_id", projectId)
+          .is("deleted_at", null);
+        if (!countError && count !== null) {
+          setVerifiedCount(count);
+        }
+      } catch {}
+    }
+
+    setApplying(false);
+
+    // Invalidate queries broadly
+    qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["reminders"] });
+
+    // Toast
+    if (totalCreated === 0 && totalMerged === 0) {
+      toast.error(`Apply failed — ${totalFailed} item${totalFailed !== 1 ? "s" : ""} could not be saved.`);
+    } else if (totalFailed > 0) {
+      toast.warning(`Partially applied — ${totalCreated} created, ${totalMerged} merged, ${totalFailed} failed.`);
     } else {
-      toast.success(`Applied to Tasks — ${totalCreated} created, ${totalMerged} merged`);
+      toast.success(`Receipt ready — ${totalCreated} created, ${totalMerged} merged.`);
+    }
+
+    // Auto-switch to Tasks tab if anything was created/merged
+    if ((totalCreated > 0 || totalMerged > 0) && onApplyComplete) {
+      onApplyComplete();
     }
   };
 
   const handleViewInTasks = () => {
-    const allIds = [
-      ...(lastResult?.created || []),
-      ...(lastResult?.merged || []),
-    ];
+    const allIds = receipt?.affected_ids || [];
     const params = new URLSearchParams();
     params.set("tab", "tasks");
     if (projectId) params.set("project_id", projectId);
@@ -235,7 +251,6 @@ export default function ActionExtractor({ noteContent, structureJson, structured
 
   const selectedCount = suggestions.filter(s => s.selected && s.applyStatus !== "created" && s.applyStatus !== "merged").length;
   const hasResults = suggestions.length > 0;
-  const hasApplied = suggestions.some(s => s.applyStatus === "created" || s.applyStatus === "merged");
 
   return (
     <div className="space-y-2">
@@ -274,16 +289,21 @@ export default function ActionExtractor({ noteContent, structureJson, structured
               </Button>
             )}
 
-            {hasApplied && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full gap-1"
-                onClick={handleViewInTasks}
-              >
-                <ExternalLink className="h-4 w-4" />
-                View in Tasks →
-              </Button>
+            {/* Receipt banner */}
+            {receipt && (
+              <WriteReceiptBanner
+                receipt={receipt}
+                onNavigate={handleViewInTasks}
+                navigateLabel="View in Tasks →"
+              />
+            )}
+
+            {/* Post-apply verification */}
+            {verifiedCount !== null && (
+              <div className="flex items-center gap-1.5 text-[11px] text-primary">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Verified: {verifiedCount} open task{verifiedCount !== 1 ? "s" : ""} now visible in this project</span>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -302,7 +322,7 @@ function ActionRow({ suggestion: s, idx, onToggle, applying }: {
     switch (s.applyStatus) {
       case "queued": return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground mt-0.5 shrink-0" />;
       case "created": return <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />;
-      case "merged": return <RefreshCw className="h-4 w-4 text-warning mt-0.5 shrink-0" />;
+      case "merged": return <RefreshCw className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />;
       case "failed": return <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />;
       default: return (
         <Checkbox
@@ -355,12 +375,12 @@ function ActionRow({ suggestion: s, idx, onToggle, applying }: {
           )}
           {s.applyStatus === "created" && (
             <Badge variant="secondary" className="text-[10px] px-1 py-0 gap-0.5">
-              <Check className="h-2.5 w-2.5" /> Added to Tasks
+              <Check className="h-2.5 w-2.5" /> Created
             </Badge>
           )}
           {s.applyStatus === "merged" && (
             <Badge variant="secondary" className="text-[10px] px-1 py-0 gap-0.5">
-              <RefreshCw className="h-2.5 w-2.5" /> Merged
+              <RefreshCw className="h-2.5 w-2.5" /> Merged (duplicate-proof)
             </Badge>
           )}
           {s.applyStatus === "queued" && (
