@@ -23,8 +23,6 @@ export interface ActionSuggestion {
   applyStatus?: "idle" | "queued" | "created" | "merged" | "failed";
   failReason?: string;
   createdId?: string;
-  /** Internal tracking key for deterministic result mapping */
-  _dedupeKey?: string;
 }
 
 interface Props {
