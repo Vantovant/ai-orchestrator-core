@@ -238,11 +238,11 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     }
     setReceipt(newReceipt);
 
-    // Await query invalidation before completing
+    // Await full refetch (not just invalidation) to guarantee visible data before tab switch
     try {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["tasks"] }),
-        qc.invalidateQueries({ queryKey: ["reminders"] }),
+        qc.refetchQueries({ queryKey: ["tasks"] }),
+        qc.refetchQueries({ queryKey: ["reminders"] }),
       ]);
     } catch {
       // If refresh fails, downgrade receipt to warning
