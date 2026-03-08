@@ -7,90 +7,76 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Upload, FileText, Sparkles, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, Sparkles, CheckCircle2, FileJson, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-
-interface ParsedTask {
-  title: string;
-  status: string;
-  priority: string;
-  due_date: string | null;
-  start_date: string | null;
-  completed_at: string | null;
-}
+import { taskImportService, type ImportedTask } from "@/services/taskImportService";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onImport: (tasks: ParsedTask[]) => void;
+  onImport: (tasks: ImportedTask[]) => void;
   isPending?: boolean;
 }
 
 export default function ImportWizard({ open, onClose, onImport, isPending }: Props) {
-  const [tab, setTab] = useState("csv");
-  const [parsedTasks, setParsedTasks] = useState<ParsedTask[]>([]);
-  const [csvText, setCsvText] = useState("");
+  const [tab, setTab] = useState("file");
+  const [parsedTasks, setParsedTasks] = useState<ImportedTask[]>([]);
   const [pasteText, setPasteText] = useState("");
-
-  // Column mapping
-  const [titleCol, setTitleCol] = useState("0");
-  const [statusCol, setStatusCol] = useState("1");
-  const [priorityCol, setPriorityCol] = useState("");
-  const [dueDateCol, setDueDateCol] = useState("");
-  const [completedCol, setCompletedCol] = useState("");
-  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [csvRows, setCsvRows] = useState<string[][]>([]);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<"csv" | "json" | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setParseError(null);
     const reader = new FileReader();
+    
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      setCsvText(text);
-      parseCSVHeaders(text);
+      const isJSON = file.name.endsWith(".json") || text.trim().startsWith("{") || text.trim().startsWith("[");
+      
+      try {
+        let tasks: ImportedTask[];
+        if (isJSON) {
+          tasks = taskImportService.parseJSON(text);
+          setFileType("json");
+        } else {
+          tasks = taskImportService.parseCSV(text);
+          setFileType("csv");
+        }
+        setParsedTasks(tasks);
+        if (tasks.length === 0) {
+          setParseError("No valid tasks found in file");
+        }
+      } catch (err: any) {
+        setParseError(err.message || "Failed to parse file");
+        setParsedTasks([]);
+      }
     };
+    
     reader.readAsText(file);
   };
 
-  const parseCSVHeaders = (text: string) => {
-    const lines = text.trim().split("\n").map(l => l.split(",").map(c => c.trim().replace(/^"|"$/g, "")));
-    if (lines.length < 2) { toast.error("CSV needs at least a header row + 1 data row"); return; }
-    setCsvHeaders(lines[0]);
-    setCsvRows(lines.slice(1));
-    // Auto-detect columns
-    const h = lines[0].map(h => h.toLowerCase());
-    const findCol = (keywords: string[]) => {
-      const idx = h.findIndex(col => keywords.some(k => col.includes(k)));
-      return idx >= 0 ? String(idx) : "";
-    };
-    setTitleCol(findCol(["title", "name", "task"]));
-    setStatusCol(findCol(["status", "state"]));
-    setPriorityCol(findCol(["priority", "prio"]));
-    setDueDateCol(findCol(["due", "deadline"]));
-    setCompletedCol(findCol(["completed", "done_at", "completed_at"]));
-  };
-
-  const previewCSV = () => {
-    if (!titleCol) { toast.error("Title column is required"); return; }
-    const tasks: ParsedTask[] = csvRows.map(row => {
-      const status = statusCol ? normalizeStatus(row[parseInt(statusCol)] || "") : "todo";
-      const completedStr = completedCol ? row[parseInt(completedCol)] || null : null;
-      return {
-        title: row[parseInt(titleCol)] || "Untitled",
-        status,
-        priority: priorityCol ? normalizePriority(row[parseInt(priorityCol)] || "") : "medium",
-        due_date: dueDateCol ? parseDate(row[parseInt(dueDateCol)]) : null,
-        start_date: null,
-        completed_at: status === "done" ? (completedStr ? parseDate(completedStr) || new Date().toISOString() : new Date().toISOString()) : null,
-      };
-    }).filter(t => t.title && t.title !== "Untitled");
-    setParsedTasks(tasks);
-  };
-
   const handleSmartPaste = () => {
-    const lines = pasteText.trim().split("\n").filter(l => l.trim());
-    const tasks: ParsedTask[] = lines.map((line, i) => {
+    setParseError(null);
+    const text = pasteText.trim();
+    
+    // Try to detect if it's JSON
+    if (text.startsWith("{") || text.startsWith("[")) {
+      try {
+        const tasks = taskImportService.parseJSON(text);
+        setParsedTasks(tasks);
+        setFileType("json");
+        return;
+      } catch {
+        // Not valid JSON, continue with line parsing
+      }
+    }
+    
+    // Parse as plain text lines
+    const lines = text.split("\n").filter(l => l.trim());
+    const tasks: ImportedTask[] = lines.map((line, i) => {
       const cleaned = line.replace(/^[-•*\d.)\]]\s*/, "").trim();
       const isDone = /\[x\]|✅|done|completed/i.test(line);
       return {
@@ -100,39 +86,32 @@ export default function ImportWizard({ open, onClose, onImport, isPending }: Pro
         due_date: null,
         start_date: null,
         completed_at: isDone ? new Date().toISOString() : null,
+        sort_index: i,
       };
     }).filter(t => t.title);
+    
     setParsedTasks(tasks);
+    setFileType(null);
   };
 
-  const normalizeStatus = (s: string): string => {
-    const lower = s.toLowerCase().trim();
-    if (["done", "complete", "completed", "closed"].includes(lower)) return "done";
-    if (["doing", "in progress", "in_progress", "wip"].includes(lower)) return "doing";
-    if (["blocked", "stuck"].includes(lower)) return "blocked";
-    return "todo";
+  const resetState = () => {
+    setParsedTasks([]);
+    setPasteText("");
+    setParseError(null);
+    setFileType(null);
   };
 
-  const normalizePriority = (s: string): string => {
-    const lower = s.toLowerCase().trim();
-    if (["high", "p1", "urgent", "critical"].includes(lower)) return "high";
-    if (["low", "p3", "nice to have"].includes(lower)) return "low";
-    return "medium";
-  };
-
-  const parseDate = (s: string | undefined): string | null => {
-    if (!s) return null;
-    try {
-      const d = new Date(s);
-      return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
-    } catch { return null; }
+  const handleClose = () => {
+    resetState();
+    onClose();
   };
 
   const doneTasks = parsedTasks.filter(t => t.status === "done").length;
   const totalTasks = parsedTasks.length;
+  const hasDedupeInfo = parsedTasks.some(t => t.dedupe_key || t.external_id || t.id);
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -140,74 +119,30 @@ export default function ImportWizard({ open, onClose, onImport, isPending }: Pro
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={(v) => { setTab(v); resetState(); }}>
           <TabsList className="w-full">
-            <TabsTrigger value="csv" className="gap-1 flex-1"><FileText className="h-3.5 w-3.5" /> CSV Upload</TabsTrigger>
+            <TabsTrigger value="file" className="gap-1 flex-1"><FileText className="h-3.5 w-3.5" /> File Upload</TabsTrigger>
             <TabsTrigger value="paste" className="gap-1 flex-1"><Sparkles className="h-3.5 w-3.5" /> Smart Paste</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="csv" className="space-y-3">
-            <Input type="file" accept=".csv,.txt" onChange={handleFileUpload} />
-            {csvHeaders.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium">Column Mapping ({csvRows.length} rows detected)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Title *</label>
-                    <Select value={titleCol} onValueChange={setTitleCol}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{csvHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Status</label>
-                    <Select value={statusCol} onValueChange={setStatusCol}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        {csvHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Priority</label>
-                    <Select value={priorityCol} onValueChange={setPriorityCol}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        {csvHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Due Date</label>
-                    <Select value={dueDateCol} onValueChange={setDueDateCol}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        {csvHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-muted-foreground">Completed At</label>
-                    <Select value={completedCol} onValueChange={setCompletedCol}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        {csvHeaders.map((h, i) => <SelectItem key={i} value={String(i)}>{h}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <Button size="sm" onClick={previewCSV}>Preview Import</Button>
-              </div>
-            )}
+          <TabsContent value="file" className="space-y-3">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Upload a CSV or JSON file. Supports VantoOS export format with automatic upsert (updates existing tasks, creates new ones).
+              </p>
+              <Input type="file" accept=".csv,.json,.txt" onChange={handleFileUpload} />
+              {fileType && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <FileJson className="h-3 w-3" />
+                  Detected: {fileType.toUpperCase()}
+                </Badge>
+              )}
+            </div>
           </TabsContent>
 
           <TabsContent value="paste" className="space-y-3">
             <Textarea
-              placeholder={"Paste task lines here...\n- Design landing page\n- [x] Set up database\n- Write API docs\n- [x] Deploy v1"}
+              placeholder={"Paste task lines or JSON here...\n- Design landing page\n- [x] Set up database\n- Write API docs\n- [x] Deploy v1"}
               value={pasteText}
               onChange={e => setPasteText(e.target.value)}
               rows={8}
@@ -217,21 +152,42 @@ export default function ImportWizard({ open, onClose, onImport, isPending }: Pro
           </TabsContent>
         </Tabs>
 
+        {/* Error */}
+        {parseError && (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {parseError}
+          </div>
+        )}
+
         {/* Preview */}
         {parsedTasks.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold">Preview: {totalTasks} tasks</span>
               <Badge variant="secondary" className="text-xs">{doneTasks} done</Badge>
               <Badge variant="outline" className="text-xs">{totalTasks - doneTasks} open</Badge>
               {totalTasks > 0 && (
                 <Badge variant="default" className="text-xs">{Math.round((doneTasks / totalTasks) * 100)}% complete</Badge>
               )}
+              {hasDedupeInfo && (
+                <Badge variant="outline" className="text-xs gap-1 text-primary border-primary/30">
+                  <CheckCircle2 className="h-3 w-3" /> Upsert enabled
+                </Badge>
+              )}
             </div>
+            
+            {hasDedupeInfo && (
+              <p className="text-xs text-muted-foreground">
+                This import contains task IDs — existing tasks will be updated, new tasks will be created.
+              </p>
+            )}
+            
             <div className="border rounded-lg overflow-hidden max-h-[200px] overflow-y-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="text-xs w-8">#</TableHead>
                     <TableHead className="text-xs">Title</TableHead>
                     <TableHead className="text-xs w-20">Status</TableHead>
                     <TableHead className="text-xs w-20">Priority</TableHead>
@@ -241,9 +197,10 @@ export default function ImportWizard({ open, onClose, onImport, isPending }: Pro
                 <TableBody>
                   {parsedTasks.slice(0, 20).map((t, i) => (
                     <TableRow key={i}>
+                      <TableCell className="text-[10px] text-muted-foreground">{t.sort_index ?? i}</TableCell>
                       <TableCell className="text-xs">
                         {t.status === "done" && <CheckCircle2 className="h-3 w-3 text-success inline mr-1" />}
-                        {t.title}
+                        <span className={t.status === "done" ? "line-through text-muted-foreground" : ""}>{t.title}</span>
                       </TableCell>
                       <TableCell><Badge variant="outline" className="text-[10px]">{t.status}</Badge></TableCell>
                       <TableCell><Badge variant="outline" className="text-[10px]">{t.priority}</Badge></TableCell>
@@ -252,6 +209,11 @@ export default function ImportWizard({ open, onClose, onImport, isPending }: Pro
                   ))}
                 </TableBody>
               </Table>
+              {parsedTasks.length > 20 && (
+                <div className="text-center py-2 text-xs text-muted-foreground bg-muted/30">
+                  ... and {parsedTasks.length - 20} more tasks
+                </div>
+              )}
             </div>
             <Button className="w-full" onClick={() => onImport(parsedTasks)} disabled={isPending}>
               {isPending ? "Importing..." : `Import ${totalTasks} Tasks`}
