@@ -1994,6 +1994,56 @@ export type Database = {
           },
         ]
       }
+      knowledge_files: {
+        Row: {
+          bucket: string
+          created_at: string
+          doc_id: string
+          filename: string
+          id: string
+          mime_type: string | null
+          path: string
+          project_id: string | null
+          sha256: string | null
+          size_bytes: number | null
+          user_id: string
+        }
+        Insert: {
+          bucket?: string
+          created_at?: string
+          doc_id: string
+          filename: string
+          id?: string
+          mime_type?: string | null
+          path: string
+          project_id?: string | null
+          sha256?: string | null
+          size_bytes?: number | null
+          user_id: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          doc_id?: string
+          filename?: string
+          id?: string
+          mime_type?: string | null
+          path?: string
+          project_id?: string | null
+          sha256?: string | null
+          size_bytes?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_files_doc_id_fkey"
+            columns: ["doc_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_docs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       market_news_cache: {
         Row: {
           created_at: string
