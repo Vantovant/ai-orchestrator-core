@@ -1,18 +1,30 @@
 # VantoOS — Full Product & Technical Specification
 
-**Version:** 1.0  
-**Date:** 2 March 2026  
+**Version:** 2.0  
+**Date:** 8 March 2026  
 **Classification:** Confidential  
+**Status:** Executive Beta — Live Production
 
 ---
 
 ## 1. Executive Summary
 
-**VantoOS** is an AI-powered executive command center designed for multinational leaders, government professionals, and high-performance executives. It functions as a "living secretary" — consolidating planning, communications, financial intelligence, project management, and investment monitoring into a single, keyboard-first interface.
+**VantoOS** is an AI-powered executive command centre designed for multinational leaders, government professionals, and high-performance executives. It functions as a "living secretary" — consolidating planning, communications, financial intelligence, project management, investment monitoring, knowledge management, and compliance tracking into a single, keyboard-first interface.
 
-The platform is built on React + TypeScript with a Supabase (Lovable Cloud) backend, leveraging multiple AI models for proactive daily briefings, strategic project advice, financial mentoring, and market analysis.
+The platform is built on React + TypeScript with a Lovable Cloud backend, leveraging multiple AI models (Google Gemini and OpenAI GPT families) for proactive daily briefings, strategic project advice, financial mentoring, and market analysis.
 
 **Key Differentiator:** VantoOS is not a generic productivity tool. It is purpose-built for South African executives managing multiple income streams, compliance obligations, and project portfolios — with AI that behaves like a PhD-level strategic partner, not a chatbot.
+
+### Platform Statistics (as of March 2026)
+
+| Metric | Count |
+|--------|-------|
+| Database tables | 45+ |
+| Edge functions | 48 |
+| UI pages | 20 |
+| Service modules | 20+ |
+| AI models supported | 10+ |
+| Storage buckets | 4 |
 
 ---
 
@@ -21,23 +33,24 @@ The platform is built on React + TypeScript with a Supabase (Lovable Cloud) back
 | Attribute | Detail |
 |-----------|--------|
 | **Name** | VantoOS |
-| **Tagline** | AI Executive Command Center |
+| **Tagline** | AI Executive Command Centre |
 | **Target User** | C-suite executives, government leaders, legal/accounting professionals, multinational operators |
 | **Geography Focus** | South Africa (ZAR currency, POPIA compliance, SA tax structures) |
 | **Core Promise** | Proactive AI assistance through daily briefings, pre-meeting prep, financial intelligence, and strategic project partnering |
+| **Data Sovereignty** | All files stored in Lovable Cloud (Supabase Storage). PII redacted before AI calls. No data leaves without user consent. |
 
 ---
 
 ## 3. Module Architecture
 
-### 3.1 Dashboard — Executive Command Center
+### 3.1 Dashboard — Executive Command Centre
 **Route:** `/`
 
 The home screen provides an at-a-glance executive overview:
 
 - **AI Daily Agenda** — AI-generated briefing with greeting, day overview, focus areas, time blocks, and "3 Commands for Today"
 - **Stat Cards** — Active tasks, today's meetings, urgent reminders, total tasks
-- **Top 5 Priorities** — AI-ranked (re-hydrated against live task data to prevent stale display)
+- **Top 5 Priorities** — AI-ranked (rehydrated against live task data to prevent stale display)
 - **Today's Meetings** — Quick access with click-through to detail drawers
 - **Compliance Widget** — Overdue compliance items surfaced proactively
 - **Urgent Reminders** — 48-hour lookahead
@@ -77,17 +90,33 @@ Six-tab planning workspace:
 ### 3.3 Email — Keyboard-First Inbox
 **Route:** `/email`
 
-Superhuman-inspired email client:
+Superhuman-inspired email client with live Gmail integration:
 
 - **Multi-Account Support** — Account switcher with unified inbox mode
-- **Keyboard Shortcuts** — j/k navigation, e=archive, s=snooze, t=create task, m=create meeting, ?=cheat sheet
+- **Gmail OAuth** — Connect, sync, and disconnect Gmail accounts securely
+- **Keyboard Shortcuts** — j/k navigation, e=archive, s=snooze, t=create task, m=create meeting, w=waiting-on, x=star, ?=cheat sheet
 - **Views** — Inbox, Snoozed, Waiting On
+- **Focus Mode** — Hide fyi/spam categories for zero-inbox workflow
+- **Smart Extract** — AI-powered email classification, money direction detection, entity extraction, and routing
 - **Command Bar** (⌘K) — Quick email actions
 - **Action Creation** — One-key task/meeting/reminder creation from any email
-- **Onboarding Tutorial** — First-time user walkthrough
+- **Onboarding Tutorial** — 5-step first-time user walkthrough
 - **Key Coach** — Contextual shortcut strip at bottom
 
-**Current Status:** Mock data implementation. Gmail OAuth integration planned.
+**Smart Extract Capabilities:**
+- Email type classification (expense, invoice, subscription, travel, task, meeting, fyi, other)
+- Money direction detection (income/expense/transfer/bank fee)
+- Account-aware intelligence (knows which bank account to reference)
+- Entity extraction (merchant, amount, currency, date, reference)
+- One-click routing to finance, tasks, meetings, reminders, or project notes
+- PII redaction (SA ID numbers, phone numbers, bank accounts)
+
+**Edge Functions:**
+- `gmail-auth-start` / `gmail-auth-callback` — OAuth flow
+- `gmail-sync` — Email synchronisation via Gmail History API
+- `gmail-list` / `gmail-get` — Email listing and body fetching
+- `gmail-disconnect` — Account disconnection
+- `email-smart-extract` — AI-powered email analysis
 
 ---
 
@@ -102,8 +131,8 @@ Comprehensive financial management tailored for South African executives:
 | **Debt Radar** | Active debts with principal, interest rates, repayment tracking |
 | **Income Engine** | Multiple income streams (salary, legal practice, network marketing, side hustles) with targets |
 | **Opportunities** | AI-surfaced opportunities with difficulty ratings |
-| **Import** | Bank statement import (CSV/OFX) with AI categorization |
-| **AI Mentor** | Financial briefing with AI-generated insights |
+| **Import** | Bank statement import (CSV/OFX) with AI categorisation |
+| **AI Mentor** | Financial briefing with AI-generated role-aware insights |
 | **Budget** | Recurring budget items with cadence, autopay tracking, event generation |
 | **Invest** | Full investment sub-module (see 3.5) |
 
@@ -114,20 +143,21 @@ Comprehensive financial management tailored for South African executives:
 - Voice input for quick expense/income entry
 - Finance Notes panel for monthly annotations
 - Bank statement parsing with merchant rule engine
-- AI-powered transaction categorization
+- AI-powered transaction categorisation
+- Role-aware AI adaptation (government executive, attorney, accountant, entrepreneur, network marketer)
 
 **Edge Functions:**
-- `finance-mentor` — AI financial briefing
+- `finance-mentor` — AI financial briefing (role-aware)
 - `finance-ai-route` — AI routing for finance queries
 - `finance-snapshot-build` — Financial data snapshot
 - `bank-import-parse` — Bank statement parser
-- `bank-categorize-ai` — AI transaction categorizer
+- `bank-categorize-ai` — AI transaction categoriser
 - `budget-generate-events` — Generates upcoming budget events
 
 ---
 
 ### 3.5 Invest & Trade — Executive Investment Dashboard
-**Route:** `/finance` (Invest tab)
+**Route:** `/finance` (Invest tab) and `/invest`
 
 Educational-first investment platform:
 
@@ -147,7 +177,7 @@ Educational-first investment platform:
 
 ---
 
-### 3.6 Projects — Personal Project Command Center
+### 3.6 Projects — Personal Project Command Centre
 **Route:** `/projects`
 
 Project management with AI strategic partnership:
@@ -158,13 +188,24 @@ Project management with AI strategic partnership:
 - Pin/unpin for quick access
 - Blocked status indicator
 - AI Partner readiness badge
+- Solution upgrade pathway
 
 **Project Detail View (tabs):**
-- **Tasks** — Project-scoped tasks
-- **Meetings** — Project-scoped meetings
-- **Notes** — Project-scoped daily notes with AI extraction
-- **Links** — Bookmark management
-- **AI Partner** — Strategic AI co-founder (see 3.7)
+
+| Tab | Function |
+|-----|----------|
+| **Tasks** | Project-scoped tasks with board, table, and timeline views |
+| **Meetings** | Project-scoped meetings |
+| **Notes** | Project-scoped daily notes with AI extraction |
+| **Links** | Bookmark management |
+| **Knowledge** | Project-scoped knowledge base with file upload (see 3.10) |
+| **AI Partner** | Strategic AI co-founder (see 3.7) |
+| **Accomplishments** | Milestone and achievement tracking |
+
+**Additional Features:**
+- Import Wizard for bulk task/note creation
+- Tender Wizard demo for government procurement workflows
+- Solution upgrade (tender compliance, funding pack, business case, financial model)
 
 ---
 
@@ -176,7 +217,7 @@ PhD-level strategic partner providing:
 | Mode | Output |
 |------|--------|
 | **Executive Brief** | Situation analysis, key risks, opportunities, recommended actions |
-| **Sprint Plan (7-Day)** | Prioritized weekly plan with daily focus areas |
+| **Sprint Plan (7-Day)** | Prioritised weekly plan with daily focus areas |
 | **Sell-Readiness Audit** | 0-100 maturity scorecard across 8 dimensions |
 | **Funding Pathways** | Verified funding types + readiness checklist + cached programs with citations |
 | **Update Memory** | AI-proposed updates to Partner Memory with diff preview |
@@ -214,60 +255,123 @@ CEO-level portfolio oversight:
 - **Compare Projects** — Head-to-head AI comparison with ROI and sequencing recommendations
 - **Suggested Tasks** — AI-generated tasks with one-click creation (confirm-before-create)
 
-**Scoring:**
-- `project_partner_scores` table updated after each audit/brief
-- Momentum: recent notes, tasks completed, meetings (14-day window)
-- Risk: overdue tasks, blocked status, low momentum
-- Sell Readiness: from latest Sell-Readiness Audit
-
 **Edge Function:** `portfolio-ai-partner` — Cross-project AI analysis
 
 ---
 
-### 3.9 Travel
-**Route:** `/travel`
+### 3.9 Solutions — Tender & Funding Management
+**Access:** Project Detail → upgrade to Solution
 
-Trip management with itinerary cards:
-- Destination, dates, status (upcoming/in-progress/completed)
-- Notes per trip
-- Email-to-itinerary import planned
+Advanced project workflows for government procurement and funding:
 
----
+| Tab | Function |
+|-----|----------|
+| **Tender Brief** | Tender opportunity details, client linking |
+| **Requirements** | Compliance requirements checklist |
+| **Compliance** | Compliance tracking matrix |
+| **Proposal** | Proposal document management |
+| **Business Case** | Lean canvas (problem, customer, offer, model, risks) |
+| **Financial Model** | Startup costs, monthly costs, pricing, cashflow, assumptions |
+| **Funding Pack** | Ask amount, use of funds, milestones, deadline |
 
-### 3.10 Shopping
-**Route:** `/shopping`
-
-Shopping list management:
-- Categories (groceries, household, personal, other)
-- Recurring items support
-- Done/pending states
-- Budget category linking planned
-
----
-
-### 3.11 Weekly Report
-**Route:** `/weekly-report`
-
-Structured executive summary:
-- Plan summary (tasks created/completed, meetings)
-- Finance summary (income/expenses/net)
-- Compliance status
-- Client/matter overview
-- One-click copy for WhatsApp/email sharing
+**Components:**
+- Bid Readiness Card — scorecard for tender preparation
+- Fundable Readiness Card — investment readiness assessment
+- Mentor Brief Card — AI strategic guidance per solution
+- Solution Mentor edge function for AI advice
 
 ---
 
-### 3.12 Settings
-**Route:** `/settings`
+### 3.10 Knowledge Base — Project-Scoped Intelligence
+**Routes:** `/knowledge` (global), Project Detail → Knowledge tab
 
-- **Account** — Email display
-- **Executive Profile Wizard** — Guided setup for AI context
-- **Clients & Matters** — CRUD for client/matter entities
-- **Email Preferences** — Key Coach toggle
-- **AI Preferences** — Provider fallback order (fastest vs quality)
-- **Secretary Mode** — Toggle morning briefings, pre-meeting prompts, end-of-day reviews
-- **Executive Context** — Key-value pairs for AI personalization (role, goals, focus, priorities)
-- **Data Export** — CSV export for finance entries and debts
+Dual-connector RAG architecture with project segmentation:
+
+**Architecture:**
+- **knowledge_docs** — Document metadata with project scoping
+- **knowledge_chunks** — ~800-word chunks for vector-ready retrieval
+- **knowledge_files** — File upload metadata linked to docs
+- **kb_workspaces** — Provider routing (OpenAI for private, Vertex for government)
+
+**Key Features:**
+- **Project-Scoped Retrieval** — Documents partitioned by `project_id` ("knowledge cells")
+- **File Upload** — Drag/drop PDF, DOCX, TXT, MD, CSV, JSON, HTML into Supabase Storage
+- **Client-Side Text Extraction** — PDF via pdfjs-dist CDN, DOCX via mammoth
+- **Auto-Chunking Pipeline** — ~800-word chunks with content hashing
+- **Smart Project Assignment** — AI suggests which project a document belongs to (user confirms)
+- **Filters** — This Project / All Projects / Global Only
+- **PII Redaction** — All queries scrubbed before reaching AI providers
+- **Data Sovereignty** — Government workspaces routed to Vertex AI only
+
+**Storage:**
+- Private bucket: `knowledge-uploads`
+- Path: `${userId}/${projectId||'global'}/${docId}/${timestamp}_${filename}`
+- User-scoped RLS on storage objects
+
+**Edge Functions:**
+- `kb-query` — Query knowledge base with project filtering
+- `kb-ingest-upload` — Process uploaded file text into chunks
+- `kb-openai-query` / `kb-openai-store` / `kb-openai-upload` — OpenAI vector operations
+- `kb-vertex-query` / `kb-vertex-store` / `kb-vertex-upload` — Vertex AI operations
+- `redact-sensitive` — PII scrubbing
+
+---
+
+### 3.11 Export & Import — Data Portability
+**Route:** Settings → Export & Import
+
+Idempotent data synchronisation for external workflows:
+
+**Export:**
+- Per-entity CSV/JSON export: Tasks, Meetings, Reminders, Notes, Knowledge Docs
+- Full Workspace Bundle (ZIP of all JSON files)
+- Exports include: id, external_id, dedupe_key, project_id, status, created_at, updated_at
+
+**Import:**
+- CSV + JSON import per entity
+- Upsert logic prevents duplicates:
+  - If `external_id` present: upsert on `(user_id, external_id)`
+  - Else compute `dedupe_key` from `userId|title|date|projectId` and upsert on `(user_id, dedupe_key)`
+
+---
+
+### 3.12 Chrome Extension — Smart Capture
+**Location:** `/chrome-extension/`
+
+Manifest V3 extension with side panel:
+
+| Feature | Description |
+|---------|-------------|
+| **Quick Capture** | Save URL/title/highlight to project inbox |
+| **Smart Capture** | AI-powered page analysis → task checklist with PII redaction |
+| **WhatsApp Smart Extract** | PhD-grade conversation analysis from WhatsApp Web |
+| **Side Panel** | Capture, Projects, Tasks, Settings tabs |
+| **Pairing** | 6-digit code exchange for secure authentication |
+| **Domain Allowlist** | Configure which sites show the floating "V" button |
+
+**Edge Functions:**
+- `extension-pair` / `extension-exchange` — Authentication
+- `extension-projects` / `extension-tasks` — Data access
+- `extension-task-create` / `extension-reminder-create` / `extension-meeting-create` / `extension-finance-create` — Entity creation
+- `smart-capture-web` / `capture-web` — Web page capture
+- `smart-capture-whatsapp` / `capture-whatsapp` — WhatsApp capture
+- `whatsapp-action-log` — WhatsApp action audit trail
+
+---
+
+### 3.13 Additional Modules
+
+| Module | Route | Description |
+|--------|-------|-------------|
+| **Travel** | `/travel` | Trip management with itinerary cards, destinations, dates, status |
+| **Shopping** | `/shopping` | Shopping lists with categories, recurring items, budget linking |
+| **Weekly Report** | `/weekly-report` | Executive summary with plan, finance, compliance, client overview |
+| **Team** | `/testers` | Beta tester management with AI credit tracking |
+| **Admin Health** | `/admin/health` | System health monitoring (admin only) |
+| **User Manual** | `/manual` | Interactive user guide with downloadable HTML manual |
+| **Investor Report** | `/investor-report` | Standalone investor-facing product report |
+| **Onboarding Emails** | `/onboarding-emails` | Email template management for user onboarding |
+| **Settings** | `/settings` | Account, profile wizard, Gmail, AI keys, clients, export/import, executive context |
 
 ---
 
@@ -275,30 +379,33 @@ Structured executive summary:
 
 ### 4.1 Frontend Stack
 
-| Technology | Purpose |
-|------------|---------|
-| React 18 | UI framework |
-| TypeScript | Type safety |
-| Vite | Build tool |
-| Tailwind CSS | Styling (HSL design tokens) |
-| shadcn/ui | Component library |
-| TanStack React Query | Server state management |
-| React Router v6 | Client-side routing |
-| Recharts | Data visualization |
-| Framer Motion | Animations (planned) |
-| date-fns | Date manipulation |
-| Sonner | Toast notifications |
-| Zod | Schema validation |
-| cmdk | Command palette |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| React | 18.3 | UI framework |
+| TypeScript | Strict | Type safety |
+| Vite | 5.4 | Build tool |
+| Tailwind CSS | HSL tokens | Design system |
+| shadcn/ui | Latest | Component library (50+ components) |
+| TanStack React Query | 5.83 | Server state management |
+| React Router v6 | 6.30 | Client-side routing |
+| Recharts | 2.15 | Data visualisation |
+| date-fns | 3.6 | Date manipulation |
+| Sonner + shadcn Toast | Dual | Notifications |
+| cmdk | 1.1 | Command palette |
+| Zod | 3.25 | Schema validation |
+| mammoth | 1.8 | DOCX text extraction |
+| pdfjs-dist | CDN | PDF text extraction |
 
 ### 4.2 Backend Stack
 
-| Technology | Purpose |
-|------------|---------|
-| Lovable Cloud (Supabase) | Database, Auth, Edge Functions, Storage |
-| PostgreSQL | Relational database with RLS |
-| Deno (Edge Functions) | Serverless backend logic |
-| Lovable AI Gateway | Multi-model AI access (Gemini, GPT) |
+| Component | Technology |
+|-----------|-----------|
+| Database | PostgreSQL (Lovable Cloud) |
+| Auth | Email/password via authentication system |
+| Edge Functions | Deno (48 functions) |
+| AI Gateway | Lovable AI + BYOK support |
+| File Storage | 4 private buckets (statements, kb-gov, kb-private, knowledge-uploads) |
+| Secrets | Lovable Cloud Secrets Manager |
 
 ### 4.3 AI Model Strategy
 
@@ -306,100 +413,152 @@ Structured executive summary:
 |-------|----------|
 | `google/gemini-2.5-flash` | Default for speed-critical features (briefings, extraction) |
 | `google/gemini-2.5-pro` | Complex reasoning (audits, strategic analysis) |
+| `google/gemini-2.5-flash-lite` | Lightweight classification, summaries |
 | `openai/gpt-5` | Fallback for high-accuracy needs |
 | `openai/gpt-5-mini` | Cost-efficient fallback |
 
-All AI calls go through the `ai-gateway` edge function with automatic model fallback and rate limiting.
+All AI calls go through the `ai-gateway` edge function with:
+- Automatic model fallback
+- Rate limiting
+- BYOK key support
+- Beta assist credit system
+- PII redaction
+- Call logging and truncation tracking
 
 ---
 
 ## 5. Database Schema
 
-### 5.1 Core Tables (32 tables)
+### 5.1 Core Tables (45+ tables)
 
-| Table | Purpose | RLS |
-|-------|---------|-----|
-| `tasks` | Task management | ✅ User-scoped |
-| `reminders` | Time-based reminders | ✅ User-scoped |
-| `meetings` | Calendar events | ✅ User-scoped |
-| `notes_daily` | Daily notes with structured mode | ✅ User-scoped |
-| `projects` | Project entities | ✅ User-scoped |
-| `project_notes` | Per-project notes | ✅ User-scoped |
-| `project_links` | Project bookmarks | ✅ User-scoped |
-| `project_partner_memory` | AI Partner persistent memory | ✅ User-scoped |
-| `project_partner_scores` | Portfolio scoring cache | ✅ User-scoped |
-| `funding_cache` | Verified funding programs | ✅ User-scoped |
-| `finance_entries` | Income/expense records | ✅ User-scoped |
-| `finance_budget_items` | Recurring budget items | ✅ User-scoped |
-| `finance_budget_events` | Generated budget events | ✅ User-scoped |
-| `finance_notes` | Monthly finance annotations | ✅ User-scoped |
-| `finance_profiles` | User financial profile | ✅ User-scoped |
-| `debts` | Debt tracking | ✅ User-scoped |
-| `income_streams` | Multiple income sources | ✅ User-scoped |
-| `opportunities` | Business opportunities | ✅ User-scoped |
-| `bank_accounts` | Linked bank accounts | ✅ User-scoped |
-| `bank_statement_imports` | Import records | ✅ User-scoped |
-| `bank_transactions` | Parsed transactions | ✅ User-scoped |
-| `merchant_rules` | Category mapping rules | ✅ User-scoped |
-| `email_accounts` | Email account configs | ✅ User-scoped |
-| `email_messages` | Email records | ✅ User-scoped |
-| `email_oauth_tokens` | OAuth credentials | ✅ User-scoped |
-| `invest_watchlists` | Investment watchlists | ✅ User-scoped |
-| `invest_watchlist_items` | Watchlist symbols | ✅ User-scoped |
-| `invest_manual_holdings` | Portfolio holdings | ✅ User-scoped |
-| `invest_paper_trades` | Simulated trades | ✅ User-scoped |
-| `invest_alerts` | Price alerts | ✅ User-scoped |
-| `market_prices_cache` | Market data cache | ✅ Public read |
-| `market_news_cache` | News cache | ✅ Public read |
-| `clients` | Client/matter entities | ✅ User-scoped |
-| `entity_client_links` | Client-entity associations | ✅ User-scoped |
-| `entity_tags` | Tag associations | ✅ User-scoped |
-| `tags` | Tag definitions | ✅ User-scoped |
-| `compliance_reminders` | Regulatory compliance | ✅ User-scoped |
-| `executive_context` | AI personalization context | ✅ User-scoped |
-| `user_preferences` | App preferences | ✅ User-scoped |
-| `notifications` | System notifications | ✅ User-scoped |
-| `attachments` | File attachments | ✅ User-scoped |
-| `assistant_runs` | AI run history | ✅ User-scoped |
+**Planning:**
+`tasks`, `reminders`, `meetings`, `notes_daily`
+
+**Projects:**
+`projects`, `project_notes`, `project_links`, `project_milestones`, `project_accomplishments`, `project_documents`, `project_inbox_items`, `project_partner_memory`, `project_partner_scores`
+
+**Finance:**
+`finance_entries`, `finance_budget_items`, `finance_budget_events`, `finance_notes`, `finance_profiles`, `debts`, `income_streams`
+
+**Banking:**
+`bank_accounts`, `bank_statement_imports`, `bank_transactions`
+
+**Email:**
+`email_accounts`, `email_messages`, `email_oauth_tokens`, `email_inbox_items`, `email_extracts`, `email_action_log`
+
+**Invest:**
+`invest_watchlists`, `invest_watchlist_items`, `invest_manual_holdings`, `invest_paper_trades`, `invest_alerts`
+
+**Knowledge Base:**
+`knowledge_docs`, `knowledge_chunks`, `knowledge_files`, `kb_workspaces`, `kb_files`, `kb_query_log`
+
+**Solutions:**
+`business_cases`, `financial_models`, `funding_cache`, `funding_packs`
+
+**System:**
+`beta_testers`, `invites`, `user_roles`, `activity_log`, `ai_call_log`, `assistant_runs`, `executive_context`, `attachments`, `clients`, `entity_client_links`, `entity_tags`, `tags`, `compliance_reminders`
+
+**Extension:**
+`extension_pairing_codes`, `extension_tokens`
 
 ### 5.2 Security Model
 
-- **Row Level Security (RLS)** enabled on ALL user-data tables
-- Every table scoped to `auth.uid() = user_id`
-- POPIA-compliant: PII redacted before AI processing
-- No secrets stored in application code or logs
-- Soft-delete pattern (`deleted_at` column) across all tables
+| Control | Implementation |
+|---------|----------------|
+| **Row Level Security** | Enabled on ALL user-data tables |
+| **User Isolation** | `auth.uid() = user_id` on every table |
+| **Admin Roles** | Separate `user_roles` table with `has_role()` security definer function |
+| **Soft Delete** | `deleted_at` column across all tables |
+| **PII Redaction** | POPIA-compliant scrubbing before AI calls |
+| **Deduplication** | SHA-256 / hash-based dedupe keys |
+| **Storage Isolation** | User-prefixed storage paths with RLS |
+| **Secret Management** | Lovable Cloud Secrets (never in code) |
 
 ---
 
-## 6. Edge Functions (17 functions)
+## 6. Edge Functions (48 functions)
 
+### 6.1 AI & Core
 | Function | Purpose |
 |----------|---------|
-| `ai-gateway` | Multi-model AI routing with fallback |
-| `run-assistant` | Daily AI briefing generation |
-| `snapshot-build` | Data snapshot builder |
-| `plan-ai-secretary` | Secretary mode briefings |
-| `plan-ai-extract-actions` | NLP action extraction from notes |
+| `ai-gateway` | Central AI router with BYOK, beta assist, provider fallback |
+| `ai-status` | Returns current AI access status for user |
+| `run-assistant` | Executive daily briefing generation |
+| `snapshot-build` | Compressed data snapshot builder |
+| `assistant-help` | Context-aware Q&A |
+| `redact-sensitive` | POPIA-compliant PII scrubbing |
+| `admin-health` | System health monitoring |
+
+### 6.2 Plan & Secretary
+| Function | Purpose |
+|----------|---------|
+| `plan-ai-secretary` | Secretary Mode briefings |
+| `plan-ai-extract-actions` | NLP extraction from notes |
+
+### 6.3 Email (Gmail)
+| Function | Purpose |
+|----------|---------|
+| `gmail-auth-start` | Initiates Gmail OAuth flow |
+| `gmail-auth-callback` | Handles OAuth callback |
+| `gmail-sync` | Syncs emails from Gmail API |
+| `gmail-list` / `gmail-get` | Lists/fetches emails |
+| `gmail-disconnect` | Disconnects Gmail account |
+| `email-smart-extract` | AI-powered email analysis |
+
+### 6.4 Finance
+| Function | Purpose |
+|----------|---------|
+| `finance-mentor` | AI financial briefing (role-aware) |
+| `finance-ai-route` | Finance AI query routing |
+| `finance-snapshot-build` | Financial snapshot |
+| `bank-import-parse` | CSV/OFX bank statement parser |
+| `bank-categorize-ai` | AI transaction categorisation |
+| `budget-generate-events` | Budget event generation |
+
+### 6.5 Projects & Solutions
+| Function | Purpose |
+|----------|---------|
 | `project-ai-partner` | Strategic AI partner (5 modes) |
 | `project-ai-extract-actions` | Project note extraction |
 | `project-ai-funding-search` | Verified funding search |
 | `portfolio-ai-partner` | Cross-project AI analysis |
-| `finance-mentor` | AI financial briefing |
-| `finance-ai-route` | Finance AI routing |
-| `finance-snapshot-build` | Financial snapshot |
-| `bank-import-parse` | Bank statement parsing |
-| `bank-categorize-ai` | AI transaction categorization |
-| `budget-generate-events` | Budget event generation |
-| `invest-market-pulse` | Market data refresh |
+| `solution-mentor` | Solution/tender AI guidance |
+
+### 6.6 Invest
+| Function | Purpose |
+|----------|---------|
+| `invest-market-pulse` | Market data fetch/generation |
 | `invest-ai-mentor` | Investment AI coaching |
-| `admin-health` | System health monitoring |
+
+### 6.7 Knowledge Base
+| Function | Purpose |
+|----------|---------|
+| `kb-query` | Query KB with project filtering |
+| `kb-ingest-upload` | Process uploaded text → chunks |
+| `kb-openai-query` / `kb-openai-store` / `kb-openai-upload` | OpenAI vector ops |
+| `kb-vertex-query` / `kb-vertex-store` / `kb-vertex-upload` | Vertex AI ops |
+
+### 6.8 Chrome Extension
+| Function | Purpose |
+|----------|---------|
+| `extension-pair` / `extension-exchange` | Auth pairing |
+| `extension-projects` / `extension-tasks` / `extension-domains` | Data access |
+| `extension-task-create` / `extension-reminder-create` / `extension-meeting-create` / `extension-finance-create` | Entity creation |
+| `smart-capture-web` / `capture-web` | Web capture |
+| `smart-capture-whatsapp` / `capture-whatsapp` | WhatsApp capture |
+| `whatsapp-action-log` | Audit trail |
+
+### 6.9 System
+| Function | Purpose |
+|----------|---------|
+| `invite-check` | Beta invite validation |
+| `team-analytics` | Team performance analytics |
 
 ---
 
 ## 7. Design System
 
-### 7.1 Color Tokens (HSL)
+### 7.1 Colour Tokens (HSL)
 
 | Token | Light | Dark |
 |-------|-------|------|
@@ -435,6 +594,11 @@ All AI calls go through the `ai-gateway` edge function with automatic model fall
 | `/settings` | Settings |
 | `/weekly-report` | Weekly Report |
 | `/dashboard/partner` | Portfolio Partner |
+| `/knowledge` | Knowledge Base (global) |
+| `/investor-report` | Investor Report |
+| `/testers` | Team / Beta Testers |
+| `/manual` | User Manual |
+| `/onboarding-emails` | Onboarding Email Templates |
 | `/admin/health` | Admin Health |
 
 **Legacy Redirects:** `/tasks`, `/reminders`, `/meetings`, `/calendar` → `/plan?tab=*`
@@ -445,13 +609,15 @@ All AI calls go through the `ai-gateway` edge function with automatic model fall
 
 | Area | Implementation |
 |------|----------------|
-| **Authentication** | Email/password via Supabase Auth |
-| **Authorization** | RLS on every table |
-| **Data Protection** | POPIA-compliant PII redaction |
-| **AI Safety** | No PII in prompts, no hallucinated data |
-| **Soft Delete** | All deletions are soft (recoverable) |
-| **Export** | CSV export for user data portability |
-| **Secrets** | Managed via Lovable Cloud secrets |
+| **Authentication** | Email/password via Lovable Cloud Auth |
+| **Authorisation** | RLS on every table + role-based admin via `user_roles` |
+| **Data Protection** | POPIA-compliant PII redaction on all AI interactions |
+| **AI Safety** | No PII in prompts, no hallucinated data, evidence-grounded claims |
+| **Soft Delete** | All deletions are recoverable |
+| **Export** | Full data portability (CSV/JSON/ZIP) |
+| **Storage Security** | Private buckets with user-scoped access policies |
+| **Secrets** | Managed via Lovable Cloud (never in code) |
+| **Deduplication** | SHA-256 and hash-based dedupe keys prevent duplicate imports |
 
 ---
 
@@ -460,27 +626,55 @@ All AI calls go through the `ai-gateway` edge function with automatic model fall
 ### Delivered ✅
 - Executive Dashboard with AI briefings
 - Plan Hub (Tasks, Reminders, Meetings, Notes, Calendar)
+- Secretary Mode with AI briefings
+- Gmail OAuth integration (live)
+- Email Smart Extract with money direction detection
 - Finance module with bank imports, AI mentor, budget
-- Invest & Trade with market pulse, paper trading
-- Projects with AI Senior Partner
+- Invest & Trade with market pulse, paper trading, AI mentor
+- Projects with AI Senior Partner (5 modes)
 - Partner Memory system
-- Verified Funding Pathways
+- Verified Funding Pathways with cached sources
 - Portfolio Partner command room
-- Email client (mock)
+- Solutions (tender, business case, financial model, funding pack)
+- Knowledge Base with project segmentation
+- File upload with text extraction (PDF, DOCX, TXT, etc.)
+- Auto-chunking pipeline for RAG retrieval
+- Smart project assignment for knowledge documents
+- Export/Import with idempotent upsert
+- Chrome Extension (Smart Capture, WhatsApp Extract)
 - Weekly Executive Report
 - Voice input & dictation
-- Secretary Mode
-- Compliance tracking
+- Compliance tracking with SA presets
+- Client/matter tagging
+- Activity logging
 
 ### Planned 🔄
-- Gmail OAuth integration
 - Email-to-itinerary import
 - Shopping ↔ Budget linking
-- Mobile PWA optimization
+- Mobile PWA optimisation
 - Push notifications
 - Multi-currency support
-- Document/contract management
 - Team collaboration features
+- Advanced email analytics
+- Offline support with service worker
+
+---
+
+## 11. Documentation Suite
+
+| Document | Purpose |
+|----------|---------|
+| `PRODUCT_SPEC.md` | Full product & technical specification (this file) |
+| `USER_MANUAL.md` | Comprehensive end-user guide |
+| `HANDOVER_REPORT.md` | Professional handover report |
+| `TECHNICAL_BLUEPRINT.md` | Engineer-only execution blueprint |
+| `EXECUTIVE_PLAYBOOK.md` | User onboarding & sovereignty guide |
+| `FLAGSHIP_FEATURES_SPEC.md` | Email, WhatsApp, Web Smart Capture specs |
+| `SA_EXECUTIVE_SPEC.md` | SA-specific executive requirements |
+| `FINANCE_SPEC.md` | Finance module specification |
+| `ROUTES.md` | Route map documentation |
+| `PARITY.md` | Feature parity tracking |
+| `AI_PROVIDERS.md` | AI provider documentation |
 
 ---
 
