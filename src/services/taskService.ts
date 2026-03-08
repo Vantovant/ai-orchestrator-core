@@ -24,10 +24,19 @@ export interface Task {
 
 export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "start_date" | "completed_at" | "order_index" | "source" | "estimated_minutes" | "project_id" | "dedupe_key" | "note_id">>;
 
+export interface BulkUpsertItemResult {
+  dedupe_key: string;
+  status: "created" | "merged" | "failed";
+  id?: string;
+  reason?: string;
+}
+
 export interface BulkUpsertResult {
   created: string[];
   merged: string[];
   failed: { title: string; reason: string }[];
+  /** Deterministic per-item results keyed by dedupe_key */
+  items: BulkUpsertItemResult[];
 }
 
 /** Generate a stable dedupe key from components */
