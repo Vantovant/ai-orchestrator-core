@@ -8,6 +8,8 @@ import { taskService, makeDedupe, type Task, type TaskInsert } from "@/services/
 import { meetingService, type Meeting, type MeetingInsert } from "@/services/meetingService";
 import { reminderService, type ReminderInsert } from "@/services/reminderService";
 import { activityLogService } from "@/services/activityLogService";
+import { taskExportService } from "@/services/taskExportService";
+import { taskImportService } from "@/services/taskImportService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import TaskDetailDrawer from "@/components/plan/TaskDetailDrawer";
 import MeetingDetailDrawer from "@/components/plan/MeetingDetailDrawer";
 import DictationMic from "@/components/plan/DictationMic";
@@ -49,7 +52,7 @@ import {
   Clock, Save, Sparkles, FolderKanban, Loader2, BookOpen, Copy,
   ChevronLeft, ChevronRight, Brain, LayoutList, Kanban, GanttChart,
   Trophy, Upload, Shield, DollarSign, Banknote, Briefcase, Gavel,
-  ClipboardCheck, FileEdit, Send,
+  ClipboardCheck, FileEdit, Send, Download,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
