@@ -36,8 +36,8 @@ describe("BulkUpsertResult items mapping", () => {
   it("items array supports per-key lookup for duplicate titles", () => {
     // Simulating two tasks with same title but different dedupe_keys
     const items: BulkUpsertItemResult[] = [
-      { dedupe_key: "dk-a", status: "created", id: "id-1" },
-      { dedupe_key: "dk-b", status: "merged", id: "id-2" },
+      { client_temp_id: "ctid-0", dedupe_key: "dk-a", status: "created", id: "id-1" },
+      { client_temp_id: "ctid-1", dedupe_key: "dk-b", status: "merged", id: "id-2" },
     ];
     const result: BulkUpsertResult = {
       created: ["id-1"],
@@ -46,15 +46,15 @@ describe("BulkUpsertResult items mapping", () => {
       items,
     };
 
-    const map = new Map(result.items.map(i => [i.dedupe_key, i]));
-    expect(map.get("dk-a")?.status).toBe("created");
-    expect(map.get("dk-b")?.status).toBe("merged");
+    const map = new Map(result.items.map(i => [i.client_temp_id, i]));
+    expect(map.get("ctid-0")?.status).toBe("created");
+    expect(map.get("ctid-1")?.status).toBe("merged");
   });
 
   it("partial failure still maps correctly", () => {
     const items: BulkUpsertItemResult[] = [
-      { dedupe_key: "dk-1", status: "created", id: "id-1" },
-      { dedupe_key: "dk-2", status: "failed", reason: "RLS violation" },
+      { client_temp_id: "ctid-0", dedupe_key: "dk-1", status: "created", id: "id-1" },
+      { client_temp_id: "ctid-1", dedupe_key: "dk-2", status: "failed", reason: "RLS violation" },
     ];
     const result: BulkUpsertResult = {
       created: ["id-1"],

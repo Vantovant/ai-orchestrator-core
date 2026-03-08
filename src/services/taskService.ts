@@ -25,17 +25,24 @@ export interface Task {
 export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "start_date" | "completed_at" | "order_index" | "source" | "estimated_minutes" | "project_id" | "dedupe_key" | "note_id">>;
 
 export interface BulkUpsertItemResult {
+  /** Caller-provided client_temp_id echoed back for deterministic UI mapping */
+  client_temp_id: string;
   dedupe_key: string;
   status: "created" | "merged" | "failed";
   id?: string;
   reason?: string;
 }
 
+export interface BulkUpsertInput extends TaskInsert {
+  /** Opaque caller ID echoed back in results – NOT stored in DB */
+  client_temp_id: string;
+}
+
 export interface BulkUpsertResult {
   created: string[];
   merged: string[];
   failed: { title: string; reason: string }[];
-  /** Deterministic per-item results keyed by dedupe_key */
+  /** Deterministic per-item results keyed by client_temp_id */
   items: BulkUpsertItemResult[];
 }
 
@@ -106,13 +113,14 @@ export const taskService = {
   /**
    * Bulk upsert tasks with dedupe_key. Returns created/merged/failed breakdown.
    */
-  async bulkUpsert(tasks: TaskInsert[]): Promise<BulkUpsertResult> {
+  async bulkUpsert(tasks: BulkUpsertInput[]): Promise<BulkUpsertResult> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
     const result: BulkUpsertResult = { created: [], merged: [], failed: [], items: [] };
 
     for (const task of tasks) {
+      const ctid = task.client_temp_id;
       const dk = task.dedupe_key || "";
       try {
         if (task.dedupe_key) {
@@ -141,7 +149,7 @@ export const taskService = {
               .single();
             if (error) throw error;
             result.merged.push(data.id);
-            result.items.push({ dedupe_key: dk, status: "merged", id: data.id });
+            result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "merged", id: data.id });
             continue;
           }
         }
@@ -154,10 +162,10 @@ export const taskService = {
           .single();
         if (error) throw error;
         result.created.push(data.id);
-        result.items.push({ dedupe_key: dk, status: "created", id: data.id });
+        result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "created", id: data.id });
       } catch (e: any) {
         result.failed.push({ title: task.title, reason: e.message || "Unknown error" });
-        result.items.push({ dedupe_key: dk, status: "failed", reason: e.message || "Unknown error" });
+        result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "failed", reason: e.message || "Unknown error" });
       }
     }
 

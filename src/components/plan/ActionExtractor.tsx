@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Check, ListTodo, Bell, ExternalLink, AlertCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { taskService, makeDedupe, type BulkUpsertResult, type BulkUpsertItemResult } from "@/services/taskService";
+import { taskService, makeDedupe, type BulkUpsertResult, type BulkUpsertItemResult, type BulkUpsertInput } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { useQueryClient } from "@tanstack/react-query";
 import { WriteReceiptBanner, buildReceipt, type WriteReceiptData } from "@/components/ui/WriteReceipt";
@@ -111,15 +111,18 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         : s
     ));
 
-    // Build task inserts with dedupe_keys for deterministic mapping
+    // Build task inserts: stable dedupe_key for DB, separate client_temp_id for UI mapping
     const taskItems = toApply.filter(s => s.type === "task");
     const reminderItems = toApply.filter(s => s.type === "reminder");
 
-    // Build a stable dedupe map keyed by suggestion title+index (no object mutation)
-    const dedupeByTitle = new Map<string, string>();
-    const taskInserts = taskItems.map((s, idx) => {
-      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title + "|" + idx);
-      dedupeByTitle.set(s.title + "|" + idx, dk);
+    // client_temp_id map for UI result lookup (keyed by temp id, not by dedupe_key)
+    const clientTempIds = new Map<number, string>();
+    const taskInserts: BulkUpsertInput[] = taskItems.map((s, idx) => {
+      // Stable DB dedupe: user + project + note + title only (no index)
+      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
+      // Unique client_temp_id for UI mapping (includes index to handle duplicate titles)
+      const ctid = `ctid-${idx}-${Date.now()}`;
+      clientTempIds.set(idx, ctid);
       return {
         title: s.title,
         priority: priorityMap[s.priority || "P2"] || "medium",
@@ -128,6 +131,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         project_id: projectId || null,
         note_id: noteId || null,
         dedupe_key: dk,
+        client_temp_id: ctid,
       };
     });
 
@@ -136,10 +140,10 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       taskResult = await taskService.bulkUpsert(taskInserts);
     }
 
-    // Build a lookup from dedupe_key → item result
+    // Build a lookup from client_temp_id → item result
     const taskResultMap = new Map<string, BulkUpsertItemResult>();
     for (const item of taskResult.items) {
-      taskResultMap.set(item.dedupe_key, item);
+      taskResultMap.set(item.client_temp_id, item);
     }
 
     let reminderCreated = 0;
@@ -159,7 +163,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       }
     }
 
-    // Update per-item statuses using deterministic dedupe_key mapping (no object mutation)
+    // Update per-item statuses using client_temp_id mapping (no object mutation)
     let convergingTaskIdx = 0;
     let convergingReminderIdx = 0;
     const updatedSuggestions = suggestions.map(s => {
@@ -167,8 +171,8 @@ export default function ActionExtractor({ noteContent, structureJson, structured
 
       if (s.type === "task") {
         const tIdx = convergingTaskIdx++;
-        const dk = dedupeByTitle.get(s.title + "|" + tIdx);
-        const itemResult = dk ? taskResultMap.get(dk) : undefined;
+        const ctid = clientTempIds.get(tIdx);
+        const itemResult = ctid ? taskResultMap.get(ctid) : undefined;
         if (!itemResult) return { ...s, applyStatus: "failed" as const, failReason: "No result returned" };
         return {
           ...s,
@@ -203,6 +207,8 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     let verificationMsg: string | undefined;
     if (projectId && (totalCreated > 0 || totalMerged > 0)) {
       try {
+        // Null-safe open-task query: status IS NULL counts as open
+        // Uses .or() to handle nullable status correctly
         const { count, error: countError } = await supabase
           .from("tasks")
           .select("id", { count: "exact", head: true })
@@ -210,9 +216,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
           .eq("project_id", projectId)
           .is("deleted_at", null)
           .is("completed_at", null)
-          .not("status", "eq", "done")
-          .not("status", "eq", "completed")
-          .not("status", "eq", "cancelled");
+          .or("status.is.null,and(status.neq.done,status.neq.completed,status.neq.cancelled)");
         if (!countError && count !== null) {
           verificationMsg = `Verified: ${count} open task${count !== 1 ? "s" : ""} now visible in this project`;
         }
