@@ -207,6 +207,8 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     let verificationMsg: string | undefined;
     if (projectId && (totalCreated > 0 || totalMerged > 0)) {
       try {
+        // Null-safe open-task query: status IS NULL counts as open
+        // Uses .or() to handle nullable status correctly
         const { count, error: countError } = await supabase
           .from("tasks")
           .select("id", { count: "exact", head: true })
@@ -214,9 +216,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
           .eq("project_id", projectId)
           .is("deleted_at", null)
           .is("completed_at", null)
-          .not("status", "eq", "done")
-          .not("status", "eq", "completed")
-          .not("status", "eq", "cancelled");
+          .or("status.is.null,and(status.neq.done,status.neq.completed,status.neq.cancelled)");
         if (!countError && count !== null) {
           verificationMsg = `Verified: ${count} open task${count !== 1 ? "s" : ""} now visible in this project`;
         }

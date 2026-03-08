@@ -53,8 +53,8 @@ describe("BulkUpsertResult items mapping", () => {
 
   it("partial failure still maps correctly", () => {
     const items: BulkUpsertItemResult[] = [
-      { dedupe_key: "dk-1", status: "created", id: "id-1" },
-      { dedupe_key: "dk-2", status: "failed", reason: "RLS violation" },
+      { client_temp_id: "ctid-0", dedupe_key: "dk-1", status: "created", id: "id-1" },
+      { client_temp_id: "ctid-1", dedupe_key: "dk-2", status: "failed", reason: "RLS violation" },
     ];
     const result: BulkUpsertResult = {
       created: ["id-1"],
