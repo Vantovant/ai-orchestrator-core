@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { knowledgeService, type KnowledgeDoc } from "@/services/knowledgeService";
-import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile } from "@/services/knowledgeUploadService";
+import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile, retryIngestion } from "@/services/knowledgeUploadService";
 import { ACCEPTED_FILE_TYPES } from "@/lib/fileExtractor";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
