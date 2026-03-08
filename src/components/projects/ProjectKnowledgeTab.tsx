@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { knowledgeService, type KnowledgeDoc, type KnowledgeDocInsert } from "@/services/knowledgeService";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { knowledgeService, suggestProject, type KnowledgeDoc, type KnowledgeDocInsert, type ProjectSuggestion } from "@/services/knowledgeService";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BookOpen, Plus, Trash2, ExternalLink, Tag, Filter } from "lucide-react";
+import { BookOpen, Plus, Trash2, ExternalLink, Tag, Filter, Sparkles, Check, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -27,6 +27,12 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
   const [sourceUrl, setSourceUrl] = useState("");
   const [tags, setTags] = useState("");
 
+  // Smart assignment state
+  const [suggestions, setSuggestions] = useState<ProjectSuggestion[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectId);
+  const [showSuggestion, setShowSuggestion] = useState(false);
+
   const docs = useQuery({
     queryKey: ["knowledge_docs", projectId, filter],
     queryFn: () => knowledgeService.list(projectId, filter),
@@ -37,11 +43,7 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["knowledge_docs"] });
       toast.success("Knowledge doc added");
-      setAddOpen(false);
-      setTitle("");
-      setRawText("");
-      setSourceUrl("");
-      setTags("");
+      resetForm();
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -54,6 +56,36 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
     },
   });
 
+  const resetForm = () => {
+    setAddOpen(false);
+    setTitle("");
+    setRawText("");
+    setSourceUrl("");
+    setTags("");
+    setSuggestions([]);
+    setShowSuggestion(false);
+    setSelectedProjectId(projectId);
+  };
+
+  const handleSmartSuggest = async () => {
+    if (!title.trim() && !rawText.trim()) return;
+    setSuggestLoading(true);
+    try {
+      const results = await suggestProject(title, rawText);
+      setSuggestions(results);
+      setShowSuggestion(true);
+      if (results.length > 0) {
+        toast.info(`Suggested: ${results[0].project_name} (${results[0].confidence}%)`);
+      } else {
+        toast.info("No strong project match found — keeping current project");
+      }
+    } catch {
+      toast.error("Suggestion failed");
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
   const handleAdd = () => {
     if (!title.trim()) { toast.error("Title required"); return; }
     addMutation.mutate({
@@ -61,7 +93,7 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
       raw_text: rawText.trim(),
       source_url: sourceUrl.trim() || undefined,
       tags: tags.split(",").map(t => t.trim()).filter(Boolean),
-      project_id: projectId,
+      project_id: selectedProjectId,
       source_type: "manual",
     });
   };
@@ -141,8 +173,8 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
         ))}
       </div>
 
-      {/* Add dialog */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      {/* Add dialog with smart assignment */}
+      <Dialog open={addOpen} onOpenChange={v => { if (!v) resetForm(); else setAddOpen(true); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
@@ -154,8 +186,62 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
             <Textarea placeholder="Content / notes / raw text" value={rawText} onChange={e => setRawText(e.target.value)} rows={5} />
             <Input placeholder="Source URL (optional)" value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} />
             <Input placeholder="Tags (comma-separated)" value={tags} onChange={e => setTags(e.target.value)} />
-            <Button onClick={handleAdd} disabled={addMutation.isPending} className="w-full">
-              {addMutation.isPending ? "Adding…" : "Add Knowledge Doc"}
+
+            {/* Smart project suggestion */}
+            <div className="border rounded-md p-3 space-y-2 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Project Assignment</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs gap-1 h-6"
+                  onClick={handleSmartSuggest}
+                  disabled={suggestLoading || (!title.trim() && !rawText.trim())}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {suggestLoading ? "Analyzing…" : "Smart Suggest"}
+                </Button>
+              </div>
+
+              {showSuggestion && suggestions.length > 0 && (
+                <div className="space-y-1.5">
+                  {suggestions.map((s, i) => (
+                    <button
+                      key={s.project_id}
+                      onClick={() => setSelectedProjectId(s.project_id)}
+                      className={`w-full text-left p-2 rounded text-xs border transition-colors ${
+                        selectedProjectId === s.project_id
+                          ? "border-primary bg-primary/5"
+                          : "border-transparent hover:bg-muted"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{s.project_name}</span>
+                        <div className="flex items-center gap-1">
+                          <Badge variant={i === 0 ? "default" : "secondary"} className="text-[9px]">
+                            {s.confidence}%
+                          </Badge>
+                          {selectedProjectId === s.project_id && <Check className="h-3 w-3 text-primary" />}
+                        </div>
+                      </div>
+                      <p className="text-muted-foreground text-[10px] mt-0.5">{s.reasons.join(" · ")}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {showSuggestion && suggestions.length === 0 && (
+                <p className="text-[10px] text-muted-foreground">No strong match — will save to current project.</p>
+              )}
+            </div>
+
+            <Button onClick={handleAdd} disabled={addMutation.isPending} className="w-full gap-1">
+              {addMutation.isPending ? "Adding…" : (
+                <>
+                  <ArrowRight className="h-3 w-3" />
+                  Add Knowledge Doc
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
