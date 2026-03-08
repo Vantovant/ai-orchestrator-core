@@ -36,8 +36,8 @@ describe("BulkUpsertResult items mapping", () => {
   it("items array supports per-key lookup for duplicate titles", () => {
     // Simulating two tasks with same title but different dedupe_keys
     const items: BulkUpsertItemResult[] = [
-      { dedupe_key: "dk-a", status: "created", id: "id-1" },
-      { dedupe_key: "dk-b", status: "merged", id: "id-2" },
+      { client_temp_id: "ctid-0", dedupe_key: "dk-a", status: "created", id: "id-1" },
+      { client_temp_id: "ctid-1", dedupe_key: "dk-b", status: "merged", id: "id-2" },
     ];
     const result: BulkUpsertResult = {
       created: ["id-1"],
