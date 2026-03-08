@@ -161,13 +161,16 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       }
     }
 
-    // Update per-item statuses using deterministic dedupe_key mapping
+    // Update per-item statuses using deterministic dedupe_key mapping (no object mutation)
+    let convergingTaskIdx = 0;
     let convergingReminderIdx = 0;
     const updatedSuggestions = suggestions.map(s => {
       if (!s.selected || s.applyStatus === "created" || s.applyStatus === "merged") return s;
 
-      if (s.type === "task" && s._dedupeKey) {
-        const itemResult = taskResultMap.get(s._dedupeKey);
+      if (s.type === "task") {
+        const tIdx = convergingTaskIdx++;
+        const dk = dedupeByTitle.get(s.title + "|" + tIdx);
+        const itemResult = dk ? taskResultMap.get(dk) : undefined;
         if (!itemResult) return { ...s, applyStatus: "failed" as const, failReason: "No result returned" };
         return {
           ...s,
