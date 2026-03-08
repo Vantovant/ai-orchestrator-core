@@ -239,6 +239,23 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  {doc.status === "extraction_failed" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1"
+                      onClick={async () => {
+                        try {
+                          toast.info("Retrying…");
+                          const r = await retryIngestion(doc.id);
+                          toast.success(`Done! ${r.chunksCreated} chunks created.`);
+                          qc.invalidateQueries({ queryKey: ["knowledge_docs"] });
+                        } catch (e: any) { toast.error(e.message); }
+                      }}
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" /> Retry
+                    </Button>
+                  )}
                   {doc.source_type === "upload" && (
                     <Button
                       size="icon"
