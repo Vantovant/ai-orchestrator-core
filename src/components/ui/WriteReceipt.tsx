@@ -57,6 +57,9 @@ export function WriteReceiptBanner({ receipt, onNavigate, navigateLabel }: Props
           </Badge>
         )}
       </div>
+      {receipt.verification_message && (
+        <p className="text-[10px] text-primary font-medium">{receipt.verification_message}</p>
+      )}
       {onNavigate && (
         <Button variant="outline" size="sm" className="h-7 text-[11px] gap-1 w-full" onClick={onNavigate}>
           <ExternalLink className="h-3 w-3" />
