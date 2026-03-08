@@ -111,15 +111,18 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         : s
     ));
 
-    // Build task inserts with dedupe_keys for deterministic mapping
+    // Build task inserts: stable dedupe_key for DB, separate client_temp_id for UI mapping
     const taskItems = toApply.filter(s => s.type === "task");
     const reminderItems = toApply.filter(s => s.type === "reminder");
 
-    // Build a stable dedupe map keyed by suggestion title+index (no object mutation)
-    const dedupeByTitle = new Map<string, string>();
-    const taskInserts = taskItems.map((s, idx) => {
-      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title + "|" + idx);
-      dedupeByTitle.set(s.title + "|" + idx, dk);
+    // client_temp_id map for UI result lookup (keyed by temp id, not by dedupe_key)
+    const clientTempIds = new Map<number, string>();
+    const taskInserts: BulkUpsertInput[] = taskItems.map((s, idx) => {
+      // Stable DB dedupe: user + project + note + title only (no index)
+      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
+      // Unique client_temp_id for UI mapping (includes index to handle duplicate titles)
+      const ctid = `ctid-${idx}-${Date.now()}`;
+      clientTempIds.set(idx, ctid);
       return {
         title: s.title,
         priority: priorityMap[s.priority || "P2"] || "medium",
@@ -128,6 +131,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         project_id: projectId || null,
         note_id: noteId || null,
         dedupe_key: dk,
+        client_temp_id: ctid,
       };
     });
 
@@ -136,10 +140,10 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       taskResult = await taskService.bulkUpsert(taskInserts);
     }
 
-    // Build a lookup from dedupe_key → item result
+    // Build a lookup from client_temp_id → item result
     const taskResultMap = new Map<string, BulkUpsertItemResult>();
     for (const item of taskResult.items) {
-      taskResultMap.set(item.dedupe_key, item);
+      taskResultMap.set(item.client_temp_id, item);
     }
 
     let reminderCreated = 0;
