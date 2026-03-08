@@ -15,13 +15,22 @@ function hashContent(str: string): string {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const authHeader = req.headers.get("Authorization") ?? "";
+
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Auth check with user client
     const userClient = createClient(supabaseUrl, anonKey, {
@@ -36,7 +45,12 @@ serve(async (req) => {
     }
 
     const { doc_id, extracted_text } = await req.json();
-    if (!doc_id) throw new Error("doc_id required");
+    if (!doc_id) {
+      return new Response(JSON.stringify({ error: "doc_id required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const adminClient = createClient(supabaseUrl, serviceKey);
 
@@ -47,11 +61,26 @@ serve(async (req) => {
       .eq("id", doc_id)
       .single();
 
-    if (docErr || !doc) throw new Error("Document not found");
-    if (doc.user_id !== user.id) throw new Error("Not authorized for this document");
+    if (docErr || !doc) {
+      return new Response(JSON.stringify({ error: "Document not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (doc.user_id !== user.id) {
+      return new Response(JSON.stringify({ error: "Not authorized for this document" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const text = (extracted_text || "").trim();
     if (!text) {
+      await adminClient
+        .from("knowledge_docs")
+        .update({ status: "ready" })
+        .eq("id", doc_id);
+
       return new Response(JSON.stringify({ ok: true, chunks: 0, message: "No text to process" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -91,6 +120,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e: any) {
+    console.error("kb-ingest-upload error:", e);
     return new Response(JSON.stringify({ error: e.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

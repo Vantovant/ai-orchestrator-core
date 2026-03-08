@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { knowledgeService, suggestProject, type KnowledgeDocInsert, type ProjectSuggestion } from "@/services/knowledgeService";
-import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile } from "@/services/knowledgeUploadService";
+import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile, retryIngestion } from "@/services/knowledgeUploadService";
 import { ACCEPTED_FILE_TYPES } from "@/lib/fileExtractor";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BookOpen, Plus, Trash2, ExternalLink, Tag, Filter, Sparkles, Check, ArrowRight, Upload, Download, FileText, X, AlertCircle } from "lucide-react";
+import { BookOpen, Plus, Trash2, ExternalLink, Tag, Filter, Sparkles, Check, ArrowRight, Upload, Download, FileText, X, AlertCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -239,6 +239,23 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  {doc.status === "extraction_failed" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 text-[10px] gap-1"
+                      onClick={async () => {
+                        try {
+                          toast.info("Retrying…");
+                          const r = await retryIngestion(doc.id);
+                          toast.success(`Done! ${r.chunksCreated} chunks created.`);
+                          qc.invalidateQueries({ queryKey: ["knowledge_docs"] });
+                        } catch (e: any) { toast.error(e.message); }
+                      }}
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" /> Retry
+                    </Button>
+                  )}
                   {doc.source_type === "upload" && (
                     <Button
                       size="icon"

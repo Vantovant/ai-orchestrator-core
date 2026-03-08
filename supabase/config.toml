@@ -131,3 +131,30 @@ verify_jwt = false
 
 [functions.extension-finance-create]
 verify_jwt = false
+
+[functions.kb-ingest-upload]
+verify_jwt = false
+
+[functions.extension-meeting-create]
+verify_jwt = false
+
+[functions.extension-reminder-create]
+verify_jwt = false
+
+[functions.capture-whatsapp]
+verify_jwt = false
+
+[functions.gmail-auth-start]
+verify_jwt = false
+
+[functions.gmail-auth-callback]
+verify_jwt = false
+
+[functions.gmail-list]
+verify_jwt = false
+
+[functions.gmail-sync]
+verify_jwt = false
+
+[functions.gmail-disconnect]
+verify_jwt = false

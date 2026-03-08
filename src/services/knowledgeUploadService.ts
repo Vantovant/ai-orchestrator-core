@@ -9,6 +9,63 @@ export interface UploadResult {
   extractionError?: string;
 }
 
+/**
+ * Attempt to call kb-ingest-upload with extracted text.
+ * Returns chunks created, or throws with a clear message.
+ */
+async function invokeIngest(docId: string, extractedText: string): Promise<number> {
+  const { data: result, error: fnErr } = await supabase.functions.invoke("kb-ingest-upload", {
+    body: { doc_id: docId, extracted_text: extractedText },
+  });
+
+  if (fnErr) {
+    // FunctionsFetchError = network/CORS/deploy issue
+    const msg = fnErr.message || String(fnErr);
+    if (msg.includes("FunctionsFetchError") || msg.includes("Failed to send")) {
+      throw new Error("Edge Function unreachable (CORS/deploy issue). File is uploaded, but indexing failed. Try the Retry button.");
+    }
+    throw new Error(msg);
+  }
+
+  if (result?.error) throw new Error(result.error);
+  return result?.chunks || 0;
+}
+
+export async function retryIngestion(docId: string, manualText?: string): Promise<{ chunksCreated: number }> {
+  let text = manualText?.trim() || "";
+
+  if (!text) {
+    // Try to get raw_text already on the doc
+    const { data: doc } = await supabase
+      .from("knowledge_docs")
+      .select("raw_text")
+      .eq("id", docId)
+      .single();
+    text = (doc as any)?.raw_text?.trim() || "";
+  }
+
+  if (!text) {
+    throw new Error("No text available. Please paste text manually.");
+  }
+
+  // Update status to processing
+  await supabase
+    .from("knowledge_docs")
+    .update({ status: "processing" } as any)
+    .eq("id", docId);
+
+  try {
+    const chunks = await invokeIngest(docId, text);
+    return { chunksCreated: chunks };
+  } catch (e: any) {
+    await supabase
+      .from("knowledge_docs")
+      .update({ status: "extraction_failed" } as any)
+      .eq("id", docId);
+    throw e;
+  }
+}
+
 export async function uploadKnowledgeFile(
   file: File,
   projectId: string | null,
@@ -48,7 +105,6 @@ export async function uploadKnowledgeFile(
     .upload(storagePath, file, { contentType: file.type, upsert: false });
 
   if (uploadErr) {
-    // Clean up doc
     await supabase.from("knowledge_docs").delete().eq("id", docId);
     throw new Error(`Upload failed: ${uploadErr.message}`);
   }
@@ -79,26 +135,31 @@ export async function uploadKnowledgeFile(
     try {
       const extractedText = await extractTextFromFile(file);
       if (extractedText.trim()) {
-        // Send to edge function for chunking
-        const { data: result, error: fnErr } = await supabase.functions.invoke("kb-ingest-upload", {
-          body: { doc_id: docId, extracted_text: extractedText },
-        });
-        if (fnErr) throw fnErr;
-        chunksCreated = result?.chunks || 0;
+        chunksCreated = await invokeIngest(docId, extractedText);
+      } else {
+        // No text but file uploaded OK
+        await supabase
+          .from("knowledge_docs")
+          .update({ status: "ready" } as any)
+          .eq("id", docId);
       }
     } catch (e: any) {
       extractionError = e.message || "Text extraction failed";
-      console.error("Extraction error:", e);
-      // Update doc status
+      console.error("Extraction/ingestion error:", e);
       await supabase
         .from("knowledge_docs")
         .update({ status: "extraction_failed" } as any)
         .eq("id", docId);
     }
+  } else {
+    // Non-extractable file type — just mark ready
+    await supabase
+      .from("knowledge_docs")
+      .update({ status: "ready" } as any)
+      .eq("id", docId);
   }
 
-  // Update status to ready if no error
-  if (!extractionError) {
+  if (!extractionError && chunksCreated > 0) {
     await supabase
       .from("knowledge_docs")
       .update({ status: "ready" } as any)
@@ -111,7 +172,7 @@ export async function uploadKnowledgeFile(
 export async function getFileDownloadUrl(path: string): Promise<string> {
   const { data, error } = await supabase.storage
     .from("knowledge-uploads")
-    .createSignedUrl(path, 3600); // 1 hour
+    .createSignedUrl(path, 3600);
 
   if (error) throw error;
   return data.signedUrl;

@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { knowledgeService, type KnowledgeDoc } from "@/services/knowledgeService";
-import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile } from "@/services/knowledgeUploadService";
+import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile, retryIngestion } from "@/services/knowledgeUploadService";
 import { ACCEPTED_FILE_TYPES } from "@/lib/fileExtractor";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import {
   BookOpen, Upload, Search, Plus, FileText, Trash2, Download,
-  Tag, X, Filter, AlertTriangle, Database, FolderOpen,
+  Tag, X, Filter, AlertTriangle, Database, FolderOpen, RefreshCw,
 } from "lucide-react";
 
 type KBFilter = "all" | "global" | "project";
@@ -266,6 +266,18 @@ export default function KnowledgeBasePage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        {doc.status === "extraction_failed" && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={async () => {
+                            try {
+                              toast.info("Retrying…");
+                              const r = await retryIngestion(doc.id);
+                              toast.success(`Done! ${r.chunksCreated} chunks created.`);
+                              qc.invalidateQueries({ queryKey: ["knowledge_docs_global"] });
+                            } catch (e: any) { toast.error(e.message); }
+                          }}>
+                            <RefreshCw className="h-3 w-3" /> Retry
+                          </Button>
+                        )}
                         {doc.source_type === "upload" && (
                           <Button size="icon" variant="ghost" className="h-7 w-7 text-primary" onClick={() => handleDownload(doc.id)} title="Download">
                             <Download className="h-3.5 w-3.5" />
