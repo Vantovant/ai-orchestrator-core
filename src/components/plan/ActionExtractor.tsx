@@ -23,8 +23,6 @@ export interface ActionSuggestion {
   applyStatus?: "idle" | "queued" | "created" | "merged" | "failed";
   failReason?: string;
   createdId?: string;
-  /** Internal tracking key for deterministic result mapping */
-  _dedupeKey?: string;
 }
 
 interface Props {
@@ -117,11 +115,11 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     const taskItems = toApply.filter(s => s.type === "task");
     const reminderItems = toApply.filter(s => s.type === "reminder");
 
-    // Each task gets a unique dedupe_key; store it on the suggestion for later lookup
+    // Build a stable dedupe map keyed by suggestion title+index (no object mutation)
+    const dedupeByTitle = new Map<string, string>();
     const taskInserts = taskItems.map((s, idx) => {
-      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
-      // Tag suggestion with its dedupe key for result mapping
-      s._dedupeKey = dk;
+      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title + "|" + idx);
+      dedupeByTitle.set(s.title + "|" + idx, dk);
       return {
         title: s.title,
         priority: priorityMap[s.priority || "P2"] || "medium",
@@ -161,13 +159,16 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       }
     }
 
-    // Update per-item statuses using deterministic dedupe_key mapping
+    // Update per-item statuses using deterministic dedupe_key mapping (no object mutation)
+    let convergingTaskIdx = 0;
     let convergingReminderIdx = 0;
     const updatedSuggestions = suggestions.map(s => {
       if (!s.selected || s.applyStatus === "created" || s.applyStatus === "merged") return s;
 
-      if (s.type === "task" && s._dedupeKey) {
-        const itemResult = taskResultMap.get(s._dedupeKey);
+      if (s.type === "task") {
+        const tIdx = convergingTaskIdx++;
+        const dk = dedupeByTitle.get(s.title + "|" + tIdx);
+        const itemResult = dk ? taskResultMap.get(dk) : undefined;
         if (!itemResult) return { ...s, applyStatus: "failed" as const, failReason: "No result returned" };
         return {
           ...s,
@@ -198,6 +199,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     const allIds = [...taskResult.created, ...taskResult.merged];
 
     // Post-apply verification: count truly open tasks (not done/completed, not deleted)
+    // Matches TasksPage "pending" filter: status !== "done" (null status = open)
     let verificationMsg: string | undefined;
     if (projectId && (totalCreated > 0 || totalMerged > 0)) {
       try {
@@ -208,7 +210,9 @@ export default function ActionExtractor({ noteContent, structureJson, structured
           .eq("project_id", projectId)
           .is("deleted_at", null)
           .is("completed_at", null)
-          .not("status", "in", '("done","completed","cancelled")');
+          .not("status", "eq", "done")
+          .not("status", "eq", "completed")
+          .not("status", "eq", "cancelled");
         if (!countError && count !== null) {
           verificationMsg = `Verified: ${count} open task${count !== 1 ? "s" : ""} now visible in this project`;
         }
@@ -232,11 +236,11 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     }
     setReceipt(newReceipt);
 
-    // Await query invalidation before completing
+    // Await full refetch (not just invalidation) to guarantee visible data before tab switch
     try {
       await Promise.all([
-        qc.invalidateQueries({ queryKey: ["tasks"] }),
-        qc.invalidateQueries({ queryKey: ["reminders"] }),
+        qc.refetchQueries({ queryKey: ["tasks"] }),
+        qc.refetchQueries({ queryKey: ["reminders"] }),
       ]);
     } catch {
       // If refresh fails, downgrade receipt to warning
