@@ -128,6 +128,14 @@ export default function SmartExtractPanel({
 
   const handleRouteAction = (route: SuggestedRoute) => {
     const moneyDir = (extract?.entities_json as any)?.money_direction;
+
+    // Hard guard: block all finance routes if direction is unknown
+    const unknownDir = moneyDir?.transaction_type === "unknown" || moneyDir?.ui_action === "none";
+    if (unknownDir && (route.target === "finance_income" || route.target === "finance_expense")) {
+      toast.error("Cannot create finance entry — money direction is unknown. Select an account and re-run.");
+      return;
+    }
+
     const isIncome = route.target === "finance_income" || moneyDir?.ui_action === "create_income";
 
     switch (route.target) {
