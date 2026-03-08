@@ -201,6 +201,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     const allIds = [...taskResult.created, ...taskResult.merged];
 
     // Post-apply verification: count truly open tasks (not done/completed, not deleted)
+    // Matches TasksPage "pending" filter: status !== "done" (null status = open)
     let verificationMsg: string | undefined;
     if (projectId && (totalCreated > 0 || totalMerged > 0)) {
       try {
@@ -211,7 +212,9 @@ export default function ActionExtractor({ noteContent, structureJson, structured
           .eq("project_id", projectId)
           .is("deleted_at", null)
           .is("completed_at", null)
-          .not("status", "in", '("done","completed","cancelled")');
+          .not("status", "eq", "done")
+          .not("status", "eq", "completed")
+          .not("status", "eq", "cancelled");
         if (!countError && count !== null) {
           verificationMsg = `Verified: ${count} open task${count !== 1 ? "s" : ""} now visible in this project`;
         }
