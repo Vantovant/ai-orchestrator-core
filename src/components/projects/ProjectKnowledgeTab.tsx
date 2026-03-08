@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { knowledgeService, suggestProject, type KnowledgeDocInsert, type ProjectSuggestion } from "@/services/knowledgeService";
-import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile } from "@/services/knowledgeUploadService";
+import { uploadKnowledgeFile, getFileDownloadUrl, getKnowledgeFile, retryIngestion } from "@/services/knowledgeUploadService";
 import { ACCEPTED_FILE_TYPES } from "@/lib/fileExtractor";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
