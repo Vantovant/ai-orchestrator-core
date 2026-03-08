@@ -148,30 +148,34 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
     },
   });
 
-  // Bulk import
+  // Bulk import with upsert
   const importTasksMut = useMutation({
     mutationFn: async (tasks: any[]) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      for (let i = 0; i < tasks.length; i++) {
-        await taskService.create({
-          title: tasks[i].title,
-          status: tasks[i].status,
-          priority: tasks[i].priority,
-          due_date: tasks[i].due_date,
-          start_date: tasks[i].start_date,
-          completed_at: tasks[i].completed_at,
-          order_index: i + 1,
-          project_id: projectId,
-        } as any);
-      }
+      return taskImportService.importTasks(projectId, tasks);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: ["project_tasks", projectId] });
       qc.invalidateQueries({ queryKey: ["tasks"] });
-      activityLogService.log(projectId, "tasks_imported", {});
+      activityLogService.log(projectId, "tasks_imported", { created: result.created, updated: result.updated });
       setImportOpen(false);
-      toast.success("Tasks imported!");
+      const msg = result.updated > 0
+        ? `Imported: ${result.created} created, ${result.updated} updated`
+        : `Imported ${result.created} tasks`;
+      toast.success(msg);
+      if (result.errors.length > 0) {
+        toast.warning(`${result.errors.length} tasks had errors`);
+      }
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  // Export tasks
+  const exportTasksMut = useMutation({
+    mutationFn: async (format: "csv" | "json") => {
+      return taskExportService.exportTasks(projectId, format);
+    },
+    onSuccess: (result) => {
+      toast.success(`Exported ${result.count} tasks`);
     },
     onError: (e: any) => toast.error(e.message),
   });
