@@ -1,6 +1,6 @@
 /**
  * Client-side text extraction for uploaded files.
- * PDF: pdfjs-dist, DOCX: mammoth, Text-based: direct read.
+ * PDF: pdfjs-dist (dynamic CDN import), DOCX: mammoth, Text-based: direct read.
  */
 
 export async function extractTextFromFile(file: File): Promise<string> {
@@ -38,9 +38,13 @@ export async function extractTextFromFile(file: File): Promise<string> {
 
 async function extractPdfText(file: File): Promise<string> {
   try {
-    const pdfjsLib = await import("pdfjs-dist");
-    // Use bundled worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+    // Dynamic CDN import to avoid Rollup resolution issues
+    const PDFJS_VERSION = "4.9.155";
+    const pdfjsLib = await import(
+      /* @vite-ignore */
+      `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.mjs`
+    );
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.mjs`;
 
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
