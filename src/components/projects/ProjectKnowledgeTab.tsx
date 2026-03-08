@@ -215,6 +215,14 @@ export default function ProjectKnowledgeTab({ projectId, projectName }: Props) {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium truncate">{doc.title}</span>
                     <Badge variant="outline" className="text-[9px] shrink-0">{doc.source_type}</Badge>
+                    {doc.status && doc.status !== "ready" && (
+                      <Badge
+                        variant={doc.status === "extraction_failed" ? "destructive" : "secondary"}
+                        className="text-[9px]"
+                      >
+                        {doc.status}
+                      </Badge>
+                    )}
                     {doc.project_id === null && <Badge variant="secondary" className="text-[9px]">Global</Badge>}
                     {doc.source_type === "upload" && (
                       <Badge variant="secondary" className="text-[9px] gap-0.5">
