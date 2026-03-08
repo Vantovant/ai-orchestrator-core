@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "sonner";
 import {
   BookOpen, Upload, Search, Plus, FileText, Trash2, Download,
-  Tag, X, Filter, AlertTriangle, Database, FolderOpen,
+  Tag, X, Filter, AlertTriangle, Database, FolderOpen, RefreshCw,
 } from "lucide-react";
 
 type KBFilter = "all" | "global" | "project";
