@@ -120,16 +120,16 @@ export const taskService = {
     const result: BulkUpsertResult = { created: [], merged: [], failed: [], items: [] };
 
     for (const task of tasks) {
-      const ctid = task.client_temp_id;
-      const dk = task.dedupe_key || "";
+      const { client_temp_id: ctid, ...dbTask } = task;
+      const dk = dbTask.dedupe_key || "";
       try {
-        if (task.dedupe_key) {
+        if (dbTask.dedupe_key) {
           // Check if exists
           const { data: existing } = await supabase
             .from("tasks")
             .select("id")
             .eq("user_id", user.id)
-            .eq("dedupe_key", task.dedupe_key)
+            .eq("dedupe_key", dbTask.dedupe_key)
             .is("deleted_at", null)
             .maybeSingle();
 
@@ -138,10 +138,10 @@ export const taskService = {
             const { data, error } = await supabase
               .from("tasks")
               .update({
-                description: task.description,
-                priority: task.priority,
-                due_date: task.due_date,
-                source: task.source,
+                description: dbTask.description,
+                priority: dbTask.priority,
+                due_date: dbTask.due_date,
+                source: dbTask.source,
                 last_touched_at: new Date().toISOString(),
               })
               .eq("id", existing.id)
@@ -157,14 +157,14 @@ export const taskService = {
         // Create new
         const { data, error } = await supabase
           .from("tasks")
-          .insert({ ...task, user_id: user.id, last_touched_at: new Date().toISOString() })
+          .insert({ ...dbTask, user_id: user.id, last_touched_at: new Date().toISOString() })
           .select()
           .single();
         if (error) throw error;
         result.created.push(data.id);
         result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "created", id: data.id });
       } catch (e: any) {
-        result.failed.push({ title: task.title, reason: e.message || "Unknown error" });
+        result.failed.push({ title: dbTask.title, reason: e.message || "Unknown error" });
         result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "failed", reason: e.message || "Unknown error" });
       }
     }
