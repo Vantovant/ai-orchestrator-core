@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Check, ListTodo, Bell, ExternalLink, AlertCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { taskService, makeDedupe, type BulkUpsertResult } from "@/services/taskService";
+import { taskService, makeDedupe, type BulkUpsertResult, type BulkUpsertItemResult } from "@/services/taskService";
 import { reminderService } from "@/services/reminderService";
 import { useQueryClient } from "@tanstack/react-query";
 import { WriteReceiptBanner, buildReceipt, type WriteReceiptData } from "@/components/ui/WriteReceipt";
@@ -23,6 +23,8 @@ export interface ActionSuggestion {
   applyStatus?: "idle" | "queued" | "created" | "merged" | "failed";
   failReason?: string;
   createdId?: string;
+  /** Internal tracking key for deterministic result mapping */
+  _dedupeKey?: string;
 }
 
 interface Props {
@@ -54,7 +56,6 @@ export default function ActionExtractor({ noteContent, structureJson, structured
   const [suggestions, setSuggestions] = useState<ActionSuggestion[]>([]);
   const [applying, setApplying] = useState(false);
   const [receipt, setReceipt] = useState<WriteReceiptData | null>(null);
-  const [verifiedCount, setVerifiedCount] = useState<number | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -67,7 +68,6 @@ export default function ActionExtractor({ noteContent, structureJson, structured
     setLoading(true);
     setSuggestions([]);
     setReceipt(null);
-    setVerifiedCount(null);
     try {
       const { data, error } = await supabase.functions.invoke("plan-ai-extract-actions", {
         body: { content: text, note_date: noteDate },
@@ -105,7 +105,6 @@ export default function ActionExtractor({ noteContent, structureJson, structured
 
     setApplying(true);
     setReceipt(null);
-    setVerifiedCount(null);
 
     // Mark all selected as queued
     setSuggestions(prev => prev.map(s =>
@@ -114,72 +113,79 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         : s
     ));
 
+    // Build task inserts with dedupe_keys for deterministic mapping
     const taskItems = toApply.filter(s => s.type === "task");
     const reminderItems = toApply.filter(s => s.type === "reminder");
 
-    const taskInserts = taskItems.map(s => ({
-      title: s.title,
-      priority: priorityMap[s.priority || "P2"] || "medium",
-      due_date: s.due_at || null,
-      source: "note_extract",
-      project_id: projectId || null,
-      note_id: noteId || null,
-      dedupe_key: makeDedupe(user.id, projectId || null, noteId || null, s.title),
-    }));
+    // Each task gets a unique dedupe_key; store it on the suggestion for later lookup
+    const taskInserts = taskItems.map((s, idx) => {
+      const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
+      // Tag suggestion with its dedupe key for result mapping
+      s._dedupeKey = dk;
+      return {
+        title: s.title,
+        priority: priorityMap[s.priority || "P2"] || "medium",
+        due_date: s.due_at || null,
+        source: "note_extract",
+        project_id: projectId || null,
+        note_id: noteId || null,
+        dedupe_key: dk,
+      };
+    });
 
-    let taskResult: BulkUpsertResult = { created: [], merged: [], failed: [] };
+    let taskResult: BulkUpsertResult = { created: [], merged: [], failed: [], items: [] };
     if (taskInserts.length > 0) {
       taskResult = await taskService.bulkUpsert(taskInserts);
     }
 
+    // Build a lookup from dedupe_key → item result
+    const taskResultMap = new Map<string, BulkUpsertItemResult>();
+    for (const item of taskResult.items) {
+      taskResultMap.set(item.dedupe_key, item);
+    }
+
     let reminderCreated = 0;
-    let reminderFailed: { title: string; reason: string }[] = [];
-    for (const s of reminderItems) {
+    const reminderResults = new Map<number, { status: "created" | "failed"; reason?: string }>();
+    for (let ri = 0; ri < reminderItems.length; ri++) {
+      const s = reminderItems[ri];
       try {
         await reminderService.create({
           title: s.title,
           reminder_time: s.remind_at || new Date().toISOString(),
+          project_id: projectId || null,
         });
         reminderCreated++;
+        reminderResults.set(ri, { status: "created" });
       } catch (e: any) {
-        reminderFailed.push({ title: s.title, reason: e.message });
+        reminderResults.set(ri, { status: "failed", reason: e.message });
       }
     }
 
-    // Update per-item statuses
+    // Update per-item statuses using deterministic dedupe_key mapping
+    let convergingReminderIdx = 0;
     const updatedSuggestions = suggestions.map(s => {
       if (!s.selected || s.applyStatus === "created" || s.applyStatus === "merged") return s;
 
-      if (s.type === "task") {
-        const failedItem = taskResult.failed.find(f => f.title === s.title);
-        if (failedItem) return { ...s, applyStatus: "failed" as const, failReason: failedItem.reason };
-        const createdItem = taskResult.created.find((_, ci) => {
-          const dk = makeDedupe(user.id, projectId || null, noteId || null, s.title);
-          return taskInserts[ci]?.dedupe_key === dk;
-        });
-        // Simple: if not failed, check created vs merged by matching title order
-        const idx = taskInserts.findIndex(t => t.title === s.title);
-        if (idx !== -1) {
-          let cCount = 0, mCount = 0;
-          for (let i = 0; i < taskInserts.length; i++) {
-            if (taskResult.failed.find(f => f.title === taskInserts[i].title)) continue;
-            if (i === idx) {
-              if (cCount < taskResult.created.length) {
-                return { ...s, applyStatus: "created" as const, createdId: taskResult.created[cCount] };
-              }
-              return { ...s, applyStatus: "merged" as const, createdId: taskResult.merged[mCount] };
-            }
-            if (cCount < taskResult.created.length) cCount++;
-            else mCount++;
-          }
-        }
-        return { ...s, applyStatus: "created" as const };
+      if (s.type === "task" && s._dedupeKey) {
+        const itemResult = taskResultMap.get(s._dedupeKey);
+        if (!itemResult) return { ...s, applyStatus: "failed" as const, failReason: "No result returned" };
+        return {
+          ...s,
+          applyStatus: itemResult.status as ActionSuggestion["applyStatus"],
+          createdId: itemResult.id,
+          failReason: itemResult.reason,
+        };
       }
 
       if (s.type === "reminder") {
-        const fi = reminderFailed.find(f => f.title === s.title);
-        if (fi) return { ...s, applyStatus: "failed" as const, failReason: fi.reason };
-        return { ...s, applyStatus: "created" as const };
+        const rIdx = convergingReminderIdx++;
+        const rResult = reminderResults.get(rIdx);
+        if (!rResult) return { ...s, applyStatus: "failed" as const, failReason: "No result returned" };
+        return {
+          ...s,
+          applyStatus: rResult.status as ActionSuggestion["applyStatus"],
+          failReason: rResult.reason,
+        };
       }
       return s;
     });
@@ -188,8 +194,29 @@ export default function ActionExtractor({ noteContent, structureJson, structured
 
     const totalCreated = taskResult.created.length + reminderCreated;
     const totalMerged = taskResult.merged.length;
-    const totalFailed = taskResult.failed.length + reminderFailed.length;
+    const totalFailed = taskResult.failed.length + (Array.from(reminderResults.values()).filter(r => r.status === "failed").length);
     const allIds = [...taskResult.created, ...taskResult.merged];
+
+    // Post-apply verification: count truly open tasks (not done/completed, not deleted)
+    let verificationMsg: string | undefined;
+    if (projectId && (totalCreated > 0 || totalMerged > 0)) {
+      try {
+        const { count, error: countError } = await supabase
+          .from("tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("project_id", projectId)
+          .is("deleted_at", null)
+          .is("completed_at", null)
+          .not("status", "in", '("done","completed","cancelled")');
+        if (!countError && count !== null) {
+          verificationMsg = `Verified: ${count} open task${count !== 1 ? "s" : ""} now visible in this project`;
+        }
+      } catch {}
+    } else if (!projectId && (totalCreated > 0 || totalMerged > 0)) {
+      // Generic receipt without project-specific verification
+      verificationMsg = undefined;
+    }
 
     // Build receipt
     const newReceipt = buildReceipt(
@@ -200,28 +227,27 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       allIds,
       noteId || undefined,
     );
+    if (verificationMsg) {
+      newReceipt.verification_message = verificationMsg;
+    }
     setReceipt(newReceipt);
 
-    // Post-apply verification: count open tasks in this project
-    if (projectId && (totalCreated > 0 || totalMerged > 0)) {
-      try {
-        const { count, error: countError } = await supabase
-          .from("tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("project_id", projectId)
-          .is("deleted_at", null);
-        if (!countError && count !== null) {
-          setVerifiedCount(count);
-        }
-      } catch {}
+    // Await query invalidation before completing
+    try {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["tasks"] }),
+        qc.invalidateQueries({ queryKey: ["reminders"] }),
+      ]);
+    } catch {
+      // If refresh fails, downgrade receipt to warning
+      if (newReceipt.status === "success") {
+        newReceipt.status = "warning";
+        newReceipt.summary += " (list refresh pending)";
+        setReceipt({ ...newReceipt });
+      }
     }
 
     setApplying(false);
-
-    // Invalidate queries broadly
-    qc.invalidateQueries({ queryKey: ["tasks"] });
-    qc.invalidateQueries({ queryKey: ["reminders"] });
 
     // Toast
     if (totalCreated === 0 && totalMerged === 0) {
@@ -232,7 +258,7 @@ export default function ActionExtractor({ noteContent, structureJson, structured
       toast.success(`Receipt ready — ${totalCreated} created, ${totalMerged} merged.`);
     }
 
-    // Auto-switch to Tasks tab if anything was created/merged
+    // Auto-switch to Tasks tab only after refresh is complete
     if ((totalCreated > 0 || totalMerged > 0) && onApplyComplete) {
       onApplyComplete();
     }
@@ -289,21 +315,13 @@ export default function ActionExtractor({ noteContent, structureJson, structured
               </Button>
             )}
 
-            {/* Receipt banner */}
+            {/* Receipt banner with optional verification */}
             {receipt && (
               <WriteReceiptBanner
                 receipt={receipt}
                 onNavigate={handleViewInTasks}
                 navigateLabel="View in Tasks →"
               />
-            )}
-
-            {/* Post-apply verification */}
-            {verifiedCount !== null && (
-              <div className="flex items-center gap-1.5 text-[11px] text-primary">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                <span>Verified: {verifiedCount} open task{verifiedCount !== 1 ? "s" : ""} now visible in this project</span>
-              </div>
             )}
           </CardContent>
         </Card>
