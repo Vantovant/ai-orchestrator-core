@@ -81,7 +81,7 @@ serve(async (req) => {
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
     if (authErr || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { action, meetingId, date } = await req.json();
+    const { action, meetingId, date, notes_text } = await req.json();
     const today = new Date().toISOString().slice(0, 10);
 
     // Fetch snapshot data
@@ -110,6 +110,15 @@ serve(async (req) => {
     } else if (action === "eod") {
       systemPrompt = "You are an executive AI secretary doing an end-of-day review. Analyze: what got completed, what slipped (overdue/pushed tasks with suggested reason categories), extract action items for tomorrow, and create tomorrow's Top 3 priorities. Be direct and actionable.";
       userPrompt = `Today is ${date || today}. Here is the snapshot:\n\n${snapshot}\n\nGenerate the end-of-day review.`;
+    } else if (action === "meeting_advisor" && notes_text) {
+      const safeNotes = redactPII((notes_text || "").slice(0, 2000));
+      let meetingContext = "";
+      if (meetingId) {
+        const { data: meeting } = await userClient.from("meetings").select("title, description, start_time, location").eq("id", meetingId).single();
+        if (meeting) meetingContext = `Meeting: ${meeting.title}\nTime: ${meeting.start_time}\nLocation: ${meeting.location || "TBD"}\nDescription: ${meeting.description || "None"}\n\n`;
+      }
+      systemPrompt = "You are a strategic meeting advisor. Based on the user's live meeting notes, provide 3-5 brief, actionable suggestions: questions they should ask, risks to raise, strategic angles to consider, or follow-up items. Be concise — each suggestion should be one sentence. Return a JSON object with a 'suggestions' array of strings.";
+      userPrompt = `${meetingContext}Current meeting notes:\n${safeNotes}\n\nContext snapshot:\n${snapshot}\n\nProvide strategic advice.`;
     } else {
       return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -119,30 +128,37 @@ serve(async (req) => {
     }
 
     // Define tools for structured output
+    const toolName = action === "briefing" ? "generate_briefing" : action === "prep" ? "generate_prep" : action === "meeting_advisor" ? "generate_advice" : "generate_eod";
+    const toolDesc = action === "briefing" ? "Generate morning briefing" : action === "prep" ? "Generate meeting prep" : action === "meeting_advisor" ? "Generate meeting advice" : "Generate EOD review";
+    const toolProps = action === "briefing" ? {
+      priorities: { type: "string", description: "Top 3 priorities formatted as P1/P2/P3 list" },
+      meetings: { type: "string", description: "Today's meetings with prep items" },
+      conflicts: { type: "string", description: "Schedule conflicts and suggested fixes" },
+      commands3: { type: "string", description: "3 short actionable commands for today" },
+    } : action === "prep" ? {
+      agenda: { type: "string", description: "Suggested agenda items" },
+      questions: { type: "string", description: "Key questions to ask" },
+      risks: { type: "string", description: "Potential risks and considerations" },
+      checklist: { type: "string", description: "Preparation checklist" },
+    } : action === "meeting_advisor" ? {
+      suggestions: { type: "array", items: { type: "string" }, description: "3-5 brief strategic suggestions" },
+    } : {
+      completed: { type: "string", description: "Tasks completed today" },
+      slipped: { type: "string", description: "Tasks that slipped with reasons" },
+      tomorrow_top3: { type: "string", description: "Tomorrow's top 3 priorities" },
+      action_items: { type: "string", description: "Action items extracted from notes" },
+    };
+    const toolRequired = action === "briefing" ? ["priorities", "commands3"] : action === "prep" ? ["agenda", "questions"] : action === "meeting_advisor" ? ["suggestions"] : ["completed", "tomorrow_top3"];
+
     const tools = [{
       type: "function",
       function: {
-        name: action === "briefing" ? "generate_briefing" : action === "prep" ? "generate_prep" : "generate_eod",
-        description: action === "briefing" ? "Generate morning briefing" : action === "prep" ? "Generate meeting prep" : "Generate EOD review",
+        name: toolName,
+        description: toolDesc,
         parameters: {
           type: "object",
-          properties: action === "briefing" ? {
-            priorities: { type: "string", description: "Top 3 priorities formatted as P1/P2/P3 list" },
-            meetings: { type: "string", description: "Today's meetings with prep items" },
-            conflicts: { type: "string", description: "Schedule conflicts and suggested fixes" },
-            commands3: { type: "string", description: "3 short actionable commands for today" },
-          } : action === "prep" ? {
-            agenda: { type: "string", description: "Suggested agenda items" },
-            questions: { type: "string", description: "Key questions to ask" },
-            risks: { type: "string", description: "Potential risks and considerations" },
-            checklist: { type: "string", description: "Preparation checklist" },
-          } : {
-            completed: { type: "string", description: "Tasks completed today" },
-            slipped: { type: "string", description: "Tasks that slipped with reasons" },
-            tomorrow_top3: { type: "string", description: "Tomorrow's top 3 priorities" },
-            action_items: { type: "string", description: "Action items extracted from notes" },
-          },
-          required: action === "briefing" ? ["priorities", "commands3"] : action === "prep" ? ["agenda", "questions"] : ["completed", "tomorrow_top3"],
+          properties: toolProps,
+          required: toolRequired,
           additionalProperties: false,
         },
       },
