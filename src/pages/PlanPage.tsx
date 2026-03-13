@@ -704,17 +704,22 @@ export default function PlanPage() {
               return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No meetings match</CardContent></Card> :
               <div className="space-y-2">
                 {filtered.map((m) => (
-                  <Card key={m.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedMeeting(m)}>
+                   <Card key={m.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedMeeting(m)}>
                     <CardContent className="flex items-center justify-between p-4">
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium">{m.title}</span>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(new Date(m.start_time), "MMM d, h:mm a")}</span>
-                          {m.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{m.location}</span>}
+                      <div className="flex items-center gap-3 min-w-0">
+                        <input type="checkbox" checked={m.is_done}
+                          onChange={(e) => { e.stopPropagation(); toggleMeetingDoneMut.mutate({ id: m.id, is_done: !m.is_done }); }}
+                          onClick={(e) => e.stopPropagation()} className="h-4 w-4 shrink-0 rounded border-border" />
+                        <div className="min-w-0">
+                          <span className={`text-sm font-medium ${m.is_done ? "line-through text-muted-foreground" : ""}`}>{m.title}</span>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{format(new Date(m.start_time), "MMM d, h:mm a")}</span>
+                            {m.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{m.location}</span>}
+                          </div>
+                          {m.project_id && projectNameMap[m.project_id] && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary mt-0.5"><FolderKanban className="h-2.5 w-2.5" />{projectNameMap[m.project_id]}</span>
+                          )}
                         </div>
-                        {m.project_id && projectNameMap[m.project_id] && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-primary mt-0.5"><FolderKanban className="h-2.5 w-2.5" />{projectNameMap[m.project_id]}</span>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
