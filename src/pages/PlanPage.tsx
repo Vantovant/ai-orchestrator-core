@@ -441,6 +441,10 @@ export default function PlanPage() {
     mutationFn: ({ id, is_done }: { id: string; is_done: boolean }) => reminderService.toggleDone(id, is_done),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["reminders"] }); toast.success("Updated"); },
   });
+  const toggleMeetingDoneMut = useMutation({
+    mutationFn: ({ id, is_done }: { id: string; is_done: boolean }) => meetingService.toggleDone(id, is_done),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["meetings"] }); toast.success("Updated"); },
+  });
 
   const closeDialog = () => { setAddType(null); setTitle(""); setPriority("medium"); setDescription(""); setStartTime(""); setEndTime(""); setLocation(""); setReminderTime(""); };
 
