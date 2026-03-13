@@ -11,6 +11,7 @@ export interface Meeting {
   attendees: any;
   notes: string | null;
   project_id: string | null;
+  is_done: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -41,12 +42,23 @@ export const meetingService = {
     return data as Meeting;
   },
 
-  async update(id: string, updates: Partial<MeetingInsert>) {
+  async update(id: string, updates: Partial<MeetingInsert & { is_done: boolean }>) {
     const { data, error } = await supabase
       .from("meetings")
       .update(updates)
       .eq("id", id)
       .is("deleted_at", null)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as Meeting;
+  },
+
+  async toggleDone(id: string, is_done: boolean) {
+    const { data, error } = await supabase
+      .from("meetings")
+      .update({ is_done })
+      .eq("id", id)
       .select()
       .single();
     if (error) throw error;

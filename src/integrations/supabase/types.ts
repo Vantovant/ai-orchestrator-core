@@ -2117,6 +2117,7 @@ export type Database = {
           end_time: string
           external_id: string | null
           id: string
+          is_done: boolean
           location: string | null
           notes: string | null
           project_id: string | null
@@ -2134,6 +2135,7 @@ export type Database = {
           end_time: string
           external_id?: string | null
           id?: string
+          is_done?: boolean
           location?: string | null
           notes?: string | null
           project_id?: string | null
@@ -2151,6 +2153,7 @@ export type Database = {
           end_time?: string
           external_id?: string | null
           id?: string
+          is_done?: boolean
           location?: string | null
           notes?: string | null
           project_id?: string | null
