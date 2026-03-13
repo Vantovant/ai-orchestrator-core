@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, Clock, MapPin, Trash2, Save, X, Sparkles, Loader2, FolderKanban, Pencil } from "lucide-react";
+import { Calendar, Clock, MapPin, Trash2, Save, X, Sparkles, Loader2, FolderKanban, Pencil, BrainCircuit, Lightbulb } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { Meeting } from "@/services/meetingService";
 import { secretaryService } from "@/services/secretaryService";
 import { projectService } from "@/services/projectService";
+import { supabase } from "@/integrations/supabase/client";
+import ActionExtractor from "@/components/plan/ActionExtractor";
 
 interface Props {
   meeting: Meeting | null;
@@ -20,6 +22,51 @@ interface Props {
   onClose: () => void;
   onUpdate: (id: string, updates: any) => void;
   onDelete: (id: string) => void;
+}
+
+// Hook: debounced background AI advisor
+function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled: boolean) {
+  const [advice, setAdvice] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const lastHashRef = useRef("");
+
+  const fetchAdvice = useCallback(async (text: string, mId: string) => {
+    // Simple hash to avoid re-fetching same content
+    const hash = `${text.length}-${text.slice(0, 50)}-${text.slice(-50)}`;
+    if (hash === lastHashRef.current) return;
+    lastHashRef.current = hash;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("plan-ai-secretary", {
+        body: { action: "meeting_advisor", meetingId: mId, notes_text: text },
+      });
+      if (error) throw error;
+      const items = data?.suggestions || data?.advice || [];
+      if (Array.isArray(items)) {
+        setAdvice(items.map((i: any) => typeof i === "string" ? i : i.text || i.suggestion || JSON.stringify(i)));
+      } else if (typeof data?.content === "string") {
+        setAdvice(data.content.split("\n").filter((l: string) => l.trim()));
+      }
+    } catch {
+      // Silent fail - advisor is non-critical
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !meetingId || notes.trim().length < 30) {
+      setAdvice([]);
+      return;
+    }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => fetchAdvice(notes, meetingId), 3000);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [notes, meetingId, enabled, fetchAdvice]);
+
+  return { advice, loading };
 }
 
 export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, onDelete }: Props) {
@@ -32,6 +79,9 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
   const [endTime, setEndTime] = useState("");
   const [notes, setNotes] = useState("");
   const [prepLoading, setPrepLoading] = useState(false);
+  const [advisorEnabled, setAdvisorEnabled] = useState(true);
+
+  const { advice, loading: advisorLoading } = useMeetingAdvisor(notes, meeting?.id, advisorEnabled && open);
 
   // Sync notes field when meeting changes
   useEffect(() => {
@@ -75,7 +125,6 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
     setPrepLoading(true);
     try {
       const result = await secretaryService.runPreMeetingPrep(meeting.id);
-      // Build a comprehensive prep text and inject into the notes textarea
       const parts: string[] = [];
       if (result.agenda) parts.push(`📋 AGENDA\n${result.agenda}`);
       if (result.questions) parts.push(`❓ KEY QUESTIONS\n${result.questions}`);
@@ -87,15 +136,12 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
         ? parts.join("\n\n---\n\n")
         : (result.text || result.summary || JSON.stringify(result, null, 2));
 
-      // Append to existing notes or set as new
       const existingNotes = notes.trim();
       const newNotes = existingNotes
         ? `${existingNotes}\n\n──── AI Meeting Prep ────\n\n${prepText}`
         : `──── AI Meeting Prep ────\n\n${prepText}`;
 
       setNotes(newNotes);
-
-      // Also save directly to DB
       onUpdate(meeting.id, { notes: newNotes });
       toast.success("AI prep injected into notes – review and edit as needed");
     } catch (e: any) {
@@ -120,10 +166,11 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
 
   const isPast = new Date(meeting.end_time) < new Date();
   const isNow = new Date(meeting.start_time) <= new Date() && new Date(meeting.end_time) >= new Date();
+  const today = new Date().toISOString().split("T")[0];
 
   return (
     <Sheet open={open} onOpenChange={(o) => { if (!o) { setEditing(false); onClose(); } }}>
-      <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader className="pb-4">
           <SheetTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary" />
@@ -228,9 +275,60 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
               <Textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={5}
+                rows={6}
                 placeholder="Add meeting agenda, talking points, notes..."
                 className="text-sm"
+              />
+            </div>
+
+            {/* AI Background Advisor */}
+            {(advice.length > 0 || advisorLoading) && (
+              <div className="border border-accent/30 bg-accent/5 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-accent-foreground flex items-center gap-1.5">
+                    <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+                    AI Advisor
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 text-[10px] px-1.5"
+                    onClick={() => setAdvisorEnabled(false)}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+                {advisorLoading && advice.length === 0 && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Analyzing notes...
+                  </div>
+                )}
+                {advice.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {advice.slice(0, 5).map((tip, i) => (
+                      <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+                        <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                        {tip}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {/* Action Extractor — extract tasks from meeting notes */}
+            <div className="border border-border rounded-lg p-3 space-y-2">
+              <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <BrainCircuit className="h-3.5 w-3.5" />
+                Extract Action Items
+              </span>
+              <ActionExtractor
+                noteContent={notes}
+                structureJson={{}}
+                structuredMode={false}
+                noteDate={today}
+                projectId={meeting.project_id}
+                noteId={meeting.id}
               />
             </div>
 
