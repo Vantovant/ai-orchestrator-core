@@ -95,7 +95,17 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
   const [prepLoading, setPrepLoading] = useState(false);
   const [advisorEnabled, setAdvisorEnabled] = useState(true);
 
-  const { advice, loading: advisorLoading } = useMeetingAdvisor(notes, meeting?.id, advisorEnabled && open);
+  const [advisorOpen, setAdvisorOpen] = useState(false);
+
+  const { advice, loading: advisorLoading, hasNewAdvice, clearNewFlag } = useMeetingAdvisor(notes, meeting?.id, advisorEnabled && open);
+
+  // Auto-open panel when new advice arrives
+  useEffect(() => {
+    if (hasNewAdvice) {
+      setAdvisorOpen(true);
+      clearNewFlag();
+    }
+  }, [hasNewAdvice, clearNewFlag]);
 
   // Sync notes field when meeting changes
   useEffect(() => {
