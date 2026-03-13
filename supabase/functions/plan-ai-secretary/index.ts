@@ -81,7 +81,7 @@ serve(async (req) => {
     const { data: { user }, error: authErr } = await userClient.auth.getUser();
     if (authErr || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { action, meetingId, date } = await req.json();
+    const { action, meetingId, date, notes_text } = await req.json();
     const today = new Date().toISOString().slice(0, 10);
 
     // Fetch snapshot data
