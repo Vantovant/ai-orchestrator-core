@@ -25,7 +25,6 @@ export interface Task {
 export type TaskInsert = Pick<Task, "title"> & Partial<Pick<Task, "description" | "status" | "priority" | "due_date" | "start_date" | "completed_at" | "order_index" | "source" | "estimated_minutes" | "project_id" | "dedupe_key" | "note_id">>;
 
 export interface BulkUpsertItemResult {
-  /** Caller-provided client_temp_id echoed back for deterministic UI mapping */
   client_temp_id: string;
   dedupe_key: string;
   status: "created" | "merged" | "failed";
@@ -34,7 +33,6 @@ export interface BulkUpsertItemResult {
 }
 
 export interface BulkUpsertInput extends TaskInsert {
-  /** Opaque caller ID echoed back in results – NOT stored in DB */
   client_temp_id: string;
 }
 
@@ -42,7 +40,6 @@ export interface BulkUpsertResult {
   created: string[];
   merged: string[];
   failed: { title: string; reason: string }[];
-  /** Deterministic per-item results keyed by client_temp_id */
   items: BulkUpsertItemResult[];
 }
 
@@ -56,6 +53,11 @@ export function makeDedupe(userId: string, projectId: string | null, noteId: str
     hash = ((hash << 5) + hash + raw.charCodeAt(i)) | 0;
   }
   return Math.abs(hash).toString(36);
+}
+
+/** Normalize title for fuzzy matching */
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 export const taskService = {
@@ -78,9 +80,69 @@ export const taskService = {
     return data as Task[];
   },
 
+  /** Find existing duplicate by dedupe_key or exact normalized title match */
+  async _findDuplicate(userId: string, task: TaskInsert): Promise<Task | null> {
+    // 1. Check by dedupe_key if provided
+    if (task.dedupe_key) {
+      const { data } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("dedupe_key", task.dedupe_key)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (data) return data as Task;
+    }
+
+    // 2. Fallback: exact normalized title + project match
+    const norm = normalizeTitle(task.title);
+    const { data: titleMatches } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .ilike("title", norm);
+
+    if (titleMatches && titleMatches.length > 0) {
+      // Match same project scope
+      const match = titleMatches.find(t =>
+        (t.project_id ?? null) === (task.project_id ?? null)
+      );
+      if (match) return match as Task;
+    }
+
+    return null;
+  },
+
   async create(task: TaskInsert) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
+
+    // Auto-generate dedupe_key if not provided
+    if (!task.dedupe_key) {
+      task.dedupe_key = makeDedupe(user.id, task.project_id ?? null, task.note_id ?? null, task.title);
+    }
+
+    // Check for duplicates before creating
+    const existing = await this._findDuplicate(user.id, task);
+    if (existing) {
+      // Merge: update fields that may have changed
+      const { data, error } = await supabase
+        .from("tasks")
+        .update({
+          description: task.description ?? existing.description,
+          priority: task.priority ?? existing.priority,
+          due_date: task.due_date ?? existing.due_date,
+          source: task.source ?? existing.source,
+          last_touched_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Task;
+    }
+
     const { data, error } = await supabase
       .from("tasks")
       .insert({ ...task, user_id: user.id })
@@ -110,9 +172,6 @@ export const taskService = {
     if (error) throw error;
   },
 
-  /**
-   * Bulk upsert tasks with dedupe_key. Returns created/merged/failed breakdown.
-   */
   async bulkUpsert(tasks: BulkUpsertInput[]): Promise<BulkUpsertResult> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
@@ -121,40 +180,35 @@ export const taskService = {
 
     for (const task of tasks) {
       const { client_temp_id: ctid, ...dbTask } = task;
-      const dk = dbTask.dedupe_key || "";
-      try {
-        if (dbTask.dedupe_key) {
-          // Check if exists
-          const { data: existing } = await supabase
-            .from("tasks")
-            .select("id")
-            .eq("user_id", user.id)
-            .eq("dedupe_key", dbTask.dedupe_key)
-            .is("deleted_at", null)
-            .maybeSingle();
 
-          if (existing) {
-            // Merge – update fields that may have changed + touch
-            const { data, error } = await supabase
-              .from("tasks")
-              .update({
-                description: dbTask.description,
-                priority: dbTask.priority,
-                due_date: dbTask.due_date,
-                source: dbTask.source,
-                last_touched_at: new Date().toISOString(),
-              })
-              .eq("id", existing.id)
-              .select()
-              .single();
-            if (error) throw error;
-            result.merged.push(data.id);
-            result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "merged", id: data.id });
-            continue;
-          }
+      // Auto-generate dedupe_key if missing
+      if (!dbTask.dedupe_key) {
+        dbTask.dedupe_key = makeDedupe(user.id, dbTask.project_id ?? null, dbTask.note_id ?? null, dbTask.title);
+      }
+      const dk = dbTask.dedupe_key || "";
+
+      try {
+        const existing = await this._findDuplicate(user.id, dbTask);
+
+        if (existing) {
+          const { data, error } = await supabase
+            .from("tasks")
+            .update({
+              description: dbTask.description ?? existing.description,
+              priority: dbTask.priority ?? existing.priority,
+              due_date: dbTask.due_date ?? existing.due_date,
+              source: dbTask.source ?? existing.source,
+              last_touched_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id)
+            .select()
+            .single();
+          if (error) throw error;
+          result.merged.push(data.id);
+          result.items.push({ client_temp_id: ctid, dedupe_key: dk, status: "merged", id: data.id });
+          continue;
         }
 
-        // Create new
         const { data, error } = await supabase
           .from("tasks")
           .insert({ ...dbTask, user_id: user.id, last_touched_at: new Date().toISOString() })
