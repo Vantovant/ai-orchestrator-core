@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, Clock, MapPin, Trash2, Save, X, Sparkles, Loader2, FolderKanban, Pencil, BrainCircuit, Lightbulb } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Calendar, Clock, MapPin, Trash2, Save, X, Sparkles, Loader2, FolderKanban, Pencil, BrainCircuit, Lightbulb, ChevronDown, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import type { Meeting } from "@/services/meetingService";
@@ -24,19 +25,26 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-// Hook: debounced background AI advisor
+// Hook: debounced background AI advisor with rate limiting
 function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled: boolean) {
   const [advice, setAdvice] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasNewAdvice, setHasNewAdvice] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   const lastHashRef = useRef("");
+  const lastCallRef = useRef(0);
 
   const fetchAdvice = useCallback(async (text: string, mId: string) => {
-    // Simple hash to avoid re-fetching same content
     const hash = `${text.length}-${text.slice(0, 50)}-${text.slice(-50)}`;
     if (hash === lastHashRef.current) return;
-    lastHashRef.current = hash;
 
+    // Rate limit: minimum 10s between calls
+    const now = Date.now();
+    const elapsed = now - lastCallRef.current;
+    if (elapsed < 10000) return;
+
+    lastHashRef.current = hash;
+    lastCallRef.current = now;
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("plan-ai-secretary", {
@@ -44,10 +52,15 @@ function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled
       });
       if (error) throw error;
       const items = data?.suggestions || data?.advice || [];
+      let parsed: string[] = [];
       if (Array.isArray(items)) {
-        setAdvice(items.map((i: any) => typeof i === "string" ? i : i.text || i.suggestion || JSON.stringify(i)));
+        parsed = items.map((i: any) => typeof i === "string" ? i : i.text || i.suggestion || JSON.stringify(i));
       } else if (typeof data?.content === "string") {
-        setAdvice(data.content.split("\n").filter((l: string) => l.trim()));
+        parsed = data.content.split("\n").filter((l: string) => l.trim());
+      }
+      if (parsed.length > 0) {
+        setAdvice(parsed);
+        setHasNewAdvice(true);
       }
     } catch {
       // Silent fail - advisor is non-critical
@@ -57,8 +70,7 @@ function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled
   }, []);
 
   useEffect(() => {
-    if (!enabled || !meetingId || notes.trim().length < 30) {
-      setAdvice([]);
+    if (!enabled || !meetingId || notes.trim().length <= 50) {
       return;
     }
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -66,7 +78,9 @@ function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [notes, meetingId, enabled, fetchAdvice]);
 
-  return { advice, loading };
+  const clearNewFlag = useCallback(() => setHasNewAdvice(false), []);
+
+  return { advice, loading, hasNewAdvice, clearNewFlag };
 }
 
 export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, onDelete }: Props) {
@@ -81,7 +95,17 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
   const [prepLoading, setPrepLoading] = useState(false);
   const [advisorEnabled, setAdvisorEnabled] = useState(true);
 
-  const { advice, loading: advisorLoading } = useMeetingAdvisor(notes, meeting?.id, advisorEnabled && open);
+  const [advisorOpen, setAdvisorOpen] = useState(false);
+
+  const { advice, loading: advisorLoading, hasNewAdvice, clearNewFlag } = useMeetingAdvisor(notes, meeting?.id, advisorEnabled && open);
+
+  // Auto-open panel when new advice arrives
+  useEffect(() => {
+    if (hasNewAdvice) {
+      setAdvisorOpen(true);
+      clearNewFlag();
+    }
+  }, [hasNewAdvice, clearNewFlag]);
 
   // Sync notes field when meeting changes
   useEffect(() => {
@@ -281,39 +305,72 @@ export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, 
               />
             </div>
 
-            {/* AI Background Advisor */}
-            {(advice.length > 0 || advisorLoading) && (
-              <div className="border border-accent/30 bg-accent/5 rounded-lg p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-accent-foreground flex items-center gap-1.5">
-                    <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
-                    AI Advisor
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 text-[10px] px-1.5"
-                    onClick={() => setAdvisorEnabled(false)}
-                  >
-                    Dismiss
-                  </Button>
+            {/* AI Background Advisor — collapsible panel */}
+            {advisorEnabled && (
+              <Collapsible open={advisorOpen} onOpenChange={setAdvisorOpen}>
+                <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg overflow-hidden">
+                  <CollapsibleTrigger asChild>
+                    <button className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-amber-500/10 transition-colors">
+                      <span className="text-xs font-medium flex items-center gap-1.5">
+                        <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
+                        <span className="text-foreground">AI Advisor</span>
+                        {advisorLoading && <Loader2 className="h-3 w-3 animate-spin text-amber-500" />}
+                        {!advisorOpen && advice.length > 0 && (
+                          <Badge variant="secondary" className="h-4 px-1.5 text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 border-0 animate-pulse">
+                            {advice.length} tip{advice.length > 1 ? "s" : ""}
+                          </Badge>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 text-[10px] px-1.5 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => { e.stopPropagation(); setAdvisorEnabled(false); setAdvisorOpen(false); }}
+                        >
+                          Dismiss
+                        </Button>
+                        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${advisorOpen ? "rotate-180" : ""}`} />
+                      </div>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-3 pb-3 space-y-2">
+                      {advisorLoading && advice.length === 0 && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Analyzing notes...
+                        </div>
+                      )}
+                      {advice.length > 0 && (
+                        <>
+                          <ul className="space-y-1.5">
+                            {advice.slice(0, 5).map((tip, i) => (
+                              <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
+                                <span className="text-amber-500 mt-0.5 shrink-0">•</span>
+                                {tip}
+                              </li>
+                            ))}
+                          </ul>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[10px] gap-1 text-muted-foreground"
+                            onClick={() => {
+                              navigator.clipboard.writeText(advice.join("\n"));
+                              toast.success("Suggestions copied");
+                            }}
+                          >
+                            <Copy className="h-3 w-3" /> Copy all
+                          </Button>
+                        </>
+                      )}
+                      {!advisorLoading && advice.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground">Keep typing notes (50+ chars) to get AI suggestions...</p>
+                      )}
+                    </div>
+                  </CollapsibleContent>
                 </div>
-                {advisorLoading && advice.length === 0 && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Analyzing notes...
-                  </div>
-                )}
-                {advice.length > 0 && (
-                  <ul className="space-y-1.5">
-                    {advice.slice(0, 5).map((tip, i) => (
-                      <li key={i} className="text-xs text-muted-foreground leading-relaxed flex items-start gap-1.5">
-                        <span className="text-amber-500 mt-0.5 shrink-0">•</span>
-                        {tip}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              </Collapsible>
             )}
 
             {/* Action Extractor — extract tasks from meeting notes */}
