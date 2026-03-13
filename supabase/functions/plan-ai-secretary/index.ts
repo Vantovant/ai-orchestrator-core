@@ -110,6 +110,15 @@ serve(async (req) => {
     } else if (action === "eod") {
       systemPrompt = "You are an executive AI secretary doing an end-of-day review. Analyze: what got completed, what slipped (overdue/pushed tasks with suggested reason categories), extract action items for tomorrow, and create tomorrow's Top 3 priorities. Be direct and actionable.";
       userPrompt = `Today is ${date || today}. Here is the snapshot:\n\n${snapshot}\n\nGenerate the end-of-day review.`;
+    } else if (action === "meeting_advisor" && notes_text) {
+      const safeNotes = redactPII((notes_text || "").slice(0, 2000));
+      let meetingContext = "";
+      if (meetingId) {
+        const { data: meeting } = await userClient.from("meetings").select("title, description, start_time, location").eq("id", meetingId).single();
+        if (meeting) meetingContext = `Meeting: ${meeting.title}\nTime: ${meeting.start_time}\nLocation: ${meeting.location || "TBD"}\nDescription: ${meeting.description || "None"}\n\n`;
+      }
+      systemPrompt = "You are a strategic meeting advisor. Based on the user's live meeting notes, provide 3-5 brief, actionable suggestions: questions they should ask, risks to raise, strategic angles to consider, or follow-up items. Be concise — each suggestion should be one sentence. Return a JSON object with a 'suggestions' array of strings.";
+      userPrompt = `${meetingContext}Current meeting notes:\n${safeNotes}\n\nContext snapshot:\n${snapshot}\n\nProvide strategic advice.`;
     } else {
       return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
