@@ -25,19 +25,26 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-// Hook: debounced background AI advisor
+// Hook: debounced background AI advisor with rate limiting
 function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled: boolean) {
   const [advice, setAdvice] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasNewAdvice, setHasNewAdvice] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   const lastHashRef = useRef("");
+  const lastCallRef = useRef(0);
 
   const fetchAdvice = useCallback(async (text: string, mId: string) => {
-    // Simple hash to avoid re-fetching same content
     const hash = `${text.length}-${text.slice(0, 50)}-${text.slice(-50)}`;
     if (hash === lastHashRef.current) return;
-    lastHashRef.current = hash;
 
+    // Rate limit: minimum 10s between calls
+    const now = Date.now();
+    const elapsed = now - lastCallRef.current;
+    if (elapsed < 10000) return;
+
+    lastHashRef.current = hash;
+    lastCallRef.current = now;
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("plan-ai-secretary", {
@@ -45,10 +52,15 @@ function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled
       });
       if (error) throw error;
       const items = data?.suggestions || data?.advice || [];
+      let parsed: string[] = [];
       if (Array.isArray(items)) {
-        setAdvice(items.map((i: any) => typeof i === "string" ? i : i.text || i.suggestion || JSON.stringify(i)));
+        parsed = items.map((i: any) => typeof i === "string" ? i : i.text || i.suggestion || JSON.stringify(i));
       } else if (typeof data?.content === "string") {
-        setAdvice(data.content.split("\n").filter((l: string) => l.trim()));
+        parsed = data.content.split("\n").filter((l: string) => l.trim());
+      }
+      if (parsed.length > 0) {
+        setAdvice(parsed);
+        setHasNewAdvice(true);
       }
     } catch {
       // Silent fail - advisor is non-critical
@@ -58,8 +70,7 @@ function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled
   }, []);
 
   useEffect(() => {
-    if (!enabled || !meetingId || notes.trim().length < 30) {
-      setAdvice([]);
+    if (!enabled || !meetingId || notes.trim().length <= 50) {
       return;
     }
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -67,7 +78,9 @@ function useMeetingAdvisor(notes: string, meetingId: string | undefined, enabled
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [notes, meetingId, enabled, fetchAdvice]);
 
-  return { advice, loading };
+  const clearNewFlag = useCallback(() => setHasNewAdvice(false), []);
+
+  return { advice, loading, hasNewAdvice, clearNewFlag };
 }
 
 export default function MeetingDetailDrawer({ meeting, open, onClose, onUpdate, onDelete }: Props) {
