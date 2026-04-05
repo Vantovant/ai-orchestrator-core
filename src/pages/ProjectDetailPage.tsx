@@ -528,9 +528,41 @@ export default function ProjectDetailPage({ projectId, onBack }: Props) {
           </div>
         </TabsContent>
 
-        {/* ACCOMPLISHMENTS */}
+        {/* DONE TAB: Completed Tasks + Accomplishments */}
         <TabsContent value="accomplishments">
-          <AccomplishmentsSection projectId={projectId} showAll />
+          <div className="space-y-6">
+            {/* Completed Tasks - auto-populated */}
+            {(() => {
+              const completedTasks = tasks.filter((t: any) => t.status === "done" || t.completed_at);
+              return completedTasks.length > 0 ? (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-success" />
+                    Completed Tasks ({completedTasks.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {completedTasks.map((t: any) => (
+                      <Card key={t.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => setSelectedTask(t)}>
+                        <CardContent className="p-3 flex items-center gap-3">
+                          <CheckCircle2 className="h-4 w-4 text-success shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium line-through text-muted-foreground">{t.title}</p>
+                            <span className="text-[10px] text-muted-foreground">
+                              {t.completed_at ? `Completed ${format(new Date(t.completed_at), "MMM d, yyyy")}` : "Done"}
+                              {t.priority && <Badge variant="outline" className="ml-2 text-[10px]">{t.priority}</Badge>}
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Manual Accomplishments */}
+            <AccomplishmentsSection projectId={projectId} showAll />
+          </div>
         </TabsContent>
 
         {/* FUNDED BUSINESS TABS */}
