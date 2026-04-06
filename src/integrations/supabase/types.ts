@@ -2328,6 +2328,122 @@ export type Database = {
         }
         Relationships: []
       }
+      partner_briefing_preferences: {
+        Row: {
+          created_at: string
+          delivery_channel: string
+          enabled: boolean
+          id: string
+          last_sent_at: string | null
+          send_hour: number
+          timezone: string
+          updated_at: string
+          user_id: string
+          weekday: number
+        }
+        Insert: {
+          created_at?: string
+          delivery_channel?: string
+          enabled?: boolean
+          id?: string
+          last_sent_at?: string | null
+          send_hour?: number
+          timezone?: string
+          updated_at?: string
+          user_id: string
+          weekday?: number
+        }
+        Update: {
+          created_at?: string
+          delivery_channel?: string
+          enabled?: boolean
+          id?: string
+          last_sent_at?: string | null
+          send_hour?: number
+          timezone?: string
+          updated_at?: string
+          user_id?: string
+          weekday?: number
+        }
+        Relationships: []
+      }
+      portfolio_partner_messages: {
+        Row: {
+          content: string
+          context_tags: string[]
+          created_at: string
+          id: string
+          role: string
+          structured_data: Json | null
+          thread_id: string
+          token_count: number | null
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          context_tags?: string[]
+          created_at?: string
+          id?: string
+          role?: string
+          structured_data?: Json | null
+          thread_id: string
+          token_count?: number | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          context_tags?: string[]
+          created_at?: string
+          id?: string
+          role?: string
+          structured_data?: Json | null
+          thread_id?: string
+          token_count?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portfolio_partner_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "portfolio_partner_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_partner_threads: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_pinned: boolean
+          last_message_at: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_pinned?: boolean
+          last_message_at?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_pinned?: boolean
+          last_message_at?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       project_accomplishments: {
         Row: {
           category: string
@@ -2669,6 +2785,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      project_partner_score_history: {
+        Row: {
+          id: string
+          momentum_score: number
+          project_id: string
+          recorded_at: string
+          risk_level: string
+          sell_readiness_score: number
+          source: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          momentum_score?: number
+          project_id: string
+          recorded_at?: string
+          risk_level?: string
+          sell_readiness_score?: number
+          source?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          momentum_score?: number
+          project_id?: string
+          recorded_at?: string
+          risk_level?: string
+          sell_readiness_score?: number
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       project_partner_scores: {
         Row: {
