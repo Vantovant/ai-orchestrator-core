@@ -2332,73 +2332,70 @@ export type Database = {
         Row: {
           created_at: string
           delivery_channel: string
-          enabled: boolean
           id: string
-          last_sent_at: string | null
           send_hour: number
           timezone: string
           updated_at: string
           user_id: string
           weekday: number
+          weekly_enabled: boolean
         }
         Insert: {
           created_at?: string
           delivery_channel?: string
-          enabled?: boolean
           id?: string
-          last_sent_at?: string | null
           send_hour?: number
           timezone?: string
           updated_at?: string
           user_id: string
           weekday?: number
+          weekly_enabled?: boolean
         }
         Update: {
           created_at?: string
           delivery_channel?: string
-          enabled?: boolean
           id?: string
-          last_sent_at?: string | null
           send_hour?: number
           timezone?: string
           updated_at?: string
           user_id?: string
           weekday?: number
+          weekly_enabled?: boolean
         }
         Relationships: []
       }
       portfolio_partner_messages: {
         Row: {
+          attachments_json: Json | null
           content: string
-          context_tags: string[]
+          context_tags_json: string[]
           created_at: string
           id: string
+          retrieval_meta_json: Json | null
           role: string
-          structured_data: Json | null
           thread_id: string
-          token_count: number | null
           user_id: string
         }
         Insert: {
+          attachments_json?: Json | null
           content?: string
-          context_tags?: string[]
+          context_tags_json?: string[]
           created_at?: string
           id?: string
+          retrieval_meta_json?: Json | null
           role?: string
-          structured_data?: Json | null
           thread_id: string
-          token_count?: number | null
           user_id: string
         }
         Update: {
+          attachments_json?: Json | null
           content?: string
-          context_tags?: string[]
+          context_tags_json?: string[]
           created_at?: string
           id?: string
+          retrieval_meta_json?: Json | null
           role?: string
-          structured_data?: Json | null
           thread_id?: string
-          token_count?: number | null
           user_id?: string
         }
         Relationships: [
@@ -2413,31 +2410,31 @@ export type Database = {
       }
       portfolio_partner_threads: {
         Row: {
+          archived: boolean
           created_at: string
-          deleted_at: string | null
           id: string
-          is_pinned: boolean
           last_message_at: string
+          pinned: boolean
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          archived?: boolean
           created_at?: string
-          deleted_at?: string | null
           id?: string
-          is_pinned?: boolean
           last_message_at?: string
+          pinned?: boolean
           title?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          archived?: boolean
           created_at?: string
-          deleted_at?: string | null
           id?: string
-          is_pinned?: boolean
           last_message_at?: string
+          pinned?: boolean
           title?: string
           updated_at?: string
           user_id?: string
@@ -2788,33 +2785,30 @@ export type Database = {
       }
       project_partner_score_history: {
         Row: {
+          captured_at: string
           id: string
           momentum_score: number
           project_id: string
-          recorded_at: string
           risk_level: string
           sell_readiness_score: number
-          source: string
           user_id: string
         }
         Insert: {
+          captured_at?: string
           id?: string
           momentum_score?: number
           project_id: string
-          recorded_at?: string
           risk_level?: string
           sell_readiness_score?: number
-          source?: string
           user_id: string
         }
         Update: {
+          captured_at?: string
           id?: string
           momentum_score?: number
           project_id?: string
-          recorded_at?: string
           risk_level?: string
           sell_readiness_score?: number
-          source?: string
           user_id?: string
         }
         Relationships: []
