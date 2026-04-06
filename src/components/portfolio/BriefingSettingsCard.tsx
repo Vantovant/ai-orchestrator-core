@@ -39,7 +39,7 @@ export default function BriefingSettingsCard() {
 
   if (loading) return null;
 
-  const enabled = prefs?.enabled ?? false;
+  const enabled = prefs?.weekly_enabled ?? false;
 
   return (
     <Card>
@@ -51,7 +51,7 @@ export default function BriefingSettingsCard() {
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
           <Label className="text-sm">Enable weekly AI briefing</Label>
-          <Switch checked={enabled} onCheckedChange={(v) => save({ enabled: v })} />
+          <Switch checked={enabled} onCheckedChange={(v) => save({ weekly_enabled: v })} />
         </div>
 
         {enabled && (
