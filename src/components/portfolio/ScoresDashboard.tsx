@@ -18,7 +18,6 @@ export default function ScoresDashboard({ projects }: Props) {
   const scoreMap = new Map<string, PartnerScores>();
   (scores.data ?? []).forEach(s => scoreMap.set(s.project_id, s));
 
-  // Build history per project (last 5 entries)
   const historyMap = new Map<string, ScoreHistory[]>();
   (history.data ?? []).forEach(h => {
     const arr = historyMap.get(h.project_id) || [];

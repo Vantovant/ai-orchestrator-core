@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const RETRIEVAL_CAP = 6000;
+const RETRIEVAL_CAP = 8000;
 
 function redact(text: string): string {
   return text
@@ -16,7 +16,7 @@ function redact(text: string): string {
     .replace(/\b(?:\+27|0)\d{9}\b/g, "[PHONE_REDACTED]");
 }
 
-// ─── Retrieval helpers ───────────────────────────────────────────
+// ─── Retrieval helpers (aligned to real VantoOS tables) ─────────
 
 async function retrieveProjects(supabase: any, userId: string, tags: string[]): Promise<any[]> {
   const projectNameTag = tags.find(t => t.startsWith("@project:"));
@@ -29,10 +29,12 @@ async function retrieveProjects(supabase: any, userId: string, tags: string[]): 
   if (projectName) {
     query = query.ilike("name", `%${projectName}%`);
   } else if (!tags.includes("@global-only")) {
+    // No arbitrary cap — retrieve all active projects for full portfolio awareness
     query = query.neq("status", "completed");
   }
 
-  const { data } = await query.order("updated_at", { ascending: false }).limit(15);
+  // Order by most recently updated, use a generous limit for portfolio-wide retrieval
+  const { data } = await query.order("updated_at", { ascending: false }).limit(100);
   return data ?? [];
 }
 
@@ -61,9 +63,11 @@ async function retrieveTasks(supabase: any, userId: string, projectIds: string[]
     .eq("user_id", userId).is("deleted_at", null)
     .in("status", ["pending", "in_progress"]);
 
-  if (projectIds.length) query = query.in("project_id", projectIds);
+  if (projectIds.length && tags.some(t => t.startsWith("@project:"))) {
+    query = query.in("project_id", projectIds);
+  }
 
-  const { data } = await query.order("due_date", { ascending: true, nullsFirst: false }).limit(20);
+  const { data } = await query.order("due_date", { ascending: true, nullsFirst: false }).limit(30);
   if (!data?.length) return "";
   return "OPEN TASKS:\n" + data.map((t: any) => `- [${t.priority}] ${t.title} (due:${t.due_date||"none"}) proj:${t.project_id?.slice(0,8)||"none"}`).join("\n");
 }
@@ -78,36 +82,85 @@ async function retrieveMeetings(supabase: any, userId: string): Promise<string> 
   return "UPCOMING MEETINGS:\n" + data.map((m: any) => `- ${m.title} at ${m.start_time?.slice(0,16)} proj:${m.project_id?.slice(0,8)||"none"}`).join("\n");
 }
 
-async function retrieveNotes(supabase: any, userId: string): Promise<string> {
-  const { data } = await supabase.from("notes")
-    .select("title, content, updated_at")
+// Uses real table: notes_daily (planning notes)
+async function retrievePlanningNotes(supabase: any, userId: string): Promise<string> {
+  const { data } = await supabase.from("notes_daily")
+    .select("note_date, content, updated_at")
     .eq("user_id", userId).is("deleted_at", null)
-    .order("updated_at", { ascending: false }).limit(3);
+    .order("note_date", { ascending: false }).limit(3);
   if (!data?.length) return "";
-  return "RECENT NOTES:\n" + data.map((n: any) => `- ${n.title}: ${(n.content||"").slice(0,150)}`).join("\n");
+  return "RECENT PLANNING NOTES:\n" + data.map((n: any) => `- [${n.note_date}] ${(n.content||"").slice(0,200)}`).join("\n");
 }
 
-async function retrieveKnowledge(supabase: any, userId: string, tags: string[]): Promise<string> {
-  if (!tags.includes("@knowledge") && !tags.some(t => t.startsWith("@doc:"))) return "";
+// Uses real table: project_notes
+async function retrieveProjectNotes(supabase: any, userId: string, projectIds: string[]): Promise<string> {
+  if (!projectIds.length) return "";
+  const { data } = await supabase.from("project_notes")
+    .select("project_id, note_date, content, updated_at")
+    .eq("user_id", userId).is("deleted_at", null)
+    .in("project_id", projectIds)
+    .order("updated_at", { ascending: false }).limit(5);
+  if (!data?.length) return "";
+  return "PROJECT NOTES:\n" + data.map((n: any) => `- [proj:${n.project_id?.slice(0,8)} ${n.note_date}] ${(n.content||"").slice(0,200)}`).join("\n");
+}
+
+// Uses real table: project_links
+async function retrieveProjectLinks(supabase: any, userId: string, projectIds: string[]): Promise<string> {
+  if (!projectIds.length) return "";
+  const { data } = await supabase.from("project_links")
+    .select("project_id, label, url")
+    .eq("user_id", userId).is("deleted_at", null)
+    .in("project_id", projectIds)
+    .limit(10);
+  if (!data?.length) return "";
+  return "PROJECT LINKS:\n" + data.map((l: any) => `- [proj:${l.project_id?.slice(0,8)}] ${l.label}: ${l.url}`).join("\n");
+}
+
+// Dynamic knowledge retrieval — always attempts retrieval unless @global-only
+// Tags @knowledge and @doc:<name> narrow scope; absence means intelligent retrieval
+async function retrieveKnowledge(supabase: any, userId: string, tags: string[], prompt: string): Promise<string> {
+  if (tags.includes("@global-only")) return "";
+
   const docNameTag = tags.find(t => t.startsWith("@doc:"));
   const docName = docNameTag?.slice(5);
+  const forceKnowledge = tags.includes("@knowledge") || !!docNameTag;
 
   let docsQuery = supabase.from("knowledge_docs")
     .select("id, title")
-    .eq("user_id", userId).is("deleted_at", null);
+    .eq("user_id", userId).is("deleted_at", null).eq("status", "active");
 
-  if (docName) docsQuery = docsQuery.ilike("title", `%${docName}%`);
-  docsQuery = docsQuery.limit(5);
+  if (docName) {
+    docsQuery = docsQuery.ilike("title", `%${docName}%`);
+  }
 
-  const { data: docs } = await docsQuery;
+  const { data: docs } = await docsQuery.limit(10);
   if (!docs?.length) return "";
 
-  const docIds = docs.map((d: any) => d.id);
+  // If no explicit tag, do a lightweight relevance check using prompt keywords
+  let targetDocIds = docs.map((d: any) => d.id);
+  if (!forceKnowledge && prompt) {
+    const keywords = prompt.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+    if (keywords.length > 0) {
+      // Score docs by title keyword overlap
+      const scored = docs.map((d: any) => {
+        const titleLower = (d.title || "").toLowerCase();
+        const hits = keywords.filter((k: string) => titleLower.includes(k)).length;
+        return { id: d.id, hits };
+      }).filter((d: any) => d.hits > 0).sort((a: any, b: any) => b.hits - a.hits);
+      if (scored.length > 0) {
+        targetDocIds = scored.slice(0, 5).map((d: any) => d.id);
+      } else {
+        // No keyword match — still include top 3 most recent docs for general awareness
+        targetDocIds = docs.slice(0, 3).map((d: any) => d.id);
+      }
+    }
+  }
+
   const { data: chunks } = await supabase.from("knowledge_chunks")
     .select("content, doc_id")
-    .in("doc_id", docIds)
+    .in("doc_id", targetDocIds)
     .order("chunk_index", { ascending: true })
-    .limit(10);
+    .limit(15);
 
   if (!chunks?.length) return "";
   const docMap = new Map(docs.map((d: any) => [d.id, d.title]));
@@ -117,14 +170,14 @@ async function retrieveKnowledge(supabase: any, userId: string, tags: string[]):
 async function retrieveScoreHistory(supabase: any, projectIds: string[]): Promise<string> {
   if (!projectIds.length) return "";
   const { data } = await supabase.from("project_partner_score_history")
-    .select("project_id, momentum_score, risk_level, sell_readiness_score, recorded_at")
+    .select("project_id, momentum_score, risk_level, sell_readiness_score, captured_at")
     .in("project_id", projectIds)
-    .order("recorded_at", { ascending: false }).limit(20);
+    .order("captured_at", { ascending: false }).limit(20);
   if (!data?.length) return "";
-  return "SCORE HISTORY:\n" + data.map((s: any) => `[${s.project_id?.slice(0,8)} ${s.recorded_at?.slice(0,10)}] M:${s.momentum_score} R:${s.risk_level} S:${s.sell_readiness_score}`).join("\n");
+  return "SCORE HISTORY:\n" + data.map((s: any) => `[${s.project_id?.slice(0,8)} ${s.captured_at?.slice(0,10)}] M:${s.momentum_score} R:${s.risk_level} S:${s.sell_readiness_score}`).join("\n");
 }
 
-async function buildRetrievalContext(supabase: any, userId: string, tags: string[]): Promise<string> {
+async function buildRetrievalContext(supabase: any, userId: string, tags: string[], prompt: string): Promise<string> {
   const projects = await retrieveProjects(supabase, userId, tags);
   const projectIds = projects.map((p: any) => p.id);
 
@@ -137,8 +190,10 @@ async function buildRetrievalContext(supabase: any, userId: string, tags: string
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
     retrieveMeetings(supabase, userId),
-    retrieveNotes(supabase, userId),
-    retrieveKnowledge(supabase, userId, tags),
+    retrievePlanningNotes(supabase, userId),
+    retrieveProjectNotes(supabase, userId, projectIds),
+    retrieveProjectLinks(supabase, userId, projectIds),
+    retrieveKnowledge(supabase, userId, tags, prompt),
     retrieveScoreHistory(supabase, projectIds),
   ]);
 
@@ -299,24 +354,23 @@ serve(async (req) => {
     // ─── Chat mode with retrieval + SSE ─────────────────────────
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
-      const context = await buildRetrievalContext(supabase, user.id, tags);
+      const userPrompt = prompt || "Hello";
+      const context = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
 
       const messages: any[] = [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "system", content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}` },
       ];
 
-      // Add conversation history
       if (history?.length) {
         for (const h of history.slice(-20)) {
           messages.push({ role: h.role === "assistant" ? "assistant" : "user", content: h.content });
         }
       }
 
-      messages.push({ role: "user", content: prompt || "Hello" });
+      messages.push({ role: "user", content: userPrompt });
 
       if (stream) {
-        // SSE streaming
         const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -335,7 +389,6 @@ serve(async (req) => {
           });
         }
 
-        // Transform OpenAI SSE to our SSE format
         const transformStream = new TransformStream({
           async transform(chunk, controller) {
             const text = new TextDecoder().decode(chunk);
@@ -370,7 +423,6 @@ serve(async (req) => {
           },
         });
       } else {
-        // Non-streaming fallback
         const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },

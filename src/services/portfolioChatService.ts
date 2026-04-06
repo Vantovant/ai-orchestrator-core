@@ -4,10 +4,11 @@ export interface PortfolioThread {
   id: string;
   user_id: string;
   title: string;
-  is_pinned: boolean;
+  pinned: boolean;
+  archived: boolean;
   last_message_at: string;
   created_at: string;
-  deleted_at: string | null;
+  updated_at: string;
 }
 
 export interface PortfolioMessage {
@@ -16,30 +17,32 @@ export interface PortfolioMessage {
   user_id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  context_tags: string[];
-  structured_data: any | null;
-  token_count: number;
+  attachments_json: any[];
+  context_tags_json: string[];
+  retrieval_meta_json: any | null;
   created_at: string;
 }
 
 export interface BriefingPreferences {
   id: string;
   user_id: string;
-  enabled: boolean;
+  weekly_enabled: boolean;
   delivery_channel: string;
   weekday: number;
   send_hour: number;
   timezone: string;
-  last_sent_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ScoreHistory {
   id: string;
+  user_id: string;
   project_id: string;
   momentum_score: number;
   risk_level: string;
   sell_readiness_score: number;
-  recorded_at: string;
+  captured_at: string;
 }
 
 export const portfolioChatService = {
@@ -48,8 +51,8 @@ export const portfolioChatService = {
     const { data } = await supabase
       .from("portfolio_partner_threads" as any)
       .select("*")
-      .is("deleted_at", null)
-      .order("is_pinned", { ascending: false })
+      .eq("archived", false)
+      .order("pinned", { ascending: false })
       .order("last_message_at", { ascending: false })
       .limit(50);
     return (data as any) ?? [];
@@ -67,17 +70,17 @@ export const portfolioChatService = {
     return data as any;
   },
 
-  async updateThread(id: string, fields: Partial<PortfolioThread>): Promise<void> {
+  async updateThread(id: string, fields: Partial<Pick<PortfolioThread, "title" | "pinned" | "archived">>): Promise<void> {
     await supabase
       .from("portfolio_partner_threads" as any)
       .update(fields as any)
       .eq("id", id);
   },
 
-  async deleteThread(id: string): Promise<void> {
+  async archiveThread(id: string): Promise<void> {
     await supabase
       .from("portfolio_partner_threads" as any)
-      .update({ deleted_at: new Date().toISOString() } as any)
+      .update({ archived: true } as any)
       .eq("id", id);
   },
 
@@ -92,7 +95,13 @@ export const portfolioChatService = {
     return (data as any) ?? [];
   },
 
-  async addMessage(threadId: string, role: string, content: string, contextTags: string[] = [], structuredData?: any): Promise<PortfolioMessage> {
+  async addMessage(
+    threadId: string,
+    role: string,
+    content: string,
+    contextTags: string[] = [],
+    retrievalMeta?: any
+  ): Promise<PortfolioMessage> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
     const { data, error } = await supabase
@@ -102,8 +111,9 @@ export const portfolioChatService = {
         user_id: user.id,
         role,
         content,
-        context_tags: contextTags,
-        structured_data: structuredData || null,
+        context_tags_json: contextTags,
+        retrieval_meta_json: retrievalMeta || null,
+        attachments_json: [],
       } as any)
       .select()
       .single();
@@ -141,7 +151,7 @@ export const portfolioChatService = {
       .from("project_partner_score_history" as any)
       .select("*")
       .eq("project_id", projectId)
-      .order("recorded_at", { ascending: true })
+      .order("captured_at", { ascending: true })
       .limit(limit);
     return (data as any) ?? [];
   },
@@ -150,7 +160,7 @@ export const portfolioChatService = {
     const { data } = await supabase
       .from("project_partner_score_history" as any)
       .select("*")
-      .order("recorded_at", { ascending: false })
+      .order("captured_at", { ascending: false })
       .limit(limit);
     return (data as any) ?? [];
   },
@@ -162,14 +172,14 @@ export const portfolioChatService = {
     contextTags: string[],
     history: { role: string; content: string }[],
     onChunk: (text: string) => void,
-    onDone: (fullText: string, structured?: any) => void,
+    onDone: (fullText: string, retrievalMeta?: any) => void,
     onError: (err: string) => void,
   ): Promise<void> {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { onError("Not authenticated"); return; }
 
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/portfolio-ai-partner`;
-    
+
     try {
       const res = await fetch(url, {
         method: "POST",
@@ -183,7 +193,7 @@ export const portfolioChatService = {
           thread_id: threadId,
           prompt,
           context_tags: contextTags,
-          history: history.slice(-20), // last 20 messages for context
+          history: history.slice(-20),
           stream: true,
         }),
       });
@@ -195,13 +205,13 @@ export const portfolioChatService = {
       }
 
       const contentType = res.headers.get("content-type") || "";
-      
+
       if (contentType.includes("text/event-stream")) {
         const reader = res.body?.getReader();
         if (!reader) { onError("No stream reader"); return; }
         const decoder = new TextDecoder();
         let fullText = "";
-        let structured: any = null;
+        let retrievalMeta: any = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -217,8 +227,8 @@ export const portfolioChatService = {
                 if (parsed.type === "text") {
                   fullText += parsed.content;
                   onChunk(fullText);
-                } else if (parsed.type === "structured") {
-                  structured = parsed.data;
+                } else if (parsed.type === "retrieval_meta") {
+                  retrievalMeta = parsed.data;
                 } else if (parsed.type === "error") {
                   onError(parsed.message);
                   return;
@@ -227,13 +237,13 @@ export const portfolioChatService = {
             }
           }
         }
-        onDone(fullText, structured);
+        onDone(fullText, retrievalMeta);
       } else {
         // Fallback: JSON response
         const data = await res.json();
         if (data.error) { onError(data.error); return; }
         const text = data.result?.content || data.result?.summary || JSON.stringify(data.result);
-        onDone(text, data.result?.structured_data);
+        onDone(text, data.result?.retrieval_meta);
       }
     } catch (e: any) {
       onError(e.message || "Network error");
