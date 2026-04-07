@@ -6,7 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SNAPSHOT_CAP = 3000;
+const SNAPSHOT_CAP = 4000;
+const KB_CHUNK_CAP = 6000;
 
 function redact(text: string): string {
   return text
@@ -17,8 +18,162 @@ function redact(text: string): string {
     .replace(/\[CONFIDENTIAL\].*?\[\/CONFIDENTIAL\]/gi, "[REDACTED_BLOCK]");
 }
 
+// ── Knowledge Retrieval ──────────────────────────────────────
+interface RetrievalMeta {
+  project_id: string;
+  docs_used: { id: string; title: string }[];
+  retrieval_type: "exact_document" | "filtered_project" | "general_project";
+  missing_docs: string[];
+  unindexed_docs: string[];
+}
+
+function detectDocReferences(prompt: string): string[] {
+  const refs: string[] = [];
+  // @doc:Title pattern
+  const atDocMatches = prompt.matchAll(/@doc:([^\s,]+(?:\s+[^\s,@]+)*)/gi);
+  for (const m of atDocMatches) refs.push(m[1].trim());
+  // "refer to <title>" / "use the <title> document" / "check the <title>"
+  const naturalPatterns = [
+    /refer\s+to\s+["`']?([^"'`\n,]+?)["`']?(?:\s+and|\s*$|\s*,)/gi,
+    /use\s+(?:the\s+)?["`']?([^"'`\n,]+?)["`']?\s+document/gi,
+    /check\s+(?:the\s+)?["`']?([^"'`\n,]+?)["`']?\s+(?:in|from|document)/gi,
+  ];
+  for (const pat of naturalPatterns) {
+    for (const m of prompt.matchAll(pat)) refs.push(m[1].trim());
+  }
+  return [...new Set(refs)].filter(r => r.length > 3);
+}
+
+async function retrieveProjectKnowledge(
+  supabase: any,
+  userId: string,
+  projectId: string,
+  prompt: string,
+  selectedDocIds: string[] | null,
+): Promise<{ text: string; meta: RetrievalMeta }> {
+  const meta: RetrievalMeta = {
+    project_id: projectId,
+    docs_used: [],
+    retrieval_type: "general_project",
+    missing_docs: [],
+    unindexed_docs: [],
+  };
+
+  // 1. Get all knowledge_docs for this project + global
+  const { data: allDocs } = await supabase
+    .from("knowledge_docs")
+    .select("id, title, status, raw_text, project_id")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .or(`project_id.eq.${projectId},project_id.is.null`)
+    .order("created_at", { ascending: false });
+
+  if (!allDocs?.length) return { text: "", meta };
+
+  // 2. Determine which docs to use
+  let targetDocIds: string[] = [];
+  const docReferences = detectDocReferences(prompt);
+
+  if (selectedDocIds?.length) {
+    // UI-selected docs take priority
+    targetDocIds = selectedDocIds;
+    meta.retrieval_type = "exact_document";
+  } else if (docReferences.length) {
+    // Explicit doc references in prompt
+    meta.retrieval_type = "exact_document";
+    for (const ref of docReferences) {
+      const refLower = ref.toLowerCase();
+      // Exact title match first
+      let match = allDocs.find((d: any) => d.title.toLowerCase() === refLower);
+      // Partial match
+      if (!match) match = allDocs.find((d: any) => d.title.toLowerCase().includes(refLower) || refLower.includes(d.title.toLowerCase()));
+      if (match) {
+        targetDocIds.push(match.id);
+      } else {
+        meta.missing_docs.push(ref);
+      }
+    }
+  }
+
+  // 3. If no specific docs targeted, use all project docs (filtered_project)
+  if (!targetDocIds.length && !meta.missing_docs.length) {
+    // Use project-scoped docs by default (project_id match), limited to most recent
+    const projectDocs = allDocs.filter((d: any) => d.project_id === projectId);
+    targetDocIds = projectDocs.slice(0, 20).map((d: any) => d.id);
+    meta.retrieval_type = "filtered_project";
+  } else if (!targetDocIds.length && meta.missing_docs.length) {
+    // All referenced docs were missing; still try general project retrieval
+    const projectDocs = allDocs.filter((d: any) => d.project_id === projectId);
+    targetDocIds = projectDocs.slice(0, 10).map((d: any) => d.id);
+    meta.retrieval_type = "general_project";
+  }
+
+  if (!targetDocIds.length) return { text: "", meta };
+
+  // Check for unindexed docs
+  for (const docId of targetDocIds) {
+    const doc = allDocs.find((d: any) => d.id === docId);
+    if (doc) meta.docs_used.push({ id: doc.id, title: doc.title });
+  }
+
+  // 4. Retrieve chunks from targeted docs
+  const { data: chunks } = await supabase
+    .from("knowledge_chunks")
+    .select("content, chunk_index, doc_id")
+    .in("doc_id", targetDocIds)
+    .order("chunk_index", { ascending: true })
+    .limit(50);
+
+  // Check which docs had no chunks (unindexed)
+  const docsWithChunks = new Set((chunks ?? []).map((c: any) => c.doc_id));
+  for (const docId of targetDocIds) {
+    if (!docsWithChunks.has(docId)) {
+      const doc = allDocs.find((d: any) => d.id === docId);
+      if (doc) meta.unindexed_docs.push(doc.title);
+    }
+  }
+
+  // 5. Build knowledge text
+  let kbText = "";
+  if (chunks?.length) {
+    // Group by doc
+    const byDoc: Record<string, string[]> = {};
+    for (const c of chunks) {
+      if (!byDoc[c.doc_id]) byDoc[c.doc_id] = [];
+      byDoc[c.doc_id].push(c.content);
+    }
+    for (const [docId, contents] of Object.entries(byDoc)) {
+      const doc = allDocs.find((d: any) => d.id === docId);
+      kbText += `\n--- DOCUMENT: ${doc?.title ?? "Unknown"} ---\n`;
+      kbText += contents.join("\n");
+      kbText += "\n";
+    }
+  }
+
+  // For exact-doc retrieval, also include raw_text as fallback if no chunks but raw_text exists
+  if (meta.retrieval_type === "exact_document") {
+    for (const docId of targetDocIds) {
+      if (!docsWithChunks.has(docId)) {
+        const doc = allDocs.find((d: any) => d.id === docId);
+        if (doc?.raw_text?.trim()) {
+          kbText += `\n--- DOCUMENT (raw): ${doc.title} ---\n`;
+          kbText += doc.raw_text.slice(0, 3000);
+          kbText += "\n";
+          // Remove from unindexed since we got raw_text
+          meta.unindexed_docs = meta.unindexed_docs.filter(t => t !== doc.title);
+        }
+      }
+    }
+  }
+
+  if (kbText.length > KB_CHUNK_CAP) kbText = kbText.slice(0, KB_CHUNK_CAP) + "\n[KB_TRUNCATED]";
+  kbText = redact(kbText);
+
+  return { text: kbText, meta };
+}
+
+// ── Snapshot Builder (existing logic) ──────────────────────────
 async function buildSnapshot(supabase: any, projectId: string): Promise<{ text: string; json: any }> {
-  // Fetch memory FIRST
   const [memoryRes, projectRes, tasksRes, meetingsRes, notesRes, linksRes] = await Promise.all([
     supabase.from("project_partner_memory").select("*").eq("project_id", projectId).maybeSingle(),
     supabase.from("projects").select("name, status, progress_manual, progress_mode, is_blocked, description, tags, updated_at").eq("id", projectId).single(),
@@ -52,7 +207,6 @@ async function buildSnapshot(supabase: any, projectId: string): Promise<{ text: 
     links,
   };
 
-  // Build text snapshot — memory first
   let text = "";
   if (memory) {
     text += "PARTNER MEMORY:\n";
@@ -92,22 +246,29 @@ async function buildSnapshot(supabase: any, projectId: string): Promise<{ text: 
   return { text, json };
 }
 
-function getSystemPrompt(mode: string): string {
+// ── System Prompts ──────────────────────────────────────
+function getSystemPrompt(mode: string, hasKB: boolean): string {
   const base = `You are an AI Senior Partner — a PhD-level strategist with streetwise African business execution experience. You advise a solo entrepreneur/executive on their personal projects. Be rigorous, practical, and concise. Ground all advice in the project data provided. Never invent facts about funding programs or external entities. If something needs verification, explicitly say "needs verification".`;
+
+  const kbInstruction = hasKB
+    ? `\n\nYou have been given PROJECT KNOWLEDGE BASE documents. When the user asks about document contents, answer DIRECTLY from those documents. Quote relevant sections. If a document was requested but not found, say so explicitly.`
+    : "";
 
   switch (mode) {
     case "executive_brief":
-      return `${base}\n\nProduce an Executive Brief with:\n1. Project status summary (2-3 sentences)\n2. Top 3 priorities (actionable, specific)\n3. Biggest risk and mitigation\n4. Next meeting prep notes (if meetings upcoming)\n\nReturn JSON with tool call.`;
+      return `${base}${kbInstruction}\n\nProduce an Executive Brief with:\n1. Project status summary (2-3 sentences)\n2. Top 3 priorities (actionable, specific)\n3. Biggest risk and mitigation\n4. Next meeting prep notes (if meetings upcoming)\n\nReturn JSON with tool call.`;
     case "sprint_plan":
-      return `${base}\n\nProduce a 7-day Sprint Plan with:\n1. This week's focus areas\n2. Daily action items (Mon-Sun, 2-3 items each)\n3. Items to postpone and why\n4. Quick wins available this week\n\nReturn JSON with tool call.`;
+      return `${base}${kbInstruction}\n\nProduce a 7-day Sprint Plan with:\n1. This week's focus areas\n2. Daily action items (Mon-Sun, 2-3 items each)\n3. Items to postpone and why\n4. Quick wins available this week\n\nReturn JSON with tool call.`;
     case "sell_readiness":
-      return `${base}\n\nConduct a Sell-Readiness Audit. Score each dimension 0-100:\n1. problem_clarity: Is the problem well-defined?\n2. solution_maturity: How developed is the solution?\n3. mvp_stability: Is the MVP stable and usable?\n4. onboarding_ux: Can users onboard easily?\n5. pricing_packaging: Is pricing clear?\n6. compliance: Privacy/legal readiness?\n7. support_docs: Documentation quality?\n\nProvide an overall score (weighted average), missing items, and exact next steps.\n\nReturn JSON with tool call.`;
+      return `${base}${kbInstruction}\n\nConduct a Sell-Readiness Audit. Score each dimension 0-100:\n1. problem_clarity\n2. solution_maturity\n3. mvp_stability\n4. onboarding_ux\n5. pricing_packaging\n6. compliance\n7. support_docs\n\nProvide an overall score, missing items, and exact next steps.\n\nReturn JSON with tool call.`;
     case "update_memory":
-      return `${base}\n\nBased on the project data, propose updates to the Partner Memory fields. Only suggest changes where you have clear evidence from the project data. Return ONLY fields that should change.`;
+      return `${base}${kbInstruction}\n\nBased on the project data, propose updates to the Partner Memory fields. Only suggest changes where you have clear evidence from the project data. Return ONLY fields that should change.`;
     case "funding_pathways":
-      return `${base}\n\nAnalyze this project's funding readiness. Provide:\n1. Recommended funding TYPES that fit (bootstrapping, pre-sales, grants, accelerator, angel, etc.) with reasons\n2. A funding readiness checklist (pitch deck, traction, unit economics, demo, compliance) with ready/not-ready status\n3. If there are cached funding opportunities provided, include them as verified opportunities. Do NOT invent funding programs.\n\nReturn JSON with tool call.`;
+      return `${base}${kbInstruction}\n\nAnalyze this project's funding readiness. Provide:\n1. Recommended funding TYPES\n2. A funding readiness checklist\n3. If cached funding opportunities provided, include them. Do NOT invent funding programs.\n\nReturn JSON with tool call.`;
+    case "chat":
+      return `${base}${kbInstruction}\n\nYou are in conversational mode. Answer the user's question using all provided project context and knowledge base documents. Be specific and cite document titles when referencing knowledge base content. If the user references a specific document, answer primarily from that document's content.`;
     default:
-      return base;
+      return `${base}${kbInstruction}`;
   }
 }
 
@@ -214,9 +375,11 @@ function getTools(mode: string) {
       },
     }];
   }
+  // chat mode: no tool calls, free-form response
   return [];
 }
 
+// ── Main Handler ──────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -236,14 +399,22 @@ serve(async (req) => {
       });
     }
 
-    const { project_id, mode } = await req.json();
+    const body = await req.json();
+    const { project_id, mode, prompt, selected_doc_ids } = body;
     if (!project_id || !mode) {
       return new Response(JSON.stringify({ error: "project_id and mode required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Build project snapshot
     const { text: snapshotText, json: snapshotJson } = await buildSnapshot(supabase, project_id);
+
+    // Retrieve project knowledge base
+    const userPrompt = prompt || `Produce the ${mode.replace(/_/g, " ")} analysis.`;
+    const { text: kbText, meta: retrievalMeta } = await retrieveProjectKnowledge(
+      supabase, user.id, project_id, userPrompt, selected_doc_ids ?? null,
+    );
 
     // For funding_pathways, append cached funding data
     let extraContext = "";
@@ -253,12 +424,13 @@ serve(async (req) => {
       if (cached?.length) {
         extraContext = "\n\nCACHED VERIFIED FUNDING OPPORTUNITIES:\n";
         for (const c of cached) {
-          extraContext += `- ${c.org_name}: ${c.program_name} (${c.funding_type}) — ${c.summary?.slice(0, 100)} [Source: ${c.source_url}] [Fetched: ${c.fetched_at}]\n`;
+          extraContext += `- ${c.org_name}: ${c.program_name} (${c.funding_type}) — ${c.summary?.slice(0, 100)} [Source: ${c.source_url}]\n`;
         }
       }
     }
 
-    const systemPrompt = getSystemPrompt(mode);
+    const hasKB = kbText.length > 0;
+    const systemPrompt = getSystemPrompt(mode, hasKB);
     const tools = getTools(mode);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -268,7 +440,24 @@ serve(async (req) => {
       });
     }
 
-    const userContent = `Here is the project snapshot:\n\n${snapshotText}${extraContext}\n\nPlease produce the ${mode.replace(/_/g, " ")} analysis.`;
+    // Build user message
+    let userContent = `Here is the project snapshot:\n\n${snapshotText}${extraContext}`;
+    if (kbText) {
+      userContent += `\n\nPROJECT KNOWLEDGE BASE:\n${kbText}`;
+    }
+    // Add retrieval warnings
+    if (retrievalMeta.missing_docs.length) {
+      userContent += `\n\n⚠️ The user referenced these documents but they were NOT found in this project's Knowledge Base: ${retrievalMeta.missing_docs.join(", ")}. Please inform the user.`;
+    }
+    if (retrievalMeta.unindexed_docs.length) {
+      userContent += `\n\n⚠️ These documents exist but have NOT been indexed into chunks yet: ${retrievalMeta.unindexed_docs.join(", ")}. Inform the user they may need to re-upload or wait for processing.`;
+    }
+
+    if (mode === "chat" && prompt) {
+      userContent += `\n\nUser question: ${redact(prompt)}`;
+    } else if (mode !== "chat") {
+      userContent += `\n\nPlease produce the ${mode.replace(/_/g, " ")} analysis.`;
+    }
 
     const aiBody: any = {
       model: "google/gemini-3-flash-preview",
@@ -324,7 +513,6 @@ serve(async (req) => {
 
     // After executive_brief, update scores
     if (mode === "executive_brief") {
-      // Compute momentum from recent activity
       const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
       const [recentTasks, recentNotes, recentMeetings] = await Promise.all([
         supabase.from("tasks").select("id").eq("project_id", project_id).gte("updated_at", twoWeeksAgo).is("deleted_at", null),
@@ -333,7 +521,6 @@ serve(async (req) => {
       ]);
       const activityCount = (recentTasks.data?.length ?? 0) + (recentNotes.data?.length ?? 0) + (recentMeetings.data?.length ?? 0);
       const momentum = Math.min(100, activityCount * 10);
-
       const overdue = (snapshotJson.open_tasks ?? []).filter((t: any) => t.due_date && new Date(t.due_date) < new Date()).length;
       const riskLevel = snapshotJson.project?.is_blocked ? "high" : overdue >= 2 ? "high" : overdue >= 1 ? "med" : "low";
 
@@ -347,7 +534,7 @@ serve(async (req) => {
       }, { onConflict: "user_id,project_id" });
     }
 
-    // If auto_update_enabled and mode is executive_brief or sprint_plan, update memory summary
+    // Auto-update memory
     if (snapshotJson.memory?.auto_update_enabled && (mode === "executive_brief" || mode === "sprint_plan")) {
       const summaryText = result.status_summary || result.summary || "";
       if (summaryText) {
@@ -362,7 +549,10 @@ serve(async (req) => {
       mode,
       result,
       snapshot_len: snapshotText.length,
+      kb_len: kbText.length,
       was_truncated: snapshotText.includes("[TRUNCATED]"),
+      kb_truncated: kbText.includes("[KB_TRUNCATED]"),
+      retrieval_meta: retrievalMeta,
       ai_status: "ok",
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
