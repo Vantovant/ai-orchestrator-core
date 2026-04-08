@@ -883,7 +883,7 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
 
       // Enrich retrieval meta with daily review info
       if (isDailyReview) {
