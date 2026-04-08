@@ -8,6 +8,35 @@ const corsHeaders = {
 
 const RETRIEVAL_CAP = 10000;
 
+// ─── Daily review intent detection ─────────────────────
+const DAILY_REVIEW_PATTERNS = [
+  /\bhow\s+was\s+(?:the\s+)?(?:my\s+)?day\b/i,
+  /\bhow\s+(?:did|was)\s+today\b/i,
+  /\bwhat\s+(?:was|got)\s+done\s+today\b/i,
+  /\bwhat\s+(?:did\s+I|have\s+I)\s+(?:do|achieve|accomplish|complete)\s+today\b/i,
+  /\bwhat\s+happened\s+today\b/i,
+  /\bdaily\s*review\b/i,
+  /\bend\s*[\-\s]*of\s*[\-\s]*day\b/i,
+  /\btoday['']?s?\s+(?:summary|review|recap|briefing|report|wrap[\-\s]*up)\b/i,
+  /\bwhat\s+could\s+(?:be|have\s+been)\s+done\s+better\s+today\b/i,
+  /\bwhat\s+was\s+done\s+well\s+today\b/i,
+  /\bwhat\s+(?:are|were)\s+(?:my\s+)?(?:wins|achievements)\s+today\b/i,
+  /\breview\s+(?:my\s+)?(?:today|this\s+day)\b/i,
+  /\bhow\s+productive\s+was\s+(?:I|my\s+day)\s+today\b/i,
+];
+
+function detectDailyReviewIntent(prompt: string): boolean {
+  return DAILY_REVIEW_PATTERNS.some(p => p.test(prompt));
+}
+
+function getTodayRange(): { todayStart: string; todayEnd: string; todayDate: string } {
+  const now = new Date();
+  const todayDate = now.toISOString().slice(0, 10);
+  const todayStart = todayDate + "T00:00:00.000Z";
+  const todayEnd = todayDate + "T23:59:59.999Z";
+  return { todayStart, todayEnd, todayDate };
+}
+
 function redact(text: string): string {
   return text
     .replace(/\b\d{13}\b/g, "[ID_REDACTED]")
