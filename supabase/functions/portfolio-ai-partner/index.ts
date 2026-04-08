@@ -16,11 +16,70 @@ function redact(text: string): string {
     .replace(/\b(?:\+27|0)\d{9}\b/g, "[PHONE_REDACTED]");
 }
 
+interface RetrievalMeta {
+  retrieval_type: "exact_document" | "project_scoped" | "portfolio_general";
+  project_ids: string[];
+  project_names: string[];
+  docs_used: Array<{
+    id: string;
+    title: string;
+    project_id: string | null;
+    project_name: string | null;
+    source_mode: "chunks" | "raw_text";
+  }>;
+  missing_docs: string[];
+  unindexed_docs: string[];
+  unreadable_docs: string[];
+}
+
+function normalizeForMatch(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectDocReferences(prompt: string): string[] {
+  const refs: string[] = [];
+  const patterns = [
+    /refer\s+to\s+["`']?([^"'`\n,]+?)["`']?(?:\s+and|\s*$|\s*,)/gi,
+    /(?:share|read|use|check|summari(?:s|z)e)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:this\s+)?document\s+["`']?([^"'`\n,]+?)["`']?(?:\s+and|\s*$|\s*,)/gi,
+    /(?:use|check)\s+(?:the\s+)?([^"'`\n,]+?)\s+document/gi,
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of prompt.matchAll(pattern)) {
+      refs.push(match[1].trim());
+    }
+  }
+
+  return [...new Set(refs)].filter((ref) => ref.length > 3);
+}
+
+function matchProjectsFromPrompt(projects: any[], prompt: string): any[] {
+  const normalizedPrompt = normalizeForMatch(prompt);
+  if (!normalizedPrompt) return [];
+
+  return projects
+    .filter((project) => {
+      const normalizedName = normalizeForMatch(project.name || "");
+      return normalizedName.length >= 4 && normalizedPrompt.includes(normalizedName);
+    })
+    .sort(
+      (a, b) =>
+        normalizeForMatch(b.name || "").length - normalizeForMatch(a.name || "").length,
+    );
+}
+
 // ─── Retrieval helpers (aligned to real VantoOS tables) ─────────
 
-async function retrieveProjects(supabase: any, userId: string, tags: string[]): Promise<any[]> {
+async function retrieveProjects(supabase: any, userId: string, tags: string[], prompt: string): Promise<any[]> {
+  if (tags.includes("@global-only")) return [];
+
   const projectNameTag = tags.find(t => t.startsWith("@project:"));
-  const projectName = projectNameTag?.slice(9);
+  const projectName = projectNameTag?.slice(9)?.trim();
 
   let query = supabase.from("projects")
     .select("id, name, status, progress_manual, progress_mode, is_blocked, description, updated_at")
@@ -35,7 +94,14 @@ async function retrieveProjects(supabase: any, userId: string, tags: string[]): 
 
   // Order by most recently updated, use a generous limit for portfolio-wide retrieval
   const { data } = await query.order("updated_at", { ascending: false }).limit(100);
-  return data ?? [];
+  const projects = data ?? [];
+
+  if (!projectNameTag && !tags.includes("@all-projects")) {
+    const matchedProjects = matchProjectsFromPrompt(projects, prompt);
+    if (matchedProjects.length > 0) return matchedProjects;
+  }
+
+  return projects;
 }
 
 async function retrieveMemories(supabase: any, projectIds: string[]): Promise<string> {
@@ -116,85 +182,155 @@ async function retrieveProjectLinks(supabase: any, userId: string, projectIds: s
   return "PROJECT LINKS:\n" + data.map((l: any) => `- [proj:${l.project_id?.slice(0,8)}] ${l.label}: ${l.url}`).join("\n");
 }
 
-// Dynamic knowledge retrieval — always attempts retrieval unless @global-only
-// Tags @knowledge and @doc:<name> narrow scope; absence means intelligent retrieval
-async function retrieveKnowledge(supabase: any, userId: string, tags: string[], prompt: string): Promise<string> {
-  if (tags.includes("@global-only")) return "";
+// Dynamic knowledge retrieval — always attempts retrieval unless @global-only.
+// Natural-language project/doc references are supported even without explicit tags.
+async function retrieveKnowledge(
+  supabase: any,
+  userId: string,
+  projects: any[],
+  tags: string[],
+  prompt: string,
+): Promise<{ text: string; meta: RetrievalMeta }> {
+  const meta: RetrievalMeta = {
+    retrieval_type: projects.length > 0 ? "project_scoped" : "portfolio_general",
+    project_ids: projects.map((project) => project.id),
+    project_names: projects.map((project) => project.name),
+    docs_used: [],
+    missing_docs: [],
+    unindexed_docs: [],
+    unreadable_docs: [],
+  };
 
-  const docNameTag = tags.find(t => t.startsWith("@doc:"));
-  const docName = docNameTag?.slice(5);
-  const forceKnowledge = tags.includes("@knowledge") || !!docNameTag;
+  if (tags.includes("@global-only")) return { text: "", meta };
+
+  const explicitDocRefs = [
+    ...new Set([
+      ...tags.filter((tag) => tag.startsWith("@doc:")).map((tag) => tag.slice(5).trim()),
+      ...detectDocReferences(prompt),
+    ].filter(Boolean)),
+  ];
 
   let docsQuery = supabase.from("knowledge_docs")
-    .select("id, title, raw_text")
-    .eq("user_id", userId).is("deleted_at", null).eq("status", "active");
+    .select("id, title, raw_text, status, project_id, created_at")
+    .eq("user_id", userId)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(projects.length > 0 ? 60 : 120);
 
-  if (docName) {
-    docsQuery = docsQuery.ilike("title", `%${docName}%`);
+  if (projects.length > 0) {
+    docsQuery = docsQuery.in("project_id", projects.map((project) => project.id));
   }
 
-  const { data: docs } = await docsQuery.order("created_at", { ascending: false }).limit(15);
-  if (!docs?.length) return "";
+  const { data: docs } = await docsQuery;
+  if (!docs?.length) {
+    if (explicitDocRefs.length > 0) meta.missing_docs = explicitDocRefs;
+    return { text: "", meta };
+  }
 
-  // If no explicit tag, do a lightweight relevance check using prompt keywords
-  let targetDocIds = docs.map((d: any) => d.id);
-  if (!forceKnowledge && prompt) {
-    const keywords = prompt.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-    if (keywords.length > 0) {
-      const scored = docs.map((d: any) => {
-        const titleLower = (d.title || "").toLowerCase();
-        const hits = keywords.filter((k: string) => titleLower.includes(k)).length;
-        return { id: d.id, hits };
-      }).filter((d: any) => d.hits > 0).sort((a: any, b: any) => b.hits - a.hits);
-      if (scored.length > 0) {
-        targetDocIds = scored.slice(0, 5).map((d: any) => d.id);
-      } else {
-        targetDocIds = docs.slice(0, 3).map((d: any) => d.id);
+  const docMap = new Map(docs.map((doc: any) => [doc.id, doc]));
+  const projectNameMap = new Map(projects.map((project) => [project.id, project.name]));
+  const promptKeywords = normalizeForMatch(prompt).split(" ").filter((word) => word.length > 3);
+  const targetDocs = new Map<string, any>();
+
+  if (explicitDocRefs.length > 0) {
+    meta.retrieval_type = "exact_document";
+    for (const ref of explicitDocRefs) {
+      const normalizedRef = normalizeForMatch(ref);
+      const exactMatches = docs.filter((doc: any) => normalizeForMatch(doc.title || "") === normalizedRef);
+      const partialMatches = docs.filter((doc: any) => {
+        const normalizedTitle = normalizeForMatch(doc.title || "");
+        return normalizedTitle.includes(normalizedRef) || normalizedRef.includes(normalizedTitle);
+      });
+
+      const rankedMatches = (exactMatches.length > 0 ? exactMatches : partialMatches).sort((a: any, b: any) => {
+        const aReadable = Number(Boolean(a.raw_text?.trim()));
+        const bReadable = Number(Boolean(b.raw_text?.trim()));
+        if (aReadable !== bReadable) return bReadable - aReadable;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      if (rankedMatches.length === 0) {
+        meta.missing_docs.push(ref);
+        continue;
       }
+
+      targetDocs.set(rankedMatches[0].id, rankedMatches[0]);
+    }
+  } else {
+    const scoredDocs = docs
+      .map((doc: any) => {
+        const normalizedTitle = normalizeForMatch(doc.title || "");
+        const normalizedRawPreview = normalizeForMatch((doc.raw_text || "").slice(0, 1200));
+        let score = 0;
+        for (const keyword of promptKeywords) {
+          if (normalizedTitle.includes(keyword)) score += 6;
+          if (normalizedRawPreview.includes(keyword)) score += 2;
+        }
+        return { doc, score };
+      })
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          new Date(b.doc.created_at).getTime() - new Date(a.doc.created_at).getTime(),
+      );
+
+    const fallbackDocs = (scoredDocs.filter((entry) => entry.score > 0).slice(0, projects.length > 0 ? 6 : 4).map((entry) => entry.doc));
+    const docsToUse = fallbackDocs.length > 0 ? fallbackDocs : docs.slice(0, projects.length > 0 ? 4 : 3);
+    for (const doc of docsToUse) {
+      targetDocs.set(doc.id, doc);
     }
   }
+
+  const targetDocIds = [...targetDocs.keys()];
+  if (targetDocIds.length === 0) return { text: "", meta };
 
   const { data: chunks } = await supabase.from("knowledge_chunks")
     .select("content, doc_id, chunk_index")
     .in("doc_id", targetDocIds)
     .order("chunk_index", { ascending: true })
-    .limit(30);
+    .limit(40);
 
-  const docMap = new Map(docs.map((d: any) => [d.id, d]));
-  const docsWithChunks = new Set((chunks ?? []).map((c: any) => c.doc_id));
+  const chunksByDoc = new Map<string, string[]>();
+  for (const chunk of chunks ?? []) {
+    const existing = chunksByDoc.get(chunk.doc_id) ?? [];
+    existing.push(chunk.content);
+    chunksByDoc.set(chunk.doc_id, existing);
+  }
 
   let kbText = "";
-
-  // Build from chunks (full content, not sliced to 300 chars)
-  if (chunks?.length) {
-    const byDoc: Record<string, string[]> = {};
-    for (const c of chunks) {
-      if (!byDoc[c.doc_id]) byDoc[c.doc_id] = [];
-      byDoc[c.doc_id].push(c.content);
-    }
-    for (const [docId, contents] of Object.entries(byDoc)) {
-      const doc = docMap.get(docId);
-      kbText += `\n--- KB DOC: ${doc?.title || "doc"} ---\n`;
-      kbText += contents.join("\n");
-      kbText += "\n";
-    }
-  }
-
-  // raw_text fallback for docs without chunks
   for (const docId of targetDocIds) {
-    if (!docsWithChunks.has(docId)) {
-      const doc = docMap.get(docId);
-      if (doc?.raw_text?.trim()) {
-        kbText += `\n--- KB DOC (raw text): ${doc.title} ---\n`;
-        kbText += doc.raw_text.slice(0, 2000);
-        kbText += "\n";
-      }
+    const doc = docMap.get(docId);
+    if (!doc) continue;
+
+    const docChunks = chunksByDoc.get(docId) ?? [];
+    const projectName = doc.project_id ? projectNameMap.get(doc.project_id) ?? null : null;
+
+    if (docChunks.length > 0) {
+      kbText += `\n--- KB DOC: ${doc.title} ---\n`;
+      kbText += docChunks.join("\n");
+      kbText += "\n";
+      meta.docs_used.push({ id: doc.id, title: doc.title, project_id: doc.project_id, project_name: projectName, source_mode: "chunks" });
+      continue;
+    }
+
+    if (doc.raw_text?.trim()) {
+      kbText += `\n--- KB DOC (raw text): ${doc.title} ---\n`;
+      kbText += doc.raw_text.slice(0, 2500);
+      kbText += "\n";
+      meta.docs_used.push({ id: doc.id, title: doc.title, project_id: doc.project_id, project_name: projectName, source_mode: "raw_text" });
+      continue;
+    }
+
+    if (doc.status === "extraction_failed") {
+      meta.unreadable_docs.push(doc.title);
+    } else {
+      meta.unindexed_docs.push(doc.title);
     }
   }
 
-  if (!kbText) return "";
+  if (!kbText) return { text: "", meta };
   if (kbText.length > RETRIEVAL_CAP) kbText = kbText.slice(0, RETRIEVAL_CAP) + "\n[KB_TRUNCATED]";
-  return "KNOWLEDGE BASE:\n" + kbText;
+  return { text: "KNOWLEDGE BASE:\n" + redact(kbText), meta };
 }
 
 async function retrieveScoreHistory(supabase: any, projectIds: string[]): Promise<string> {
@@ -207,15 +343,21 @@ async function retrieveScoreHistory(supabase: any, projectIds: string[]): Promis
   return "SCORE HISTORY:\n" + data.map((s: any) => `[${s.project_id?.slice(0,8)} ${s.captured_at?.slice(0,10)}] M:${s.momentum_score} R:${s.risk_level} S:${s.sell_readiness_score}`).join("\n");
 }
 
-async function buildRetrievalContext(supabase: any, userId: string, tags: string[], prompt: string): Promise<string> {
-  const projects = await retrieveProjects(supabase, userId, tags);
+async function buildRetrievalContext(
+  supabase: any,
+  userId: string,
+  tags: string[],
+  prompt: string,
+): Promise<{ context: string; retrievalMeta: RetrievalMeta }> {
+  const projects = await retrieveProjects(supabase, userId, tags, prompt);
   const projectIds = projects.map((p: any) => p.id);
 
   const projectSummary = projects.map((p: any) =>
     `[${p.name}] id:${p.id.slice(0,8)} status:${p.status} blocked:${p.is_blocked} desc:${(p.description||"").slice(0,100)}`
   ).join("\n");
 
-  const parts = await Promise.all([
+  const [knowledgeResult, ...parts] = await Promise.all([
+    retrieveKnowledge(supabase, userId, projects, tags, prompt),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -223,13 +365,14 @@ async function buildRetrievalContext(supabase: any, userId: string, tags: string
     retrievePlanningNotes(supabase, userId),
     retrieveProjectNotes(supabase, userId, projectIds),
     retrieveProjectLinks(supabase, userId, projectIds),
-    retrieveKnowledge(supabase, userId, tags, prompt),
     retrieveScoreHistory(supabase, projectIds),
   ]);
 
-  let context = "ACTIVE PROJECTS:\n" + projectSummary + "\n\n" + parts.filter(Boolean).join("\n\n");
+  const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
+  const contextParts = [knowledgeResult.text, ...parts].filter(Boolean);
+  let context = "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
   if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
-  return redact(context);
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────────
@@ -343,7 +486,8 @@ OPERATING RULES:
 7. Never expose secrets, unredacted PII, or cross-user data.
 8. Format responses in clear markdown. Use headings, bullets, and bold for readability.
 9. When relevant, suggest actionable next steps the user can apply as tasks.
-10. Be rigorous but concise — executive-grade communication.`;
+10. Be rigorous but concise — executive-grade communication.
+11. You DO have direct access to the retrieved VantoOS context included in this request. Never tell the user that you cannot access the knowledge base, project notes, files, or portfolio data when that context is present. If something is missing, unreadable, or not indexed yet, explain that exact limitation instead.`;
 
 // ─── Main handler ───────────────────────────────────────────────
 
@@ -385,11 +529,28 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const context = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+      const { context, retrievalMeta } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+      const retrievalNotes = [
+        retrievalMeta.docs_used.length > 0
+          ? `Knowledge sources used: ${retrievalMeta.docs_used.map((doc) => doc.title).join(", ")}`
+          : "",
+        retrievalMeta.missing_docs.length > 0
+          ? `Requested docs not found in scope: ${retrievalMeta.missing_docs.join(", ")}`
+          : "",
+        retrievalMeta.unindexed_docs.length > 0
+          ? `Requested docs exist but are not indexed yet: ${retrievalMeta.unindexed_docs.join(", ")}`
+          : "",
+        retrievalMeta.unreadable_docs.length > 0
+          ? `Requested docs exist but content extraction failed: ${retrievalMeta.unreadable_docs.join(", ")}`
+          : "",
+      ].filter(Boolean).join("\n");
 
       const messages: any[] = [
         { role: "system", content: SYSTEM_PROMPT },
-        { role: "system", content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}` },
+        {
+          role: "system",
+          content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}${retrievalNotes ? `\n\nRETRIEVAL NOTES:\n${retrievalNotes}` : ""}`,
+        },
       ];
 
       if (history?.length) {
@@ -427,6 +588,7 @@ serve(async (req) => {
               if (line.startsWith("data: ")) {
                 const payload = line.slice(6).trim();
                 if (payload === "[DONE]") {
+                  controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ type: "retrieval_meta", data: retrievalMeta })}\n\n`));
                   controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
                   continue;
                 }
@@ -468,7 +630,7 @@ serve(async (req) => {
         const aiData = await aiRes.json();
         const content = aiData?.choices?.[0]?.message?.content ?? "No response";
 
-        return new Response(JSON.stringify({ mode: "chat", result: { content }, context_len: context.length }), {
+        return new Response(JSON.stringify({ mode: "chat", result: { content, retrieval_meta: retrievalMeta }, context_len: context.length }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
