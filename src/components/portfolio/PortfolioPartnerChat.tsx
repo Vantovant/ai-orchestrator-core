@@ -158,8 +158,12 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
   return (
     <div className="flex h-[calc(100vh-12rem)] border rounded-lg overflow-hidden bg-background relative">
       {/* Thread sidebar - full overlay on mobile, side panel on desktop */}
-      {showSidebar && (
-        <div className="absolute inset-0 z-20 sm:relative sm:inset-auto sm:w-64 w-full border-r flex flex-col bg-background sm:bg-muted/20">
+      {/* Desktop: always visible sidebar. Mobile: overlay when toggled */}
+      <div className={cn(
+        "border-r flex flex-col bg-background",
+        "sm:relative sm:inset-auto sm:w-64 sm:flex sm:bg-muted/20",
+        showSidebar ? "absolute inset-0 z-20 w-full" : "hidden sm:flex"
+      )}>
           <div className="p-2 border-b flex items-center gap-2">
             <Button size="sm" variant="default" className="flex-1 gap-1 h-8 text-xs" onClick={handleNewThread}>
               <Plus className="h-3 w-3" /> New Chat
