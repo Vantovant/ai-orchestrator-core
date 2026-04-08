@@ -689,7 +689,7 @@ async function buildRetrievalContext(
   // Run standard retrieval + daily review retrieval in parallel
   const [knowledgeResult, todayResult, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
-    isDailyReview ? retrieveTodayData(supabase, userId) : Promise.resolve({ text: "", counts: {} }),
+    isDailyReview ? retrieveTodayData(supabase, userId, tzOffsetMinutes) : Promise.resolve({ text: "", counts: {} }),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -863,7 +863,8 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { mode, project_ids, prompt, context_tags, history, stream, thread_id } = body;
+    const { mode, project_ids, prompt, context_tags, history, stream, thread_id, tz_offset } = body;
+    const tzOffsetMinutes: number | undefined = typeof tz_offset === "number" ? tz_offset : undefined;
 
     if (!mode) {
       return new Response(JSON.stringify({ error: "mode required" }), {
