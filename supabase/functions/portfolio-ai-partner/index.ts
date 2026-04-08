@@ -734,7 +734,7 @@ async function buildRetrievalContext(
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
-  const contextParts = [knowledgeResult.text, ...parts].filter(Boolean);
+  const contextParts = [knowledgeResult.text, ...parts, diaryText].filter(Boolean);
 
   // For daily review, prepend today data prominently
   let context = "";
