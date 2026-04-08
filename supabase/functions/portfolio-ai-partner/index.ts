@@ -640,6 +640,27 @@ async function retrieveTodayData(supabase: any, userId: string, tzOffsetMinutes?
   return { text: text ? redact(text) : "", counts };
 }
 
+// ─── Voice diary retrieval ─────────────────────────────
+async function retrieveVoiceDiary(supabase: any, userId: string, prompt: string): Promise<string> {
+  // Fetch recent diary entries (last 14 days, up to 20)
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { data } = await supabase.from("voice_diary_entries")
+    .select("content, title, source_type, mood, is_pinned, created_at, linked_project_ids")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("created_at", twoWeeksAgo)
+    .order("created_at", { ascending: false }).limit(20);
+  if (!data?.length) return "";
+  const pinnedFirst = [...data].sort((a: any, b: any) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0));
+  return "VOICE DIARY (recent entries — user's private thoughts, concerns, intentions):\n" +
+    pinnedFirst.map((e: any) => {
+      const pin = e.is_pinned ? "📌 " : "";
+      const date = e.created_at?.slice(0, 16) || "";
+      const mood = e.mood ? ` [${e.mood}]` : "";
+      const content = (e.content || "").slice(0, 300);
+      return `- ${pin}[${date}]${mood} ${content}`;
+    }).join("\n");
+}
+
 const DAILY_REVIEW_SYSTEM_SUPPLEMENT = `
 DAILY REVIEW MODE ACTIVE:
 The user is asking about today specifically. You MUST produce a structured daily review using ONLY the TODAY-FILTERED data provided below.
@@ -687,9 +708,10 @@ async function buildRetrievalContext(
   ).join("\n");
 
   // Run standard retrieval + daily review retrieval in parallel
-  const [knowledgeResult, todayResult, ...parts] = await Promise.all([
+  const [knowledgeResult, todayResult, diaryText, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
     isDailyReview ? retrieveTodayData(supabase, userId, tzOffsetMinutes) : Promise.resolve({ text: "", counts: {} }),
+    retrieveVoiceDiary(supabase, userId, prompt),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -708,10 +730,11 @@ async function buildRetrievalContext(
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) dataSources.push(partLabels[i]);
   }
+  if (diaryText) dataSources.push("voice_diary");
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
-  const contextParts = [knowledgeResult.text, ...parts].filter(Boolean);
+  const contextParts = [knowledgeResult.text, ...parts, diaryText].filter(Boolean);
 
   // For daily review, prepend today data prominently
   let context = "";
@@ -829,7 +852,7 @@ function getTools(mode: string) {
 const SYSTEM_PROMPT = `You are the Chief Portfolio Strategist for VantoOS — a persistent AI co-founder and senior partner.
 
 OPERATING RULES:
-1. Cross-reference ALL available data sources: projects, tasks, meetings, notes, emails, finances, knowledge docs, reminders, debts, income streams.
+1. Cross-reference ALL available data sources: projects, tasks, meetings, notes, emails, finances, knowledge docs, reminders, debts, income streams, and the user's Voice Diary.
 2. Spot conflicts, duplicated effort, hidden opportunities, resource strain, and financial pressure across the portfolio.
 3. Treat knowledge documents as frameworks and reference material, not absolute truth.
 4. Prioritize live project reality (tasks, meetings, scores, finances) over theory when they conflict.
@@ -840,7 +863,10 @@ OPERATING RULES:
 9. When relevant, suggest actionable next steps the user can apply as tasks.
 10. Be rigorous but concise — executive-grade communication.
 11. You DO have direct access to the retrieved VantoOS context included in this request. Never tell the user that you cannot access the knowledge base, project notes, files, emails, finances, or portfolio data when that context is present. If something is missing, unreadable, or not indexed yet, explain that exact limitation instead.
-12. CROSS-MODULE REASONING: When asked about a project, combine evidence from tasks, meetings, finances, emails, knowledge docs, and notes. When asked about finances, relate them to active projects. When asked about emails, connect them to relevant projects and tasks. Always cite which data source your conclusions come from.`;
+12. CROSS-MODULE REASONING: When asked about a project, combine evidence from tasks, meetings, finances, emails, knowledge docs, notes, and voice diary. When asked about finances, relate them to active projects. When asked about emails, connect them to relevant projects and tasks. Always cite which data source your conclusions come from.
+13. VOICE DIARY AWARENESS: The Voice Diary contains the user's private thoughts, concerns, frustrations, intentions, and reflections. Use diary entries to understand what the user truly cares about, what is stressing them, what they want to focus on, what they keep repeating, and what kind of support they need. Treat diary content with empathy and strategic insight. When diary content is relevant to a question, reference it naturally.`;
+
+
 
 // ─── Main handler ───────────────────────────────────────
 
