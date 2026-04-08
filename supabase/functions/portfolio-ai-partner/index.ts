@@ -23,14 +23,30 @@ const DAILY_REVIEW_PATTERNS = [
   /\bwhat\s+(?:are|were)\s+(?:my\s+)?(?:wins|achievements)\s+today\b/i,
   /\breview\s+(?:my\s+)?(?:today|this\s+day)\b/i,
   /\bhow\s+productive\s+was\s+(?:I|my\s+day)\s+today\b/i,
+  /\bwhat\s+(?:are|is)\s+(?:my\s+)?(?:meetings?|tasks?|reminders?|schedule)\s+(?:for\s+)?today\b/i,
+  /\b(?:meetings?|tasks?|reminders?|schedule)\s+(?:for\s+)?today\b/i,
+  /\btoday['']?s?\s+(?:meetings?|tasks?|reminders?|schedule|agenda)\b/i,
+  /\bshow\s+(?:me\s+)?(?:my\s+)?(?:day|today)\b/i,
+  /\bwhat\s+do\s+I\s+have\s+today\b/i,
+  /\bwhat['']?s\s+(?:on\s+)?(?:for\s+)?today\b/i,
+  /\bmy\s+day\s+today\b/i,
+  /\bwrap\s*up\s+(?:the\s+)?day\b/i,
 ];
 
 function detectDailyReviewIntent(prompt: string): boolean {
   return DAILY_REVIEW_PATTERNS.some(p => p.test(prompt));
 }
 
-function getTodayRange(): { todayStart: string; todayEnd: string; todayDate: string } {
+function getTodayRange(tzOffsetMinutes?: number): { todayStart: string; todayEnd: string; todayDate: string } {
   const now = new Date();
+  if (tzOffsetMinutes != null && !isNaN(tzOffsetMinutes)) {
+    const localMs = now.getTime() - tzOffsetMinutes * 60000;
+    const localNow = new Date(localMs);
+    const todayDate = localNow.toISOString().slice(0, 10);
+    const todayStart = new Date(localMs - (localNow.getUTCHours() * 3600000 + localNow.getUTCMinutes() * 60000 + localNow.getUTCSeconds() * 1000 + localNow.getUTCMilliseconds())).toISOString();
+    const todayEnd = new Date(new Date(todayStart).getTime() + 86400000 - 1).toISOString();
+    return { todayStart, todayEnd, todayDate };
+  }
   const todayDate = now.toISOString().slice(0, 10);
   const todayStart = todayDate + "T00:00:00.000Z";
   const todayEnd = todayDate + "T23:59:59.999Z";
@@ -453,8 +469,8 @@ async function retrieveKnowledge(
 
 // ─── Daily review: today-filtered retrieval ─────────────────────
 
-async function retrieveTodayData(supabase: any, userId: string): Promise<{ text: string; counts: Record<string, number> }> {
-  const { todayStart, todayEnd, todayDate } = getTodayRange();
+async function retrieveTodayData(supabase: any, userId: string, tzOffsetMinutes?: number): Promise<{ text: string; counts: Record<string, number> }> {
+  const { todayStart, todayEnd, todayDate } = getTodayRange(tzOffsetMinutes);
   const counts: Record<string, number> = {};
   let text = "";
 
@@ -507,14 +523,14 @@ async function retrieveTodayData(supabase: any, userId: string): Promise<{ text:
 
   // 5. Meetings today
   const { data: todayMeetings } = await supabase.from("meetings")
-    .select("title, start_time, project_id, agenda, is_completed")
+    .select("title, start_time, end_time, project_id, notes, is_done")
     .eq("user_id", userId).is("deleted_at", null)
     .gte("start_time", todayStart).lte("start_time", todayEnd)
     .order("start_time", { ascending: true }).limit(15);
   if (todayMeetings?.length) {
     counts.meetings = todayMeetings.length;
-    const completed = todayMeetings.filter((m: any) => m.is_completed).length;
-    text += `MEETINGS TODAY (${completed}/${todayMeetings.length} completed):\n` + todayMeetings.map((m: any) => `- ${m.is_completed ? "✅" : "⬜"} ${m.title} at ${m.start_time?.slice(11,16)} proj:${m.project_id?.slice(0,8)||"none"}${m.agenda ? " agenda:" + m.agenda.slice(0,60) : ""}`).join("\n") + "\n\n";
+    const completed = todayMeetings.filter((m: any) => m.is_done).length;
+    text += `MEETINGS TODAY (${completed}/${todayMeetings.length} completed):\n` + todayMeetings.map((m: any) => `- ${m.is_done ? "✅" : "⬜"} ${m.title} at ${m.start_time?.slice(11,16)}${m.end_time ? "-" + m.end_time.slice(11,16) : ""} proj:${m.project_id?.slice(0,8)||"none"}${m.notes ? " notes:" + m.notes.slice(0,80) : ""}`).join("\n") + "\n\n";
   }
 
   // 6. Reminders due today
@@ -659,7 +675,7 @@ IMPORTANT: Base every point on actual data from today. Do NOT give generic portf
 
 
 async function buildRetrievalContext(
-  supabase: any, userId: string, tags: string[], prompt: string,
+  supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
 ): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number> }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
   const projects = await retrieveProjects(supabase, userId, tags, prompt);
@@ -673,7 +689,7 @@ async function buildRetrievalContext(
   // Run standard retrieval + daily review retrieval in parallel
   const [knowledgeResult, todayResult, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
-    isDailyReview ? retrieveTodayData(supabase, userId) : Promise.resolve({ text: "", counts: {} }),
+    isDailyReview ? retrieveTodayData(supabase, userId, tzOffsetMinutes) : Promise.resolve({ text: "", counts: {} }),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -847,7 +863,8 @@ serve(async (req) => {
     }
 
     const body = await req.json();
-    const { mode, project_ids, prompt, context_tags, history, stream, thread_id } = body;
+    const { mode, project_ids, prompt, context_tags, history, stream, thread_id, tz_offset } = body;
+    const tzOffsetMinutes: number | undefined = typeof tz_offset === "number" ? tz_offset : undefined;
 
     if (!mode) {
       return new Response(JSON.stringify({ error: "mode required" }), {
@@ -866,7 +883,7 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
 
       // Enrich retrieval meta with daily review info
       if (isDailyReview) {
