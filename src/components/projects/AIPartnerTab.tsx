@@ -17,7 +17,7 @@ import ReactMarkdown from "react-markdown";
 import {
   Brain, Zap, Target, ShieldCheck, Loader2, CheckCircle2,
   AlertTriangle, ArrowRight, Sparkles, Banknote, MessageCircle,
-  Send, BookOpen, ChevronDown, FileText, Info, X,
+  Send, BookOpen, ChevronDown, FileText, Info, X, Mic,
 } from "lucide-react";
 import { toast } from "sonner";
 

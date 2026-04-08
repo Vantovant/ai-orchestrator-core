@@ -9,6 +9,7 @@ import {
   Send, Loader2, Plus, MessageSquare, Pin, Trash2,
   Hash, BookOpen, FolderKanban, Globe, X,
 } from "lucide-react";
+import ChatDictation from "@/components/voice/ChatDictation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -351,6 +352,7 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
             ))}
           </div>
           <div className="flex gap-2 items-end">
+            <ChatDictation onAppend={(text) => setInput(prev => prev ? `${prev} ${text}` : text)} />
             <Textarea
               ref={inputRef}
               value={input}
