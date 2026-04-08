@@ -22,7 +22,7 @@ export default function PageGuide() {
         <Button
           variant="outline"
           size="icon"
-          className="fixed bottom-24 right-4 z-50 md:bottom-6 h-12 w-12 rounded-full shadow-lg border-primary/30 bg-background hover:bg-primary hover:text-primary-foreground transition-all"
+          className="fixed bottom-36 right-4 z-50 md:bottom-6 h-12 w-12 rounded-full shadow-lg border-primary/30 bg-background hover:bg-primary hover:text-primary-foreground transition-all"
           aria-label="Page Guide"
         >
           <HelpCircle className="h-6 w-6" />
