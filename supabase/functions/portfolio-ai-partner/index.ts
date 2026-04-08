@@ -640,6 +640,27 @@ async function retrieveTodayData(supabase: any, userId: string, tzOffsetMinutes?
   return { text: text ? redact(text) : "", counts };
 }
 
+// ─── Voice diary retrieval ─────────────────────────────
+async function retrieveVoiceDiary(supabase: any, userId: string, prompt: string): Promise<string> {
+  // Fetch recent diary entries (last 14 days, up to 20)
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { data } = await supabase.from("voice_diary_entries")
+    .select("content, title, source_type, mood, is_pinned, created_at, linked_project_ids")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("created_at", twoWeeksAgo)
+    .order("created_at", { ascending: false }).limit(20);
+  if (!data?.length) return "";
+  const pinnedFirst = [...data].sort((a: any, b: any) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0));
+  return "VOICE DIARY (recent entries — user's private thoughts, concerns, intentions):\n" +
+    pinnedFirst.map((e: any) => {
+      const pin = e.is_pinned ? "📌 " : "";
+      const date = e.created_at?.slice(0, 16) || "";
+      const mood = e.mood ? ` [${e.mood}]` : "";
+      const content = (e.content || "").slice(0, 300);
+      return `- ${pin}[${date}]${mood} ${content}`;
+    }).join("\n");
+}
+
 const DAILY_REVIEW_SYSTEM_SUPPLEMENT = `
 DAILY REVIEW MODE ACTIVE:
 The user is asking about today specifically. You MUST produce a structured daily review using ONLY the TODAY-FILTERED data provided below.
