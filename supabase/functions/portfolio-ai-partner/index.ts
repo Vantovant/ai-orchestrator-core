@@ -126,14 +126,14 @@ async function retrieveKnowledge(supabase: any, userId: string, tags: string[], 
   const forceKnowledge = tags.includes("@knowledge") || !!docNameTag;
 
   let docsQuery = supabase.from("knowledge_docs")
-    .select("id, title")
+    .select("id, title, raw_text")
     .eq("user_id", userId).is("deleted_at", null).eq("status", "active");
 
   if (docName) {
     docsQuery = docsQuery.ilike("title", `%${docName}%`);
   }
 
-  const { data: docs } = await docsQuery.limit(10);
+  const { data: docs } = await docsQuery.order("created_at", { ascending: false }).limit(15);
   if (!docs?.length) return "";
 
   // If no explicit tag, do a lightweight relevance check using prompt keywords
@@ -141,7 +141,6 @@ async function retrieveKnowledge(supabase: any, userId: string, tags: string[], 
   if (!forceKnowledge && prompt) {
     const keywords = prompt.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
     if (keywords.length > 0) {
-      // Score docs by title keyword overlap
       const scored = docs.map((d: any) => {
         const titleLower = (d.title || "").toLowerCase();
         const hits = keywords.filter((k: string) => titleLower.includes(k)).length;
@@ -150,21 +149,52 @@ async function retrieveKnowledge(supabase: any, userId: string, tags: string[], 
       if (scored.length > 0) {
         targetDocIds = scored.slice(0, 5).map((d: any) => d.id);
       } else {
-        // No keyword match — still include top 3 most recent docs for general awareness
         targetDocIds = docs.slice(0, 3).map((d: any) => d.id);
       }
     }
   }
 
   const { data: chunks } = await supabase.from("knowledge_chunks")
-    .select("content, doc_id")
+    .select("content, doc_id, chunk_index")
     .in("doc_id", targetDocIds)
     .order("chunk_index", { ascending: true })
-    .limit(15);
+    .limit(30);
 
-  if (!chunks?.length) return "";
-  const docMap = new Map(docs.map((d: any) => [d.id, d.title]));
-  return "KNOWLEDGE:\n" + chunks.map((c: any) => `[${docMap.get(c.doc_id)||"doc"}] ${c.content.slice(0,300)}`).join("\n");
+  const docMap = new Map(docs.map((d: any) => [d.id, d]));
+  const docsWithChunks = new Set((chunks ?? []).map((c: any) => c.doc_id));
+
+  let kbText = "";
+
+  // Build from chunks (full content, not sliced to 300 chars)
+  if (chunks?.length) {
+    const byDoc: Record<string, string[]> = {};
+    for (const c of chunks) {
+      if (!byDoc[c.doc_id]) byDoc[c.doc_id] = [];
+      byDoc[c.doc_id].push(c.content);
+    }
+    for (const [docId, contents] of Object.entries(byDoc)) {
+      const doc = docMap.get(docId);
+      kbText += `\n--- KB DOC: ${doc?.title || "doc"} ---\n`;
+      kbText += contents.join("\n");
+      kbText += "\n";
+    }
+  }
+
+  // raw_text fallback for docs without chunks
+  for (const docId of targetDocIds) {
+    if (!docsWithChunks.has(docId)) {
+      const doc = docMap.get(docId);
+      if (doc?.raw_text?.trim()) {
+        kbText += `\n--- KB DOC (raw text): ${doc.title} ---\n`;
+        kbText += doc.raw_text.slice(0, 2000);
+        kbText += "\n";
+      }
+    }
+  }
+
+  if (!kbText) return "";
+  if (kbText.length > RETRIEVAL_CAP) kbText = kbText.slice(0, RETRIEVAL_CAP) + "\n[KB_TRUNCATED]";
+  return "KNOWLEDGE BASE:\n" + kbText;
 }
 
 async function retrieveScoreHistory(supabase: any, projectIds: string[]): Promise<string> {
