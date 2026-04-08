@@ -675,7 +675,7 @@ IMPORTANT: Base every point on actual data from today. Do NOT give generic portf
 
 
 async function buildRetrievalContext(
-  supabase: any, userId: string, tags: string[], prompt: string,
+  supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
 ): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number> }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
   const projects = await retrieveProjects(supabase, userId, tags, prompt);
