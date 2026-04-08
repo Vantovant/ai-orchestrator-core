@@ -226,6 +226,9 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                 Your AI co-founder for the full VantoOS portfolio. Ask about projects, risks, tasks, knowledge docs, or strategy.
               </p>
               <div className="flex flex-wrap gap-1.5 justify-center mt-2">
+                <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("How was the day today? What was done well, and what could be done better?"); inputRef.current?.focus(); }}>
+                  📊 Daily review
+                </Badge>
                 <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("Give me a full portfolio health check"); inputRef.current?.focus(); }}>
                   Portfolio health check
                 </Badge>
@@ -255,9 +258,34 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                   </div>
                 )}
                 {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
+                  <>
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
+                      <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    </div>
+                    {msg.retrieval_meta_json?.is_daily_review && msg.retrieval_meta_json.daily_review_counts && (
+                      <div className="mt-2 pt-2 border-t border-border/40">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1">📊 DAILY REVIEW SOURCES</p>
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(msg.retrieval_meta_json.daily_review_counts as Record<string, number>).map(([key, val]) => (
+                            <Badge key={key} variant="secondary" className="text-[9px] px-1.5 py-0">
+                              {key.replace(/_/g, " ")}: {val}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {msg.retrieval_meta_json?.data_sources?.length > 0 && !msg.retrieval_meta_json?.is_daily_review && (
+                      <div className="mt-2 pt-2 border-t border-border/40">
+                        <div className="flex flex-wrap gap-1">
+                          {(msg.retrieval_meta_json.data_sources as string[]).map((src: string) => (
+                            <Badge key={src} variant="outline" className="text-[9px] px-1.5 py-0">
+                              {src.replace(/_/g, " ")}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                 )}

@@ -8,6 +8,35 @@ const corsHeaders = {
 
 const RETRIEVAL_CAP = 10000;
 
+// ─── Daily review intent detection ─────────────────────
+const DAILY_REVIEW_PATTERNS = [
+  /\bhow\s+was\s+(?:the\s+)?(?:my\s+)?day\b/i,
+  /\bhow\s+(?:did|was)\s+today\b/i,
+  /\bwhat\s+(?:was|got)\s+done\s+today\b/i,
+  /\bwhat\s+(?:did\s+I|have\s+I)\s+(?:do|achieve|accomplish|complete)\s+today\b/i,
+  /\bwhat\s+happened\s+today\b/i,
+  /\bdaily\s*review\b/i,
+  /\bend\s*[\-\s]*of\s*[\-\s]*day\b/i,
+  /\btoday['']?s?\s+(?:summary|review|recap|briefing|report|wrap[\-\s]*up)\b/i,
+  /\bwhat\s+could\s+(?:be|have\s+been)\s+done\s+better\s+today\b/i,
+  /\bwhat\s+was\s+done\s+well\s+today\b/i,
+  /\bwhat\s+(?:are|were)\s+(?:my\s+)?(?:wins|achievements)\s+today\b/i,
+  /\breview\s+(?:my\s+)?(?:today|this\s+day)\b/i,
+  /\bhow\s+productive\s+was\s+(?:I|my\s+day)\s+today\b/i,
+];
+
+function detectDailyReviewIntent(prompt: string): boolean {
+  return DAILY_REVIEW_PATTERNS.some(p => p.test(prompt));
+}
+
+function getTodayRange(): { todayStart: string; todayEnd: string; todayDate: string } {
+  const now = new Date();
+  const todayDate = now.toISOString().slice(0, 10);
+  const todayStart = todayDate + "T00:00:00.000Z";
+  const todayEnd = todayDate + "T23:59:59.999Z";
+  return { todayStart, todayEnd, todayDate };
+}
+
 function redact(text: string): string {
   return text
     .replace(/\b\d{13}\b/g, "[ID_REDACTED]")
@@ -422,11 +451,217 @@ async function retrieveKnowledge(
   return { text: "KNOWLEDGE BASE:\n" + redact(kbText), meta };
 }
 
-// ─── Build full retrieval context ─────────────────────
+// ─── Daily review: today-filtered retrieval ─────────────────────
+
+async function retrieveTodayData(supabase: any, userId: string): Promise<{ text: string; counts: Record<string, number> }> {
+  const { todayStart, todayEnd, todayDate } = getTodayRange();
+  const counts: Record<string, number> = {};
+  let text = "";
+
+  // 1. Tasks completed today
+  const { data: completedTasks } = await supabase.from("tasks")
+    .select("title, priority, project_id, updated_at")
+    .eq("user_id", userId).is("deleted_at", null)
+    .eq("status", "done")
+    .gte("updated_at", todayStart).lte("updated_at", todayEnd)
+    .order("updated_at", { ascending: false }).limit(30);
+  if (completedTasks?.length) {
+    counts.tasks_completed = completedTasks.length;
+    text += "TASKS COMPLETED TODAY:\n" + completedTasks.map((t: any) => `- [${t.priority}] ${t.title} (proj:${t.project_id?.slice(0,8)||"none"})`).join("\n") + "\n\n";
+  }
+
+  // 2. Tasks created today
+  const { data: createdTasks } = await supabase.from("tasks")
+    .select("title, priority, status, project_id, created_at")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("created_at", todayStart).lte("created_at", todayEnd)
+    .order("created_at", { ascending: false }).limit(30);
+  if (createdTasks?.length) {
+    counts.tasks_created = createdTasks.length;
+    text += "TASKS CREATED TODAY:\n" + createdTasks.map((t: any) => `- [${t.priority}/${t.status}] ${t.title}`).join("\n") + "\n\n";
+  }
+
+  // 3. Overdue tasks still open
+  const { data: overdueTasks } = await supabase.from("tasks")
+    .select("title, priority, due_date, project_id")
+    .eq("user_id", userId).is("deleted_at", null)
+    .in("status", ["pending", "in_progress"])
+    .lt("due_date", todayDate)
+    .order("due_date", { ascending: true }).limit(20);
+  if (overdueTasks?.length) {
+    counts.tasks_overdue = overdueTasks.length;
+    text += "OVERDUE TASKS (still open):\n" + overdueTasks.map((t: any) => `- [${t.priority}] ${t.title} (due:${t.due_date}) proj:${t.project_id?.slice(0,8)||"none"}`).join("\n") + "\n\n";
+  }
+
+  // 4. Priority tasks touched today
+  const { data: touchedTasks } = await supabase.from("tasks")
+    .select("title, priority, status, project_id, updated_at")
+    .eq("user_id", userId).is("deleted_at", null)
+    .in("priority", ["critical", "high"])
+    .gte("updated_at", todayStart).lte("updated_at", todayEnd)
+    .order("updated_at", { ascending: false }).limit(20);
+  if (touchedTasks?.length) {
+    counts.priority_tasks_touched = touchedTasks.length;
+    text += "HIGH/CRITICAL TASKS TOUCHED TODAY:\n" + touchedTasks.map((t: any) => `- [${t.priority}/${t.status}] ${t.title}`).join("\n") + "\n\n";
+  }
+
+  // 5. Meetings today
+  const { data: todayMeetings } = await supabase.from("meetings")
+    .select("title, start_time, project_id, agenda, is_completed")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("start_time", todayStart).lte("start_time", todayEnd)
+    .order("start_time", { ascending: true }).limit(15);
+  if (todayMeetings?.length) {
+    counts.meetings = todayMeetings.length;
+    const completed = todayMeetings.filter((m: any) => m.is_completed).length;
+    text += `MEETINGS TODAY (${completed}/${todayMeetings.length} completed):\n` + todayMeetings.map((m: any) => `- ${m.is_completed ? "✅" : "⬜"} ${m.title} at ${m.start_time?.slice(11,16)} proj:${m.project_id?.slice(0,8)||"none"}${m.agenda ? " agenda:" + m.agenda.slice(0,60) : ""}`).join("\n") + "\n\n";
+  }
+
+  // 6. Reminders due today
+  const { data: todayReminders } = await supabase.from("reminders")
+    .select("title, reminder_time, is_done, description")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("reminder_time", todayStart).lte("reminder_time", todayEnd)
+    .order("reminder_time", { ascending: true }).limit(15);
+  if (todayReminders?.length) {
+    const done = todayReminders.filter((r: any) => r.is_done).length;
+    const missed = todayReminders.filter((r: any) => !r.is_done && new Date(r.reminder_time) < new Date()).length;
+    counts.reminders_due = todayReminders.length;
+    counts.reminders_done = done;
+    counts.reminders_missed = missed;
+    text += `REMINDERS TODAY (${done} done, ${missed} missed):\n` + todayReminders.map((r: any) => `- ${r.is_done ? "✅" : "⬜"} ${r.title} (${r.reminder_time?.slice(11,16)})`).join("\n") + "\n\n";
+  }
+
+  // 7. Daily notes for today
+  const { data: todayNotes } = await supabase.from("notes_daily")
+    .select("content, updated_at")
+    .eq("user_id", userId).is("deleted_at", null)
+    .eq("note_date", todayDate).limit(3);
+  if (todayNotes?.length) {
+    counts.daily_notes = todayNotes.length;
+    text += "DAILY NOTES (today):\n" + todayNotes.map((n: any) => (n.content||"").slice(0,300)).join("\n---\n") + "\n\n";
+  }
+
+  // 8. Emails from today (important)
+  const { data: todayEmails } = await supabase.from("email_messages")
+    .select("subject, sender, date, urgency, intent, is_starred, waiting_on, snippet")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("date", todayStart).lte("date", todayEnd)
+    .order("date", { ascending: false }).limit(15);
+  if (todayEmails?.length) {
+    counts.emails = todayEmails.length;
+    const urgent = todayEmails.filter((e: any) => e.urgency === "urgent").length;
+    const waiting = todayEmails.filter((e: any) => e.waiting_on).length;
+    text += `EMAILS TODAY (${todayEmails.length} total, ${urgent} urgent, ${waiting} waiting):\n`;
+    for (const e of todayEmails.slice(0, 10)) {
+      text += `- "${e.subject}" from ${e.sender}`;
+      if (e.urgency) text += ` [${e.urgency}]`;
+      if (e.is_starred) text += ` ⭐`;
+      if (e.waiting_on) text += ` [waiting]`;
+      text += "\n";
+    }
+    text += "\n";
+  }
+
+  // 9. Smart extracts from today
+  const { data: todayExtracts } = await supabase.from("email_extracts")
+    .select("detected_type, summary, confidence")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("created_at", todayStart).lte("created_at", todayEnd)
+    .gte("confidence", 0.5)
+    .order("created_at", { ascending: false }).limit(5);
+  if (todayExtracts?.length) {
+    counts.email_extracts = todayExtracts.length;
+    text += "EMAIL EXTRACTS TODAY:\n" + todayExtracts.map((ex: any) => `- [${ex.detected_type}] ${ex.summary.slice(0,120)}`).join("\n") + "\n\n";
+  }
+
+  // 10. Finance entries today
+  const { data: todayFinance } = await supabase.from("finance_entries")
+    .select("type, category, amount, notes")
+    .eq("user_id", userId).is("deleted_at", null)
+    .eq("entry_date", todayDate)
+    .order("created_at", { ascending: false }).limit(15);
+  if (todayFinance?.length) {
+    counts.finance_entries = todayFinance.length;
+    const income = todayFinance.filter((f: any) => f.type === "income").reduce((s: number, f: any) => s + Number(f.amount), 0);
+    const expense = todayFinance.filter((f: any) => f.type === "expense").reduce((s: number, f: any) => s + Number(f.amount), 0);
+    text += `FINANCE TODAY: Income R${income.toFixed(0)} | Expenses R${expense.toFixed(0)}\n`;
+    for (const f of todayFinance) {
+      text += `- ${f.type}: R${Number(f.amount).toFixed(0)} (${f.category})${f.notes ? " — " + f.notes.slice(0,50) : ""}\n`;
+    }
+    text += "\n";
+  }
+
+  // 11. Projects touched today (via task/meeting/note activity)
+  const projectIdsToday = new Set<string>();
+  for (const t of [...(completedTasks||[]), ...(createdTasks||[]), ...(touchedTasks||[])]) {
+    if (t.project_id) projectIdsToday.add(t.project_id);
+  }
+  for (const m of (todayMeetings||[])) {
+    if (m.project_id) projectIdsToday.add(m.project_id);
+  }
+  if (projectIdsToday.size > 0) {
+    counts.projects_touched = projectIdsToday.size;
+    const { data: touchedProjects } = await supabase.from("projects")
+      .select("id, name, status, is_blocked")
+      .in("id", [...projectIdsToday]).limit(20);
+    if (touchedProjects?.length) {
+      text += "PROJECTS TOUCHED TODAY:\n" + touchedProjects.map((p: any) => `- ${p.name} (${p.status}${p.is_blocked ? " BLOCKED" : ""})`).join("\n") + "\n\n";
+    }
+  }
+
+  // 12. Project notes updated today
+  const { data: todayProjectNotes } = await supabase.from("project_notes")
+    .select("project_id, content, updated_at")
+    .eq("user_id", userId).is("deleted_at", null)
+    .gte("updated_at", todayStart).lte("updated_at", todayEnd)
+    .order("updated_at", { ascending: false }).limit(5);
+  if (todayProjectNotes?.length) {
+    counts.project_notes_updated = todayProjectNotes.length;
+    text += "PROJECT NOTES UPDATED TODAY:\n" + todayProjectNotes.map((n: any) => `- [proj:${n.project_id?.slice(0,8)}] ${(n.content||"").slice(0,150)}`).join("\n") + "\n\n";
+  }
+
+  return { text: text ? redact(text) : "", counts };
+}
+
+const DAILY_REVIEW_SYSTEM_SUPPLEMENT = `
+DAILY REVIEW MODE ACTIVE:
+The user is asking about today specifically. You MUST produce a structured daily review using ONLY the TODAY-FILTERED data provided below.
+
+Structure your response as:
+## 📊 Day Summary
+A short 2-3 sentence overview of how the day actually went based on evidence.
+
+## ✅ What Was Done Well
+Real wins from today — tasks completed, meetings handled, decisions made, progress by project. Be specific.
+
+## 📋 Progress Made
+- Tasks completed (list them)
+- Meetings handled
+- Decisions made / communication handled
+- Progress by project
+
+## ⚠️ What Could Be Done Better
+- Missed or overdue tasks
+- Weak follow-through
+- Neglected projects
+- Unresolved emails/reminders
+- Financial pressure points
+
+## 🔴 Key Risks Carrying Into Tomorrow
+- Blockers, overdue items, urgent follow-ups, dependencies
+
+## 🎯 Tomorrow's Focus
+- Top 3-5 actions for the next day based on today's evidence
+
+IMPORTANT: Base every point on actual data from today. Do NOT give generic portfolio summaries. If there is little data for today, say so honestly rather than inventing activity.`;
+
+
 
 async function buildRetrievalContext(
   supabase: any, userId: string, tags: string[], prompt: string,
-): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[] }> {
+): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number> }> {
+  const isDailyReview = detectDailyReviewIntent(prompt);
   const projects = await retrieveProjects(supabase, userId, tags, prompt);
   const projectIds = projects.map((p: any) => p.id);
   const dataSources: string[] = ["projects"];
@@ -435,8 +670,10 @@ async function buildRetrievalContext(
     `[${p.name}] id:${p.id.slice(0,8)} status:${p.status} blocked:${p.is_blocked} desc:${(p.description||"").slice(0,100)}`
   ).join("\n");
 
-  const [knowledgeResult, ...parts] = await Promise.all([
+  // Run standard retrieval + daily review retrieval in parallel
+  const [knowledgeResult, todayResult, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
+    isDailyReview ? retrieveTodayData(supabase, userId) : Promise.resolve({ text: "", counts: {} }),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -455,16 +692,23 @@ async function buildRetrievalContext(
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) dataSources.push(partLabels[i]);
   }
+  if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
   const contextParts = [knowledgeResult.text, ...parts].filter(Boolean);
-  let context = "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
+
+  // For daily review, prepend today data prominently
+  let context = "";
+  if (isDailyReview && todayResult.text) {
+    context = "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
+  }
+  context += "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
   if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
 
   // Merge data sources
   knowledgeResult.meta.data_sources = [...new Set([...dataSources, ...knowledgeResult.meta.data_sources])];
 
-  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources };
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────
@@ -622,7 +866,14 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+
+      // Enrich retrieval meta with daily review info
+      if (isDailyReview) {
+        (retrievalMeta as any).is_daily_review = true;
+        (retrievalMeta as any).daily_review_counts = dailyReviewCounts;
+      }
+
       const retrievalNotes = [
         retrievalMeta.docs_used.length > 0
           ? `Knowledge sources used: ${retrievalMeta.docs_used.map((d) => d.title).join(", ")}`
@@ -642,7 +893,7 @@ serve(async (req) => {
       ].filter(Boolean).join("\n");
 
       const messages: any[] = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: SYSTEM_PROMPT + (isDailyReview ? "\n\n" + DAILY_REVIEW_SYSTEM_SUPPLEMENT : "") },
         {
           role: "system",
           content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}${retrievalNotes ? `\n\nRETRIEVAL NOTES:\n${retrievalNotes}` : ""}`,
