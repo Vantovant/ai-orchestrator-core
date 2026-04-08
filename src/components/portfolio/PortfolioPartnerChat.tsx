@@ -31,7 +31,7 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [loadingThreads, setLoadingThreads] = useState(true);
-  const [showSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -156,13 +156,16 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
   };
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] border rounded-lg overflow-hidden bg-background">
-      {/* Thread sidebar */}
+    <div className="flex h-[calc(100vh-12rem)] border rounded-lg overflow-hidden bg-background relative">
+      {/* Thread sidebar - full overlay on mobile, side panel on desktop */}
       {showSidebar && (
-        <div className="w-64 border-r flex flex-col bg-muted/20">
-          <div className="p-2 border-b flex items-center gap-1">
+        <div className="absolute inset-0 z-20 sm:relative sm:inset-auto sm:w-64 w-full border-r flex flex-col bg-background sm:bg-muted/20">
+          <div className="p-2 border-b flex items-center gap-2">
             <Button size="sm" variant="default" className="flex-1 gap-1 h-8 text-xs" onClick={handleNewThread}>
               <Plus className="h-3 w-3" /> New Chat
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0 sm:hidden" onClick={() => setShowSidebar(false)}>
+              <X className="h-4 w-4" />
             </Button>
           </div>
           <ScrollArea className="flex-1">
@@ -178,7 +181,7 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                     "group flex items-center gap-1 p-2 rounded-md cursor-pointer text-xs hover:bg-muted/50 transition-colors",
                     activeThread === t.id && "bg-primary/10 text-primary"
                   )}
-                  onClick={() => setActiveThread(t.id)}
+                  onClick={() => { setActiveThread(t.id); setShowSidebar(false); }}
                 >
                   {t.pinned && <Pin className="h-3 w-3 text-warning shrink-0" />}
                   <MessageSquare className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -200,6 +203,15 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
 
       {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile top bar with thread list toggle */}
+        <div className="flex items-center gap-2 p-2 border-b sm:hidden">
+          <Button size="sm" variant="ghost" className="h-8 gap-1 text-xs" onClick={() => setShowSidebar(true)}>
+            <MessageSquare className="h-3.5 w-3.5" /> Chats
+          </Button>
+          <Button size="sm" variant="default" className="h-8 gap-1 text-xs ml-auto" onClick={handleNewThread}>
+            <Plus className="h-3 w-3" /> New
+          </Button>
+        </div>
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
           {!activeThread && messages.length === 0 && !streaming && (
             <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
@@ -307,17 +319,17 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
               </Button>
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-end">
             <Textarea
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask your portfolio partner anything… (use @project:Name, @knowledge, @doc:Name)"
-              className="min-h-[44px] max-h-28 resize-none text-sm"
+              placeholder="Ask your portfolio partner…"
+              className="min-h-[44px] max-h-28 resize-none text-sm flex-1"
               rows={1}
             />
-            <Button onClick={handleSend} disabled={!input.trim() || streaming} size="icon" className="shrink-0 h-11 w-11">
+            <Button onClick={handleSend} disabled={!input.trim() || streaming} size="icon" className="shrink-0 h-11 w-11 mb-0 relative z-30">
               {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
