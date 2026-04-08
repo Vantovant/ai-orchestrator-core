@@ -3608,6 +3608,51 @@ export type Database = {
           },
         ]
       }
+      voice_diary_entries: {
+        Row: {
+          content: string
+          created_at: string
+          deleted_at: string | null
+          extracted_intents: Json | null
+          id: string
+          is_pinned: boolean
+          linked_project_ids: string[] | null
+          mood: string | null
+          source_type: string
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          extracted_intents?: Json | null
+          id?: string
+          is_pinned?: boolean
+          linked_project_ids?: string[] | null
+          mood?: string | null
+          source_type?: string
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          extracted_intents?: Json | null
+          id?: string
+          is_pinned?: boolean
+          linked_project_ids?: string[] | null
+          mood?: string | null
+          source_type?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       whatsapp_action_log: {
         Row: {
           action_type: string
