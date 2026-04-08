@@ -133,10 +133,9 @@ async function retrieveProjectKnowledge(
     }
   }
 
-  // 5. Build knowledge text
+  // 5. Build knowledge text from chunks
   let kbText = "";
   if (chunks?.length) {
-    // Group by doc
     const byDoc: Record<string, string[]> = {};
     for (const c of chunks) {
       if (!byDoc[c.doc_id]) byDoc[c.doc_id] = [];
@@ -150,18 +149,18 @@ async function retrieveProjectKnowledge(
     }
   }
 
-  // For exact-doc retrieval, also include raw_text as fallback if no chunks but raw_text exists
-  if (meta.retrieval_type === "exact_document") {
-    for (const docId of targetDocIds) {
-      if (!docsWithChunks.has(docId)) {
-        const doc = allDocs.find((d: any) => d.id === docId);
-        if (doc?.raw_text?.trim()) {
-          kbText += `\n--- DOCUMENT (raw): ${doc.title} ---\n`;
-          kbText += doc.raw_text.slice(0, 3000);
-          kbText += "\n";
-          // Remove from unindexed since we got raw_text
-          meta.unindexed_docs = meta.unindexed_docs.filter(t => t !== doc.title);
-        }
+  // 6. raw_text fallback for ALL retrieval types — not just exact_document
+  // If a doc has no chunks, try to use its raw_text content directly
+  for (const docId of targetDocIds) {
+    if (!docsWithChunks.has(docId)) {
+      const doc = allDocs.find((d: any) => d.id === docId);
+      if (doc?.raw_text?.trim()) {
+        const rawSlice = meta.retrieval_type === "exact_document" ? 4000 : 2000;
+        kbText += `\n--- DOCUMENT (raw text): ${doc.title} ---\n`;
+        kbText += doc.raw_text.slice(0, rawSlice);
+        kbText += "\n";
+        // Remove from unindexed since we got usable content
+        meta.unindexed_docs = meta.unindexed_docs.filter(t => t !== doc.title);
       }
     }
   }
