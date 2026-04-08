@@ -203,7 +203,6 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
             </div>
           </ScrollArea>
         </div>
-      )}
 
       {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
