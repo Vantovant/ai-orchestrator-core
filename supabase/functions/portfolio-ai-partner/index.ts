@@ -469,8 +469,8 @@ async function retrieveKnowledge(
 
 // ─── Daily review: today-filtered retrieval ─────────────────────
 
-async function retrieveTodayData(supabase: any, userId: string): Promise<{ text: string; counts: Record<string, number> }> {
-  const { todayStart, todayEnd, todayDate } = getTodayRange();
+async function retrieveTodayData(supabase: any, userId: string, tzOffsetMinutes?: number): Promise<{ text: string; counts: Record<string, number> }> {
+  const { todayStart, todayEnd, todayDate } = getTodayRange(tzOffsetMinutes);
   const counts: Record<string, number> = {};
   let text = "";
 
@@ -523,14 +523,14 @@ async function retrieveTodayData(supabase: any, userId: string): Promise<{ text:
 
   // 5. Meetings today
   const { data: todayMeetings } = await supabase.from("meetings")
-    .select("title, start_time, project_id, agenda, is_completed")
+    .select("title, start_time, end_time, project_id, notes, is_done")
     .eq("user_id", userId).is("deleted_at", null)
     .gte("start_time", todayStart).lte("start_time", todayEnd)
     .order("start_time", { ascending: true }).limit(15);
   if (todayMeetings?.length) {
     counts.meetings = todayMeetings.length;
-    const completed = todayMeetings.filter((m: any) => m.is_completed).length;
-    text += `MEETINGS TODAY (${completed}/${todayMeetings.length} completed):\n` + todayMeetings.map((m: any) => `- ${m.is_completed ? "✅" : "⬜"} ${m.title} at ${m.start_time?.slice(11,16)} proj:${m.project_id?.slice(0,8)||"none"}${m.agenda ? " agenda:" + m.agenda.slice(0,60) : ""}`).join("\n") + "\n\n";
+    const completed = todayMeetings.filter((m: any) => m.is_done).length;
+    text += `MEETINGS TODAY (${completed}/${todayMeetings.length} completed):\n` + todayMeetings.map((m: any) => `- ${m.is_done ? "✅" : "⬜"} ${m.title} at ${m.start_time?.slice(11,16)}${m.end_time ? "-" + m.end_time.slice(11,16) : ""} proj:${m.project_id?.slice(0,8)||"none"}${m.notes ? " notes:" + m.notes.slice(0,80) : ""}`).join("\n") + "\n\n";
   }
 
   // 6. Reminders due today
