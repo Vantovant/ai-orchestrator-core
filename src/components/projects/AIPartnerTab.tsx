@@ -34,6 +34,7 @@ interface RetrievalMeta {
   retrieval_type: string;
   missing_docs: string[];
   unindexed_docs: string[];
+  data_sources?: string[];
 }
 
 interface ChatMessage {
@@ -349,15 +350,35 @@ export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabPro
 
 // ── Sources Used ──
 function SourcesUsed({ meta }: { meta: RetrievalMeta }) {
-  if (!meta.docs_used.length && !meta.missing_docs.length && !meta.unindexed_docs.length) return null;
+  const hasContent = meta.docs_used?.length || meta.missing_docs?.length || meta.unindexed_docs?.length || (meta.data_sources?.length && meta.data_sources.length > 0);
+  if (!hasContent) return null;
+
+  const sourceLabels: Record<string, string> = {
+    project: "📋 Project", tasks: "✅ Tasks", meetings: "📅 Meetings",
+    notes: "📝 Notes", partner_memory: "🧠 Memory", emails: "📧 Emails",
+    finance: "💰 Finance", plan_hub: "📌 Plan Hub", knowledge_base: "📚 Knowledge",
+    projects: "📋 Projects", memories: "🧠 Memories", scores: "📊 Scores",
+    planning_notes: "📝 Plan Notes", project_notes: "📝 Project Notes",
+    project_links: "🔗 Links", score_history: "📈 Trends", reminders: "⏰ Reminders",
+  };
+
   return (
     <div className="mt-1 p-2 rounded bg-muted/40 border border-border/50 max-w-[85%]">
       <div className="flex items-center gap-1 mb-1">
         <Info className="h-3 w-3 text-muted-foreground" />
         <span className="text-[10px] font-semibold text-muted-foreground uppercase">Sources Used</span>
-        <Badge variant="outline" className="text-[9px] ml-1">{meta.retrieval_type.replace(/_/g, " ")}</Badge>
+        <Badge variant="outline" className="text-[9px] ml-1">{meta.retrieval_type?.replace(/_/g, " ") || "auto"}</Badge>
       </div>
-      {meta.docs_used.length > 0 && (
+      {meta.data_sources && meta.data_sources.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1">
+          {meta.data_sources.map(src => (
+            <Badge key={src} variant="outline" className="text-[9px] gap-0.5">
+              {sourceLabels[src] || src}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {meta.docs_used?.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {meta.docs_used.map(d => (
             <Badge key={d.id} variant="secondary" className="text-[9px] gap-1">
@@ -366,10 +387,10 @@ function SourcesUsed({ meta }: { meta: RetrievalMeta }) {
           ))}
         </div>
       )}
-      {meta.missing_docs.length > 0 && (
+      {meta.missing_docs?.length > 0 && (
         <p className="text-[10px] text-destructive mt-1">⚠ Not found: {meta.missing_docs.join(", ")}</p>
       )}
-      {meta.unindexed_docs.length > 0 && (
+      {meta.unindexed_docs?.length > 0 && (
         <p className="text-[10px] text-warning mt-1">⏳ Not indexed: {meta.unindexed_docs.join(", ")}</p>
       )}
     </div>
