@@ -17,9 +17,10 @@ import ReactMarkdown from "react-markdown";
 import {
   Brain, Zap, Target, ShieldCheck, Loader2, CheckCircle2,
   AlertTriangle, ArrowRight, Sparkles, Banknote, MessageCircle,
-  Send, BookOpen, ChevronDown, FileText, Info, X, Mic,
+   Send, BookOpen, ChevronDown, FileText, Info, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import ChatDictation from "@/components/voice/ChatDictation";
 
 type Mode = "executive_brief" | "sprint_plan" | "sell_readiness" | "funding_pathways" | "chat";
 
@@ -291,13 +292,14 @@ export default function AIPartnerTab({ projectId, projectName }: AIPartnerTabPro
               </div>
             </ScrollArea>
           )}
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-end">
+            <ChatDictation onAppend={(text) => setChatInput(prev => prev ? `${prev} ${text}` : text)} />
             <Textarea
               placeholder={`Ask about ${projectName}… e.g. "refer to 05_Outstanding_Tasks and tell me what's done"`}
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendChat(); } }}
-              className="min-h-[60px] text-sm resize-none"
+              className="min-h-[60px] text-sm resize-none flex-1"
               rows={2}
             />
             <Button
