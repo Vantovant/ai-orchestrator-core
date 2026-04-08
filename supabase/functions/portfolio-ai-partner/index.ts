@@ -660,7 +660,8 @@ IMPORTANT: Base every point on actual data from today. Do NOT give generic portf
 
 async function buildRetrievalContext(
   supabase: any, userId: string, tags: string[], prompt: string,
-): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[] }> {
+): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number> }> {
+  const isDailyReview = detectDailyReviewIntent(prompt);
   const projects = await retrieveProjects(supabase, userId, tags, prompt);
   const projectIds = projects.map((p: any) => p.id);
   const dataSources: string[] = ["projects"];
@@ -669,8 +670,10 @@ async function buildRetrievalContext(
     `[${p.name}] id:${p.id.slice(0,8)} status:${p.status} blocked:${p.is_blocked} desc:${(p.description||"").slice(0,100)}`
   ).join("\n");
 
-  const [knowledgeResult, ...parts] = await Promise.all([
+  // Run standard retrieval + daily review retrieval in parallel
+  const [knowledgeResult, todayResult, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
+    isDailyReview ? retrieveTodayData(supabase, userId) : Promise.resolve({ text: "", counts: {} }),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -689,16 +692,23 @@ async function buildRetrievalContext(
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) dataSources.push(partLabels[i]);
   }
+  if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
   const contextParts = [knowledgeResult.text, ...parts].filter(Boolean);
-  let context = "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
+
+  // For daily review, prepend today data prominently
+  let context = "";
+  if (isDailyReview && todayResult.text) {
+    context = "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
+  }
+  context += "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
   if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
 
   // Merge data sources
   knowledgeResult.meta.data_sources = [...new Set([...dataSources, ...knowledgeResult.meta.data_sources])];
 
-  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources };
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────
