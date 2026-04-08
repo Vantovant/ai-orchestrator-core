@@ -866,7 +866,14 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt);
+
+      // Enrich retrieval meta with daily review info
+      if (isDailyReview) {
+        (retrievalMeta as any).is_daily_review = true;
+        (retrievalMeta as any).daily_review_counts = dailyReviewCounts;
+      }
+
       const retrievalNotes = [
         retrievalMeta.docs_used.length > 0
           ? `Knowledge sources used: ${retrievalMeta.docs_used.map((d) => d.title).join(", ")}`
@@ -886,7 +893,7 @@ serve(async (req) => {
       ].filter(Boolean).join("\n");
 
       const messages: any[] = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: SYSTEM_PROMPT + (isDailyReview ? "\n\n" + DAILY_REVIEW_SYSTEM_SUPPLEMENT : "") },
         {
           role: "system",
           content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}${retrievalNotes ? `\n\nRETRIEVAL NOTES:\n${retrievalNotes}` : ""}`,
