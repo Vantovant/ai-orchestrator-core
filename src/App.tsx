@@ -24,6 +24,7 @@ import KnowledgeBasePage from "@/pages/KnowledgeBasePage";
 import TeamPage from "@/pages/TeamPage";
 import UserManualPage from "@/pages/UserManualPage";
 import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
+import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
 
 const queryClient = new QueryClient();
 
@@ -65,6 +66,7 @@ function AppRoutes() {
         <Route path="/testers" element={<TeamPage />} />
         <Route path="/manual" element={<UserManualPage />} />
         <Route path="/onboarding-emails" element={<OnboardingEmailsPage />} />
+        <Route path="/voice-diary" element={<VoiceDiaryPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
