@@ -23,14 +23,30 @@ const DAILY_REVIEW_PATTERNS = [
   /\bwhat\s+(?:are|were)\s+(?:my\s+)?(?:wins|achievements)\s+today\b/i,
   /\breview\s+(?:my\s+)?(?:today|this\s+day)\b/i,
   /\bhow\s+productive\s+was\s+(?:I|my\s+day)\s+today\b/i,
+  /\bwhat\s+(?:are|is)\s+(?:my\s+)?(?:meetings?|tasks?|reminders?|schedule)\s+(?:for\s+)?today\b/i,
+  /\b(?:meetings?|tasks?|reminders?|schedule)\s+(?:for\s+)?today\b/i,
+  /\btoday['']?s?\s+(?:meetings?|tasks?|reminders?|schedule|agenda)\b/i,
+  /\bshow\s+(?:me\s+)?(?:my\s+)?(?:day|today)\b/i,
+  /\bwhat\s+do\s+I\s+have\s+today\b/i,
+  /\bwhat['']?s\s+(?:on\s+)?(?:for\s+)?today\b/i,
+  /\bmy\s+day\s+today\b/i,
+  /\bwrap\s*up\s+(?:the\s+)?day\b/i,
 ];
 
 function detectDailyReviewIntent(prompt: string): boolean {
   return DAILY_REVIEW_PATTERNS.some(p => p.test(prompt));
 }
 
-function getTodayRange(): { todayStart: string; todayEnd: string; todayDate: string } {
+function getTodayRange(tzOffsetMinutes?: number): { todayStart: string; todayEnd: string; todayDate: string } {
   const now = new Date();
+  if (tzOffsetMinutes != null && !isNaN(tzOffsetMinutes)) {
+    const localMs = now.getTime() - tzOffsetMinutes * 60000;
+    const localNow = new Date(localMs);
+    const todayDate = localNow.toISOString().slice(0, 10);
+    const todayStart = new Date(localMs - (localNow.getUTCHours() * 3600000 + localNow.getUTCMinutes() * 60000 + localNow.getUTCSeconds() * 1000 + localNow.getUTCMilliseconds())).toISOString();
+    const todayEnd = new Date(new Date(todayStart).getTime() + 86400000 - 1).toISOString();
+    return { todayStart, todayEnd, todayDate };
+  }
   const todayDate = now.toISOString().slice(0, 10);
   const todayStart = todayDate + "T00:00:00.000Z";
   const todayEnd = todayDate + "T23:59:59.999Z";
