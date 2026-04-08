@@ -708,9 +708,10 @@ async function buildRetrievalContext(
   ).join("\n");
 
   // Run standard retrieval + daily review retrieval in parallel
-  const [knowledgeResult, todayResult, ...parts] = await Promise.all([
+  const [knowledgeResult, todayResult, diaryText, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
     isDailyReview ? retrieveTodayData(supabase, userId, tzOffsetMinutes) : Promise.resolve({ text: "", counts: {} }),
+    retrieveVoiceDiary(supabase, userId, prompt),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -729,6 +730,7 @@ async function buildRetrievalContext(
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) dataSources.push(partLabels[i]);
   }
+  if (diaryText) dataSources.push("voice_diary");
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
