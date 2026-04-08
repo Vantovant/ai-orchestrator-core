@@ -226,6 +226,9 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                 Your AI co-founder for the full VantoOS portfolio. Ask about projects, risks, tasks, knowledge docs, or strategy.
               </p>
               <div className="flex flex-wrap gap-1.5 justify-center mt-2">
+                <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("How was the day today? What was done well, and what could be done better?"); inputRef.current?.focus(); }}>
+                  📊 Daily review
+                </Badge>
                 <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("Give me a full portfolio health check"); inputRef.current?.focus(); }}>
                   Portfolio health check
                 </Badge>
