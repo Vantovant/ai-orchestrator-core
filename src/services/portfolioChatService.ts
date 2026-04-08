@@ -195,6 +195,7 @@ export const portfolioChatService = {
           context_tags: contextTags,
           history: history.slice(-20),
           stream: true,
+          tz_offset: new Date().getTimezoneOffset(),
         }),
       });
 
