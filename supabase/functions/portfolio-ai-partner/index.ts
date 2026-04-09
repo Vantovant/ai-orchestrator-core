@@ -37,6 +37,41 @@ function detectDailyReviewIntent(prompt: string): boolean {
   return DAILY_REVIEW_PATTERNS.some(p => p.test(prompt));
 }
 
+// ─── Voice Diary–only intent detection ─────────────────
+const DIARY_ONLY_PATTERNS = [
+  /\b(?:voice\s+)?diary\b/i,
+  /\bdiary\s+entr(?:y|ies)\b/i,
+  /\bnotes?\s+in\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bwhat\s+(?:did\s+)?I\s+(?:say|said|record|dictate|write|note)\s+in\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bsummari[sz]e\s+(?:my\s+)?(?:voice\s+)?diary\b/i,
+  /\bfrom\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bmy\s+(?:voice\s+)?diary\b/i,
+  /\bshow\s+(?:me\s+)?(?:my\s+)?diary\b/i,
+  /\bhow\s+(?:is|does)\s+(?:my\s+)?day\s+look(?:ing)?\s+from\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bdiary\s+(?:summary|review|recap|entries|thoughts|reflections)\b/i,
+  /\bwhat\s+(?:have\s+)?I\s+(?:been\s+)?(?:saying|thinking|recording|noting)\s+in\s+(?:the\s+)?diary\b/i,
+];
+const DIARY_CROSSREF_PATTERNS = [
+  /\bcross[\s-]*reference/i,
+  /\bcompare\s+(?:with|to|against)\s+(?:my\s+)?(?:projects?|tasks?|emails?|financ)/i,
+  /\bdiary\s+and\s+(?:projects?|tasks?|emails?|financ)/i,
+  /\b(?:projects?|tasks?|emails?|financ)\s+and\s+(?:the\s+)?diary\b/i,
+  /\brelate\s+(?:my\s+)?diary\s+to\b/i,
+];
+
+function detectDiaryOnlyIntent(prompt: string): boolean {
+  const isDiary = DIARY_ONLY_PATTERNS.some(p => p.test(prompt));
+  if (!isDiary) return false;
+  const isCrossRef = DIARY_CROSSREF_PATTERNS.some(p => p.test(prompt));
+  return !isCrossRef;
+}
+
+function detectDiaryTimeFilter(prompt: string): "today" | "week" | "all" {
+  if (/\btoday\b/i.test(prompt) || /\bthis\s+morning\b/i.test(prompt)) return "today";
+  if (/\bthis\s+week\b/i.test(prompt) || /\bweek\b/i.test(prompt)) return "week";
+  return "all";
+}
+
 function getTodayRange(tzOffsetMinutes?: number): { todayStart: string; todayEnd: string; todayDate: string } {
   const now = new Date();
   if (tzOffsetMinutes != null && !isNaN(tzOffsetMinutes)) {
