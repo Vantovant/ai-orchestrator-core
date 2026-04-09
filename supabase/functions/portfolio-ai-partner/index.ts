@@ -762,12 +762,46 @@ Real wins from today — tasks completed, meetings handled, decisions made, prog
 
 IMPORTANT: Base every point on actual data from today. Do NOT give generic portfolio summaries. If there is little data for today, say so honestly rather than inventing activity.`;
 
+const DIARY_ONLY_SYSTEM_SUPPLEMENT = `
+VOICE DIARY–ONLY MODE ACTIVE:
+The user is asking specifically about their Voice Diary. You MUST answer using ONLY the Voice Diary entries provided below.
+
+STRICT RULES:
+1. Use ONLY the diary entry text provided. Do NOT reference projects, tasks, emails, finance, knowledge base, reminders, or any other data source.
+2. NEVER fabricate diary excerpts. If you quote or paraphrase, it MUST come from an actual entry below. If no entry says it, do not claim it was said.
+3. If a diary entry transcript is unclear, messy, or ambiguous, say so honestly: "This entry seems to refer to X, but the transcript is unclear."
+4. Do NOT convert ambiguous dictation into certain facts.
+5. If the user asks about something not covered in diary entries, say: "I don't see that topic in your diary entries for this period."
+6. Structure your response clearly with entry timestamps so the user can verify your claims.
+7. When summarizing, distinguish between what the user actually said vs your interpretation. Use phrases like "You mentioned…", "Your entry on [date] says…", "Based on your words…"
+8. Show a brief "📓 Diary Evidence" block at the end listing: number of entries reviewed, date range, and any pinned entries.`;
+
 
 
 async function buildRetrievalContext(
   supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
-): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number> }> {
+): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number>; isDiaryOnly: boolean; diaryEvidence: DiaryEvidence | null }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
+  const isDiaryOnly = detectDiaryOnlyIntent(prompt);
+
+  // ─── DIARY-ONLY MODE: skip all other sources ───
+  if (isDiaryOnly) {
+    const diaryTimeFilter = detectDiaryTimeFilter(prompt);
+    const diaryResult = await retrieveVoiceDiary(supabase, userId, prompt, diaryTimeFilter, tzOffsetMinutes);
+    const dataSources = diaryResult.text ? ["voice_diary"] : [];
+    const emptyMeta: RetrievalMeta = {
+      retrieval_type: "portfolio_general",
+      project_ids: [], project_names: [],
+      docs_used: [], missing_docs: [], unindexed_docs: [], unreadable_docs: [],
+      data_sources: dataSources,
+    };
+    const context = diaryResult.text
+      ? "═══ VOICE DIARY (EXCLUSIVE SOURCE — no other data included) ═══\n\n" + diaryResult.text + "\n\n═══ END DIARY ═══"
+      : "No Voice Diary entries found for the requested period.";
+    return { context: redact(context), retrievalMeta: emptyMeta, dataSources, isDailyReview: false, dailyReviewCounts: {}, isDiaryOnly: true, diaryEvidence: diaryResult.evidence };
+  }
+
+  // ─── NORMAL MODE (unchanged) ───
   const projects = await retrieveProjects(supabase, userId, tags, prompt);
   const projectIds = projects.map((p: any) => p.id);
   const dataSources: string[] = ["projects"];
@@ -776,11 +810,10 @@ async function buildRetrievalContext(
     `[${p.name}] id:${p.id.slice(0,8)} status:${p.status} blocked:${p.is_blocked} desc:${(p.description||"").slice(0,100)}`
   ).join("\n");
 
-  // Run standard retrieval + daily review retrieval in parallel
-  const [knowledgeResult, todayResult, diaryText, ...parts] = await Promise.all([
+  const [knowledgeResult, todayResult, diaryResult, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
     isDailyReview ? retrieveTodayData(supabase, userId, tzOffsetMinutes) : Promise.resolve({ text: "", counts: {} }),
-    retrieveVoiceDiary(supabase, userId, prompt),
+    retrieveVoiceDiary(supabase, userId, prompt, "all", tzOffsetMinutes),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -794,18 +827,16 @@ async function buildRetrievalContext(
     retrieveReminders(supabase, userId),
   ]);
 
-  // Track which data sources had content
   const partLabels = ["memories", "scores", "tasks", "meetings", "planning_notes", "project_notes", "project_links", "score_history", "emails", "finance", "reminders"];
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) dataSources.push(partLabels[i]);
   }
-  if (diaryText) dataSources.push("voice_diary");
+  if (diaryResult.text) dataSources.push("voice_diary");
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
-  const contextParts = [knowledgeResult.text, ...parts, diaryText].filter(Boolean);
+  const contextParts = [knowledgeResult.text, ...parts, diaryResult.text].filter(Boolean);
 
-  // For daily review, prepend today data prominently
   let context = "";
   if (isDailyReview && todayResult.text) {
     context = "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
@@ -813,10 +844,9 @@ async function buildRetrievalContext(
   context += "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
   if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
 
-  // Merge data sources
   knowledgeResult.meta.data_sources = [...new Set([...dataSources, ...knowledgeResult.meta.data_sources])];
 
-  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts };
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts, isDiaryOnly: false, diaryEvidence: diaryResult.evidence };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────
