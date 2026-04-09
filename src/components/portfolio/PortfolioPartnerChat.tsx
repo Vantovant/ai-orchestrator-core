@@ -263,7 +263,25 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                     <div className="prose prose-sm dark:prose-invert max-w-none text-sm">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
-                    {msg.retrieval_meta_json?.is_daily_review && msg.retrieval_meta_json.daily_review_counts && (
+                    {msg.retrieval_meta_json?.is_diary_only && msg.retrieval_meta_json.diary_evidence && (
+                      <div className="mt-2 pt-2 border-t border-border/40">
+                        <p className="text-[10px] font-semibold text-muted-foreground mb-1">📓 DIARY EVIDENCE (exclusive source)</p>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                            {(msg.retrieval_meta_json.diary_evidence as any).entry_count} entries
+                          </Badge>
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                            filter: {(msg.retrieval_meta_json.diary_evidence as any).time_filter}
+                          </Badge>
+                          {(msg.retrieval_meta_json.diary_evidence as any).pinned_count > 0 && (
+                            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">
+                              📌 {(msg.retrieval_meta_json.diary_evidence as any).pinned_count} pinned
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {msg.retrieval_meta_json?.is_daily_review && msg.retrieval_meta_json.daily_review_counts && !msg.retrieval_meta_json?.is_diary_only && (
                       <div className="mt-2 pt-2 border-t border-border/40">
                         <p className="text-[10px] font-semibold text-muted-foreground mb-1">📊 DAILY REVIEW SOURCES</p>
                         <div className="flex flex-wrap gap-1">
@@ -275,7 +293,7 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                         </div>
                       </div>
                     )}
-                    {msg.retrieval_meta_json?.data_sources?.length > 0 && !msg.retrieval_meta_json?.is_daily_review && (
+                    {msg.retrieval_meta_json?.data_sources?.length > 0 && !msg.retrieval_meta_json?.is_daily_review && !msg.retrieval_meta_json?.is_diary_only && (
                       <div className="mt-2 pt-2 border-t border-border/40">
                         <div className="flex flex-wrap gap-1">
                           {(msg.retrieval_meta_json.data_sources as string[]).map((src: string) => (
