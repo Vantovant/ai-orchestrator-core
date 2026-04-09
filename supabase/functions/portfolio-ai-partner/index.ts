@@ -37,6 +37,41 @@ function detectDailyReviewIntent(prompt: string): boolean {
   return DAILY_REVIEW_PATTERNS.some(p => p.test(prompt));
 }
 
+// ─── Voice Diary–only intent detection ─────────────────
+const DIARY_ONLY_PATTERNS = [
+  /\b(?:voice\s+)?diary\b/i,
+  /\bdiary\s+entr(?:y|ies)\b/i,
+  /\bnotes?\s+in\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bwhat\s+(?:did\s+)?I\s+(?:say|said|record|dictate|write|note)\s+in\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bsummari[sz]e\s+(?:my\s+)?(?:voice\s+)?diary\b/i,
+  /\bfrom\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bmy\s+(?:voice\s+)?diary\b/i,
+  /\bshow\s+(?:me\s+)?(?:my\s+)?diary\b/i,
+  /\bhow\s+(?:is|does)\s+(?:my\s+)?day\s+look(?:ing)?\s+from\s+(?:the\s+)?(?:voice\s+)?diary\b/i,
+  /\bdiary\s+(?:summary|review|recap|entries|thoughts|reflections)\b/i,
+  /\bwhat\s+(?:have\s+)?I\s+(?:been\s+)?(?:saying|thinking|recording|noting)\s+in\s+(?:the\s+)?diary\b/i,
+];
+const DIARY_CROSSREF_PATTERNS = [
+  /\bcross[\s-]*reference/i,
+  /\bcompare\s+(?:with|to|against)\s+(?:my\s+)?(?:projects?|tasks?|emails?|financ)/i,
+  /\bdiary\s+and\s+(?:projects?|tasks?|emails?|financ)/i,
+  /\b(?:projects?|tasks?|emails?|financ)\s+and\s+(?:the\s+)?diary\b/i,
+  /\brelate\s+(?:my\s+)?diary\s+to\b/i,
+];
+
+function detectDiaryOnlyIntent(prompt: string): boolean {
+  const isDiary = DIARY_ONLY_PATTERNS.some(p => p.test(prompt));
+  if (!isDiary) return false;
+  const isCrossRef = DIARY_CROSSREF_PATTERNS.some(p => p.test(prompt));
+  return !isCrossRef;
+}
+
+function detectDiaryTimeFilter(prompt: string): "today" | "week" | "all" {
+  if (/\btoday\b/i.test(prompt) || /\bthis\s+morning\b/i.test(prompt)) return "today";
+  if (/\bthis\s+week\b/i.test(prompt) || /\bweek\b/i.test(prompt)) return "week";
+  return "all";
+}
+
 function getTodayRange(tzOffsetMinutes?: number): { todayStart: string; todayEnd: string; todayDate: string } {
   const now = new Date();
   if (tzOffsetMinutes != null && !isNaN(tzOffsetMinutes)) {
@@ -640,25 +675,59 @@ async function retrieveTodayData(supabase: any, userId: string, tzOffsetMinutes?
   return { text: text ? redact(text) : "", counts };
 }
 
-// ─── Voice diary retrieval ─────────────────────────────
-async function retrieveVoiceDiary(supabase: any, userId: string, prompt: string): Promise<string> {
-  // Fetch recent diary entries (last 14 days, up to 20)
-  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+// ─── Voice diary retrieval (with time filter + evidence) ───────
+interface DiaryEvidence {
+  entry_count: number;
+  timestamps: string[];
+  titles: string[];
+  pinned_count: number;
+  time_filter: string;
+}
+
+async function retrieveVoiceDiary(
+  supabase: any, userId: string, prompt: string, timeFilter: "today" | "week" | "all" = "all", tzOffsetMinutes?: number,
+): Promise<{ text: string; evidence: DiaryEvidence }> {
+  const emptyEvidence: DiaryEvidence = { entry_count: 0, timestamps: [], titles: [], pinned_count: 0, time_filter: timeFilter };
+
+  let sinceDate: string;
+  if (timeFilter === "today") {
+    const { todayStart } = getTodayRange(tzOffsetMinutes);
+    sinceDate = todayStart;
+  } else if (timeFilter === "week") {
+    sinceDate = new Date(Date.now() - 7 * 86400000).toISOString();
+  } else {
+    sinceDate = new Date(Date.now() - 14 * 86400000).toISOString();
+  }
+
   const { data } = await supabase.from("voice_diary_entries")
     .select("content, title, source_type, mood, is_pinned, created_at, linked_project_ids")
     .eq("user_id", userId).is("deleted_at", null)
-    .gte("created_at", twoWeeksAgo)
-    .order("created_at", { ascending: false }).limit(20);
-  if (!data?.length) return "";
+    .gte("created_at", sinceDate)
+    .order("created_at", { ascending: false }).limit(30);
+
+  if (!data?.length) return { text: "", evidence: emptyEvidence };
+
   const pinnedFirst = [...data].sort((a: any, b: any) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0));
-  return "VOICE DIARY (recent entries — user's private thoughts, concerns, intentions):\n" +
+  const evidence: DiaryEvidence = {
+    entry_count: data.length,
+    timestamps: data.map((e: any) => e.created_at?.slice(0, 16) || ""),
+    titles: data.filter((e: any) => e.title).map((e: any) => e.title),
+    pinned_count: data.filter((e: any) => e.is_pinned).length,
+    time_filter: timeFilter,
+  };
+
+  const text = "VOICE DIARY ENTRIES (retrieved verbatim — these are the user's actual words):\n" +
     pinnedFirst.map((e: any) => {
       const pin = e.is_pinned ? "📌 " : "";
       const date = e.created_at?.slice(0, 16) || "";
-      const mood = e.mood ? ` [${e.mood}]` : "";
-      const content = (e.content || "").slice(0, 300);
-      return `- ${pin}[${date}]${mood} ${content}`;
-    }).join("\n");
+      const mood = e.mood ? ` [mood:${e.mood}]` : "";
+      const src = e.source_type ? ` [${e.source_type}]` : "";
+      const title = e.title ? ` "${e.title}"` : "";
+      const content = (e.content || "").slice(0, 400);
+      return `--- Entry ${date}${src}${mood}${title} ---\n${pin}${content}`;
+    }).join("\n\n");
+
+  return { text, evidence };
 }
 
 const DAILY_REVIEW_SYSTEM_SUPPLEMENT = `
@@ -693,12 +762,46 @@ Real wins from today — tasks completed, meetings handled, decisions made, prog
 
 IMPORTANT: Base every point on actual data from today. Do NOT give generic portfolio summaries. If there is little data for today, say so honestly rather than inventing activity.`;
 
+const DIARY_ONLY_SYSTEM_SUPPLEMENT = `
+VOICE DIARY–ONLY MODE ACTIVE:
+The user is asking specifically about their Voice Diary. You MUST answer using ONLY the Voice Diary entries provided below.
+
+STRICT RULES:
+1. Use ONLY the diary entry text provided. Do NOT reference projects, tasks, emails, finance, knowledge base, reminders, or any other data source.
+2. NEVER fabricate diary excerpts. If you quote or paraphrase, it MUST come from an actual entry below. If no entry says it, do not claim it was said.
+3. If a diary entry transcript is unclear, messy, or ambiguous, say so honestly: "This entry seems to refer to X, but the transcript is unclear."
+4. Do NOT convert ambiguous dictation into certain facts.
+5. If the user asks about something not covered in diary entries, say: "I don't see that topic in your diary entries for this period."
+6. Structure your response clearly with entry timestamps so the user can verify your claims.
+7. When summarizing, distinguish between what the user actually said vs your interpretation. Use phrases like "You mentioned…", "Your entry on [date] says…", "Based on your words…"
+8. Show a brief "📓 Diary Evidence" block at the end listing: number of entries reviewed, date range, and any pinned entries.`;
+
 
 
 async function buildRetrievalContext(
   supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
-): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number> }> {
+): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number>; isDiaryOnly: boolean; diaryEvidence: DiaryEvidence | null }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
+  const isDiaryOnly = detectDiaryOnlyIntent(prompt);
+
+  // ─── DIARY-ONLY MODE: skip all other sources ───
+  if (isDiaryOnly) {
+    const diaryTimeFilter = detectDiaryTimeFilter(prompt);
+    const diaryResult = await retrieveVoiceDiary(supabase, userId, prompt, diaryTimeFilter, tzOffsetMinutes);
+    const dataSources = diaryResult.text ? ["voice_diary"] : [];
+    const emptyMeta: RetrievalMeta = {
+      retrieval_type: "portfolio_general",
+      project_ids: [], project_names: [],
+      docs_used: [], missing_docs: [], unindexed_docs: [], unreadable_docs: [],
+      data_sources: dataSources,
+    };
+    const context = diaryResult.text
+      ? "═══ VOICE DIARY (EXCLUSIVE SOURCE — no other data included) ═══\n\n" + diaryResult.text + "\n\n═══ END DIARY ═══"
+      : "No Voice Diary entries found for the requested period.";
+    return { context: redact(context), retrievalMeta: emptyMeta, dataSources, isDailyReview: false, dailyReviewCounts: {}, isDiaryOnly: true, diaryEvidence: diaryResult.evidence };
+  }
+
+  // ─── NORMAL MODE (unchanged) ───
   const projects = await retrieveProjects(supabase, userId, tags, prompt);
   const projectIds = projects.map((p: any) => p.id);
   const dataSources: string[] = ["projects"];
@@ -707,11 +810,10 @@ async function buildRetrievalContext(
     `[${p.name}] id:${p.id.slice(0,8)} status:${p.status} blocked:${p.is_blocked} desc:${(p.description||"").slice(0,100)}`
   ).join("\n");
 
-  // Run standard retrieval + daily review retrieval in parallel
-  const [knowledgeResult, todayResult, diaryText, ...parts] = await Promise.all([
+  const [knowledgeResult, todayResult, diaryResult, ...parts] = await Promise.all([
     retrieveKnowledge(supabase, userId, projects, tags, prompt),
     isDailyReview ? retrieveTodayData(supabase, userId, tzOffsetMinutes) : Promise.resolve({ text: "", counts: {} }),
-    retrieveVoiceDiary(supabase, userId, prompt),
+    retrieveVoiceDiary(supabase, userId, prompt, "all", tzOffsetMinutes),
     retrieveMemories(supabase, projectIds),
     retrieveScores(supabase, projectIds),
     retrieveTasks(supabase, userId, projectIds, tags),
@@ -725,18 +827,16 @@ async function buildRetrievalContext(
     retrieveReminders(supabase, userId),
   ]);
 
-  // Track which data sources had content
   const partLabels = ["memories", "scores", "tasks", "meetings", "planning_notes", "project_notes", "project_links", "score_history", "emails", "finance", "reminders"];
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) dataSources.push(partLabels[i]);
   }
-  if (diaryText) dataSources.push("voice_diary");
+  if (diaryResult.text) dataSources.push("voice_diary");
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
-  const contextParts = [knowledgeResult.text, ...parts, diaryText].filter(Boolean);
+  const contextParts = [knowledgeResult.text, ...parts, diaryResult.text].filter(Boolean);
 
-  // For daily review, prepend today data prominently
   let context = "";
   if (isDailyReview && todayResult.text) {
     context = "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
@@ -744,10 +844,9 @@ async function buildRetrievalContext(
   context += "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
   if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
 
-  // Merge data sources
   knowledgeResult.meta.data_sources = [...new Set([...dataSources, ...knowledgeResult.meta.data_sources])];
 
-  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts };
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts, isDiaryOnly: false, diaryEvidence: diaryResult.evidence };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────
@@ -909,12 +1008,16 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts, isDiaryOnly, diaryEvidence } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
 
-      // Enrich retrieval meta with daily review info
+      // Enrich retrieval meta with mode info
       if (isDailyReview) {
         (retrievalMeta as any).is_daily_review = true;
         (retrievalMeta as any).daily_review_counts = dailyReviewCounts;
+      }
+      if (isDiaryOnly) {
+        (retrievalMeta as any).is_diary_only = true;
+        (retrievalMeta as any).diary_evidence = diaryEvidence;
       }
 
       const retrievalNotes = [
@@ -935,8 +1038,13 @@ serve(async (req) => {
           : "",
       ].filter(Boolean).join("\n");
 
+      // Choose system prompt supplement based on mode
+      let systemSupplement = "";
+      if (isDiaryOnly) systemSupplement = DIARY_ONLY_SYSTEM_SUPPLEMENT;
+      else if (isDailyReview) systemSupplement = DAILY_REVIEW_SYSTEM_SUPPLEMENT;
+
       const messages: any[] = [
-        { role: "system", content: SYSTEM_PROMPT + (isDailyReview ? "\n\n" + DAILY_REVIEW_SYSTEM_SUPPLEMENT : "") },
+        { role: "system", content: SYSTEM_PROMPT + (systemSupplement ? "\n\n" + systemSupplement : "") },
         {
           role: "system",
           content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}${retrievalNotes ? `\n\nRETRIEVAL NOTES:\n${retrievalNotes}` : ""}`,
