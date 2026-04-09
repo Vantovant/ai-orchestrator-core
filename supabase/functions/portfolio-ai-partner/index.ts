@@ -1008,12 +1008,16 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts, isDiaryOnly, diaryEvidence } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
 
-      // Enrich retrieval meta with daily review info
+      // Enrich retrieval meta with mode info
       if (isDailyReview) {
         (retrievalMeta as any).is_daily_review = true;
         (retrievalMeta as any).daily_review_counts = dailyReviewCounts;
+      }
+      if (isDiaryOnly) {
+        (retrievalMeta as any).is_diary_only = true;
+        (retrievalMeta as any).diary_evidence = diaryEvidence;
       }
 
       const retrievalNotes = [
@@ -1034,8 +1038,13 @@ serve(async (req) => {
           : "",
       ].filter(Boolean).join("\n");
 
+      // Choose system prompt supplement based on mode
+      let systemSupplement = "";
+      if (isDiaryOnly) systemSupplement = DIARY_ONLY_SYSTEM_SUPPLEMENT;
+      else if (isDailyReview) systemSupplement = DAILY_REVIEW_SYSTEM_SUPPLEMENT;
+
       const messages: any[] = [
-        { role: "system", content: SYSTEM_PROMPT + (isDailyReview ? "\n\n" + DAILY_REVIEW_SYSTEM_SUPPLEMENT : "") },
+        { role: "system", content: SYSTEM_PROMPT + (systemSupplement ? "\n\n" + systemSupplement : "") },
         {
           role: "system",
           content: `PORTFOLIO CONTEXT (retrieved ${new Date().toISOString().slice(0,16)}):\n\n${context}${retrievalNotes ? `\n\nRETRIEVAL NOTES:\n${retrievalNotes}` : ""}`,
