@@ -675,25 +675,59 @@ async function retrieveTodayData(supabase: any, userId: string, tzOffsetMinutes?
   return { text: text ? redact(text) : "", counts };
 }
 
-// ─── Voice diary retrieval ─────────────────────────────
-async function retrieveVoiceDiary(supabase: any, userId: string, prompt: string): Promise<string> {
-  // Fetch recent diary entries (last 14 days, up to 20)
-  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+// ─── Voice diary retrieval (with time filter + evidence) ───────
+interface DiaryEvidence {
+  entry_count: number;
+  timestamps: string[];
+  titles: string[];
+  pinned_count: number;
+  time_filter: string;
+}
+
+async function retrieveVoiceDiary(
+  supabase: any, userId: string, prompt: string, timeFilter: "today" | "week" | "all" = "all", tzOffsetMinutes?: number,
+): Promise<{ text: string; evidence: DiaryEvidence }> {
+  const emptyEvidence: DiaryEvidence = { entry_count: 0, timestamps: [], titles: [], pinned_count: 0, time_filter: timeFilter };
+
+  let sinceDate: string;
+  if (timeFilter === "today") {
+    const { todayStart } = getTodayRange(tzOffsetMinutes);
+    sinceDate = todayStart;
+  } else if (timeFilter === "week") {
+    sinceDate = new Date(Date.now() - 7 * 86400000).toISOString();
+  } else {
+    sinceDate = new Date(Date.now() - 14 * 86400000).toISOString();
+  }
+
   const { data } = await supabase.from("voice_diary_entries")
     .select("content, title, source_type, mood, is_pinned, created_at, linked_project_ids")
     .eq("user_id", userId).is("deleted_at", null)
-    .gte("created_at", twoWeeksAgo)
-    .order("created_at", { ascending: false }).limit(20);
-  if (!data?.length) return "";
+    .gte("created_at", sinceDate)
+    .order("created_at", { ascending: false }).limit(30);
+
+  if (!data?.length) return { text: "", evidence: emptyEvidence };
+
   const pinnedFirst = [...data].sort((a: any, b: any) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0));
-  return "VOICE DIARY (recent entries — user's private thoughts, concerns, intentions):\n" +
+  const evidence: DiaryEvidence = {
+    entry_count: data.length,
+    timestamps: data.map((e: any) => e.created_at?.slice(0, 16) || ""),
+    titles: data.filter((e: any) => e.title).map((e: any) => e.title),
+    pinned_count: data.filter((e: any) => e.is_pinned).length,
+    time_filter: timeFilter,
+  };
+
+  const text = "VOICE DIARY ENTRIES (retrieved verbatim — these are the user's actual words):\n" +
     pinnedFirst.map((e: any) => {
       const pin = e.is_pinned ? "📌 " : "";
       const date = e.created_at?.slice(0, 16) || "";
-      const mood = e.mood ? ` [${e.mood}]` : "";
-      const content = (e.content || "").slice(0, 300);
-      return `- ${pin}[${date}]${mood} ${content}`;
-    }).join("\n");
+      const mood = e.mood ? ` [mood:${e.mood}]` : "";
+      const src = e.source_type ? ` [${e.source_type}]` : "";
+      const title = e.title ? ` "${e.title}"` : "";
+      const content = (e.content || "").slice(0, 400);
+      return `--- Entry ${date}${src}${mood}${title} ---\n${pin}${content}`;
+    }).join("\n\n");
+
+  return { text, evidence };
 }
 
 const DAILY_REVIEW_SYSTEM_SUPPLEMENT = `
