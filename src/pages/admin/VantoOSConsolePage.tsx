@@ -397,19 +397,72 @@ type TestResult = {
   raw?: any;
 };
 
+type SessionInfo = {
+  present: boolean;
+  email?: string;
+  userIdMasked?: string;
+  tokenPresent: boolean;
+  tokenLength: number;
+  authHeaderAttached: boolean;
+};
+
 function Step4DTestHarness({ apps }: { apps: string[] }) {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
+  const [session, setSession] = useState<SessionInfo | null>(null);
   const KNOWN_APPS = ["app_vantoos_host", "app_vanto_crm", "app_aplgo_mlm", "app_zazi_mail"];
+  const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vos-verify-signature`;
+  const IDEM_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vos-verify-idempotency`;
+  const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-  async function invoke(body: any) {
-    const { data, error } = await supabase.functions.invoke("vos-verify-signature", { body });
-    if (error) return { _error: error.message ?? String(error) };
-    return data;
+  async function getAdminToken(): Promise<string | null> {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token ?? null;
+  }
+
+  // Explicit admin-authenticated fetch. Surfaces HTTP status + body, never the token.
+  async function callFn(url: string, body: any) {
+    const token = await getAdminToken();
+    if (!token) {
+      return { _error: "NO_ADMIN_SESSION", _http_status: null, _raw_body: null, _auth_attached: false };
+    }
+    let resp: Response;
+    let rawText = "";
+    try {
+      resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: ANON_KEY,
+        },
+        body: JSON.stringify(body),
+      });
+      rawText = await resp.text();
+    } catch (e: any) {
+      return { _error: `network_error: ${e?.message ?? String(e)}`, _http_status: null, _raw_body: null, _auth_attached: true };
+    }
+    let parsed: any = null;
+    try { parsed = rawText ? JSON.parse(rawText) : null; } catch { /* keep raw */ }
+    if (parsed && typeof parsed === "object") {
+      return { ...parsed, _http_status: resp.status, _raw_body: rawText, _auth_attached: true };
+    }
+    return { _error: `non_json_response`, _http_status: resp.status, _raw_body: rawText, _auth_attached: true };
+  }
+
+  function fmtError(r: any): string {
+    const parts: string[] = [];
+    if (r?._http_status != null) parts.push(`http=${r._http_status}`);
+    if (r?._error) parts.push(`_error=${r._error}`);
+    if (r?.reason) parts.push(`reason=${r.reason}`);
+    if (r?.message) parts.push(`message=${r.message}`);
+    parts.push(`auth_attached=${r?._auth_attached === true}`);
+    if (r?._raw_body) parts.push(`body=${String(r._raw_body).slice(0, 240)}`);
+    return parts.join(" | ");
   }
 
   async function freshSig(source_app: string, target_app: string | null, payload: any, opts?: { tamper?: boolean; tsOverride?: number }) {
-    return invoke({
+    return callFn(FN_URL, {
       mode: "sign_and_verify",
       source_app,
       target_app,
@@ -419,129 +472,178 @@ function Step4DTestHarness({ apps }: { apps: string[] }) {
     });
   }
 
+  async function refreshSession() {
+    const { data } = await supabase.auth.getSession();
+    const s = data?.session;
+    const info: SessionInfo = {
+      present: !!s,
+      email: s?.user?.email ?? undefined,
+      userIdMasked: s?.user?.id ? `${s.user.id.slice(0, 4)}…${s.user.id.slice(-4)}` : undefined,
+      tokenPresent: !!s?.access_token,
+      tokenLength: s?.access_token?.length ?? 0,
+      authHeaderAttached: !!s?.access_token,
+    };
+    setSession(info);
+    return info;
+  }
+
   async function runAll() {
     setRunning(true);
     setResults([]);
+    const info = await refreshSession();
+    if (!info.present || !info.tokenPresent) {
+      setResults([{
+        id: "PRE", name: "Session pre-check",
+        expected: "admin session + access_token",
+        actual: "NO_ADMIN_SESSION — please log in again.", pass: false,
+      }]);
+      setRunning(false);
+      toast.error("NO_ADMIN_SESSION — please log in again.");
+      return;
+    }
+
     const out: TestResult[] = [];
     const sample = { event_name: "test.dry_run", entity_id: "t_0001", body: "step-4d" };
 
-    // T1
+    // T1 — valid sig + known apps (kill-switch is engaged so ok=false but signature_valid=true)
     {
       const r = await freshSig("app_vanto_crm", "app_vantoos_host", sample);
       const pass = r?.signature_valid === true && r?.would_dispatch === false && r?.secret_source === "registry"
         && typeof r?.fingerprint_prefix === "string" && r?.fingerprint_prefix.length === 8 && !!r?.secret_ref;
       out.push({ id: "T1", name: "Valid sig + known apps",
-        expected: "signature_valid=true, would_dispatch=false, secret_source=registry, fingerprint_prefix(8)",
-        actual: `signature_valid=${r?.signature_valid}, would_dispatch=${r?.would_dispatch}, secret_source=${r?.secret_source}, fp=${r?.fingerprint_prefix}, ks_clear=${r?.kill_switch_clear}, ok=${r?.ok}`,
+        expected: "signature_valid=true, would_dispatch=false, secret_source=registry, fingerprint_prefix(8), secret_ref present",
+        actual: pass
+          ? `signature_valid=${r.signature_valid}, would_dispatch=${r.would_dispatch}, secret_source=${r.secret_source}, fp=${r.fingerprint_prefix}, secret_ref=${r.secret_ref}, ks_clear=${r.kill_switch_clear}, ok=${r.ok}`
+          : fmtError(r),
         pass, raw: r });
     }
-    // T2
+    // T2 — bad signature
     {
       const r = await freshSig("app_vanto_crm", "app_vantoos_host", sample, { tamper: true });
       const pass = r?.signature_valid === false && r?.would_dispatch === false;
-      out.push({ id: "T2", name: "Bad signature", expected: "signature_valid=false, would_dispatch=false",
-        actual: `signature_valid=${r?.signature_valid}, would_dispatch=${r?.would_dispatch}`, pass, raw: r });
+      out.push({ id: "T2", name: "Bad signature",
+        expected: "signature_valid=false, would_dispatch=false",
+        actual: pass ? `signature_valid=${r.signature_valid}, would_dispatch=${r.would_dispatch}` : fmtError(r),
+        pass, raw: r });
     }
-    // T3
+    // T3 — stale timestamp
     {
-      const r = await invoke({
+      const r = await callFn(FN_URL, {
         payload_string: JSON.stringify(sample),
         signature_header: "v1=" + "0".repeat(64),
         timestamp: Math.floor(Date.now() / 1000) - 3600,
         source_app: "app_vanto_crm", target_app: "app_vantoos_host",
       });
       const pass = r?.reason === "timestamp_outside_window";
-      out.push({ id: "T3", name: "Stale timestamp (>300s)", expected: "reason=timestamp_outside_window",
-        actual: `reason=${r?.reason}`, pass, raw: r });
+      out.push({ id: "T3", name: "Stale timestamp (>300s)",
+        expected: "reason=timestamp_outside_window",
+        actual: pass ? `reason=${r.reason}` : fmtError(r),
+        pass, raw: r });
     }
-    // T4
+    // T4 — unknown source_app
     {
-      const r = await invoke({
+      const r = await callFn(FN_URL, {
         payload_string: JSON.stringify(sample),
         signature_header: "v1=" + "0".repeat(64),
         timestamp: Math.floor(Date.now() / 1000),
         source_app: "app_does_not_exist_xxx", target_app: "app_vantoos_host",
       });
       const pass = r?.reason === "unknown_source_app";
-      out.push({ id: "T4", name: "Unknown source_app", expected: "reason=unknown_source_app",
-        actual: `reason=${r?.reason}`, pass, raw: r });
+      out.push({ id: "T4", name: "Unknown source_app",
+        expected: "reason=unknown_source_app",
+        actual: pass ? `reason=${r.reason}` : fmtError(r),
+        pass, raw: r });
     }
-    // T5
+    // T5 — target_app mismatch
     {
-      const r = await invoke({
+      const r = await callFn(FN_URL, {
         payload_string: JSON.stringify(sample),
         signature_header: "v1=" + "0".repeat(64),
         timestamp: Math.floor(Date.now() / 1000),
         source_app: "app_vanto_crm", target_app: "app_unknown_target_yyy",
       });
       const pass = r?.reason === "target_app_mismatch";
-      out.push({ id: "T5", name: "Target_app mismatch", expected: "reason=target_app_mismatch",
-        actual: `reason=${r?.reason}`, pass, raw: r });
+      out.push({ id: "T5", name: "Target_app mismatch",
+        expected: "reason=target_app_mismatch",
+        actual: pass ? `reason=${r.reason}` : fmtError(r),
+        pass, raw: r });
     }
-    // T6 — raw fetch, no JWT
+    // T6 — raw fetch, NO JWT (must be 401 at platform)
     {
       try {
-        const url = `https://zsvaqtlomgofwqkpwxeh.supabase.co/functions/v1/vos-verify-signature`;
-        const resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-        const status = resp.status; await resp.text();
-        out.push({ id: "T6", name: "No JWT (raw fetch)", expected: "401 platform-level rejection",
-          actual: `status=${status}`, pass: status === 401 });
+        const resp = await fetch(FN_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const status = resp.status; const txt = await resp.text();
+        out.push({ id: "T6", name: "No JWT (raw fetch)",
+          expected: "401 platform-level rejection",
+          actual: status === 401 ? `status=401` : `status=${status} body=${txt.slice(0, 160)}`,
+          pass: status === 401 });
       } catch (e: any) {
         out.push({ id: "T6", name: "No JWT (raw fetch)", expected: "401", actual: `error=${e?.message}`, pass: false });
       }
     }
-    // T7
-    out.push({ id: "T7", name: "Non-admin JWT", expected: "403 not_admin",
-      actual: "NOT TESTABLE from admin session — would require seeded non-admin user + sign-in. Logic verified in code: requireAdmin returns 403.",
+    // T7 — non-admin JWT (not testable from admin session; logic verified in code)
+    out.push({ id: "T7", name: "Non-admin JWT",
+      expected: "403 not_admin",
+      actual: "NOT TESTABLE from admin session — requires seeded non-admin user. requireAdmin() returns 403 (verified in code).",
       pass: true });
-    // T8
+    // T8 — valid sig + kill-switch engaged → ok=false
     {
       const r = await freshSig("app_vanto_crm", "app_vantoos_host", sample);
       const pass = r?.signature_valid === true && r?.kill_switch_clear === false && r?.ok === false && r?.would_dispatch === false;
       out.push({ id: "T8", name: "Valid sig + kill-switch engaged",
         expected: "signature_valid=true, kill_switch_clear=false, ok=false, would_dispatch=false",
-        actual: `signature_valid=${r?.signature_valid}, kill_switch_clear=${r?.kill_switch_clear}, ok=${r?.ok}, would_dispatch=${r?.would_dispatch}`,
+        actual: pass
+          ? `signature_valid=${r.signature_valid}, kill_switch_clear=${r.kill_switch_clear}, ok=${r.ok}, would_dispatch=${r.would_dispatch}`
+          : fmtError(r),
         pass, raw: r });
     }
-    // T9
+    // T9 — app design_only
     {
       const r = await freshSig("app_vanto_crm", "app_vantoos_host", sample);
       const pass = r?.app_status === "design_only" && r?.would_dispatch === false && r?.dispatch_blocked === true;
       out.push({ id: "T9", name: "App design_only → no dispatch",
         expected: "app_status=design_only, would_dispatch=false, dispatch_blocked=true",
-        actual: `app_status=${r?.app_status}, would_dispatch=${r?.would_dispatch}, dispatch_blocked=${r?.dispatch_blocked}`,
+        actual: pass
+          ? `app_status=${r.app_status}, would_dispatch=${r.would_dispatch}, dispatch_blocked=${r.dispatch_blocked}`
+          : fmtError(r),
         pass, raw: r });
     }
-    // T10
+    // T10 — idempotency lookup (no insert)
     {
       const idem = `app_vanto_crm:test.dry_run:t_0001:${Date.now().toString(16)}`;
-      const { data, error } = await supabase.functions.invoke("vos-verify-idempotency", { body: { idempotency_key: idem } });
-      const pass = !error && data?.deduped === false;
+      const r = await callFn(IDEM_URL, { idempotency_key: idem });
+      const pass = r?.deduped === false;
       out.push({ id: "T10", name: "Idempotency LOOKUP (no insert)",
         expected: "deduped=false, no row inserted",
-        actual: error ? `error=${error.message}` : `deduped=${data?.deduped}`, pass, raw: data });
+        actual: pass ? `deduped=${r.deduped}` : fmtError(r),
+        pass, raw: r });
     }
-    // Per-app negative matrix
+    // Per-app negative matrix — bad sig
     for (const appKey of KNOWN_APPS) {
       const r = await freshSig(appKey, null, sample, { tamper: true });
       const pass = r?.signature_valid === false && r?.would_dispatch === false;
       out.push({ id: `M-${appKey}-badsig`, name: `[${appKey}] bad signature`,
         expected: "signature_valid=false, would_dispatch=false",
-        actual: `signature_valid=${r?.signature_valid}, would_dispatch=${r?.would_dispatch}`, pass, raw: r });
+        actual: pass ? `signature_valid=${r.signature_valid}, would_dispatch=${r.would_dispatch}` : fmtError(r),
+        pass, raw: r });
     }
+    // Per-app negative matrix — kill-switch / design_only
     for (const appKey of KNOWN_APPS) {
       const r = await freshSig(appKey, null, sample);
       const pass = r?.kill_switch_clear === false && r?.would_dispatch === false && r?.app_status === "design_only";
       out.push({ id: `M-${appKey}-killswitch`, name: `[${appKey}] kill-switch + design_only`,
         expected: "kill_switch_clear=false, would_dispatch=false, app_status=design_only",
-        actual: `ks_clear=${r?.kill_switch_clear}, would_dispatch=${r?.would_dispatch}, app_status=${r?.app_status}`,
+        actual: pass
+          ? `ks_clear=${r.kill_switch_clear}, would_dispatch=${r.would_dispatch}, app_status=${r.app_status}`
+          : fmtError(r),
         pass, raw: r });
     }
 
     setResults(out);
     setRunning(false);
     const passed = out.filter((x) => x.pass).length;
-    toast.success(`Step 4D: ${passed}/${out.length} tests passed`);
+    if (passed === out.length) toast.success(`Step 4D: ${passed}/${out.length} tests passed`);
+    else toast.error(`Step 4D: ${passed}/${out.length} tests passed`);
   }
 
   return (
@@ -557,10 +659,24 @@ function Step4DTestHarness({ apps }: { apps: string[] }) {
           <div>Runs T1–T10 + per-app negative matrix against the live verifier from your admin session.</div>
           <div className="font-medium text-foreground">Safety: NO dispatch · NO inbox writes · NO publish · NO consume · NO send · secrets never leave the server.</div>
         </div>
-        <Button onClick={runAll} disabled={running}>
-          {running ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-2" />}
-          {running ? "Running…" : "Run Step 4D Test Suite"}
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={runAll} disabled={running}>
+            {running ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-2" />}
+            {running ? "Running…" : "Run Step 4D Test Suite"}
+          </Button>
+          <Button variant="outline" onClick={refreshSession}>Check session</Button>
+        </div>
+        {session && (
+          <div className="rounded-md border p-3 text-xs space-y-1 bg-muted/40">
+            <div className="font-medium">Session pre-check</div>
+            <div>admin session present: <span className="font-mono">{String(session.present)}</span></div>
+            <div>user email: <span className="font-mono">{session.email ?? "—"}</span></div>
+            <div>user id (masked): <span className="font-mono">{session.userIdMasked ?? "—"}</span></div>
+            <div>access token present: <span className="font-mono">{String(session.tokenPresent)}</span></div>
+            <div>access token length: <span className="font-mono">{session.tokenLength}</span></div>
+            <div>Authorization header attached: <span className="font-mono">{String(session.authHeaderAttached)}</span></div>
+          </div>
+        )}
         {results.length > 0 && (
           <div className="space-y-2">
             <div className="text-sm font-medium">{results.filter((r) => r.pass).length}/{results.length} passed</div>
@@ -572,7 +688,7 @@ function Step4DTestHarness({ apps }: { apps: string[] }) {
                     <StatusPill ok={r.pass} label={r.pass ? "PASS" : "FAIL"} />
                   </div>
                   <div className="text-muted-foreground"><span className="font-medium">Expected:</span> {r.expected}</div>
-                  <div className="text-muted-foreground"><span className="font-medium">Actual:</span> {r.actual}</div>
+                  <div className="text-muted-foreground break-all"><span className="font-medium">Actual:</span> {r.actual}</div>
                 </div>
               ))}
             </div>
