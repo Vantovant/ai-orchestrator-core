@@ -13,9 +13,10 @@ const corsHeaders = {
 };
 
 const PILOT_APP = "app_vantoos_host";
-const ACTIVE_REF = "VOS_HMAC_VANTO_OS_INTERNAL_ACTIVE";
-const NEXT_REF = "VOS_HMAC_VANTO_OS_INTERNAL_NEXT";
-const PREVIOUS_REF = "VOS_HMAC_VANTO_OS_INTERNAL_PREVIOUS";
+// Step 4K: slot refs are now resolved via vos_secret_slot_state, not hardcoded.
+// These constants are fallbacks ONLY if the slot-state row is missing (should never happen post-seed).
+const FALLBACK_ACTIVE_REF = "VOS_HMAC_VANTO_OS_INTERNAL_ACTIVE";
+const FALLBACK_NEXT_REF = "VOS_HMAC_VANTO_OS_INTERNAL_NEXT";
 const REPLAY_WINDOW_SECONDS = 300;
 
 function json(body: unknown, status = 200) {
