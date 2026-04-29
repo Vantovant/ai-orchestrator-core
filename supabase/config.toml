@@ -158,3 +158,16 @@ verify_jwt = false
 
 [functions.gmail-disconnect]
 verify_jwt = false
+
+[functions.vos-verify-signature]
+verify_jwt = false
+
+[functions.vos-verify-idempotency]
+verify_jwt = false
+
+[functions.vos-redact-packet]
+verify_jwt = false
+
+[functions.vos-dry-run]
+verify_jwt = false
+
