@@ -313,6 +313,8 @@ Deno.serve(async (req: Request) => {
       total: results.length,
       passed,
       failed: results.length - passed,
+      slot_state_resolved_from,        // ← "vos_secret_slot_state" or "fallback_constants"
+      slot_state_row: slotRow ?? null, // ← refs only, no values
       slot_inventory,                  // ← presence + fingerprint_prefix only, NEVER values
       results,
       postflight: {
