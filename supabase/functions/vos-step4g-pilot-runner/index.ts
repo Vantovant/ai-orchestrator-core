@@ -70,11 +70,15 @@ async function fingerprintPrefix(secret: string): Promise<string> {
   return Array.from(new Uint8Array(fp)).slice(0, 4).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type Slot = "active" | "next";
+type Slot = "active" | "next" | "previous";
+
+type ResolvedSlot = { slot: Slot; ref: string };
 
 /**
  * Dual-accept dry-run verifier for app_vantoos_host only.
- * Tries ACTIVE first, then NEXT. Returns slot_used + secret_ref + fingerprint_prefix only.
+ * Resolves slots through vos_secret_slot_state (Step 4K reference rails).
+ * Tries ACTIVE first, then NEXT (NEXT only allowed in pilot mode).
+ * Returns slot_used + secret_ref + fingerprint_prefix only.
  * Never returns secret values. would_dispatch is hard-coded false.
  */
 async function dualAcceptVerify(opts: {
@@ -83,6 +87,7 @@ async function dualAcceptVerify(opts: {
   timestamp: number;
   killRows: any[];
   appStatus: string;
+  resolvedSlots: ResolvedSlot[]; // ordered by attempt priority
 }) {
   const base = { ok: false, would_dispatch: false, dispatch_blocked: true, app_status: opts.appStatus };
   const nowSec = Math.floor(Date.now() / 1000);
@@ -90,25 +95,21 @@ async function dualAcceptVerify(opts: {
     return { ...base, signature_valid: false, kill_switch_clear: false, slot_used: null as Slot | null, secret_ref: null, fingerprint_prefix: null, reason: "timestamp_outside_window" };
   }
 
-  const slots: { slot: Slot; ref: string; value: string | undefined }[] = [
-    { slot: "active", ref: ACTIVE_REF, value: Deno.env.get(ACTIVE_REF) },
-    { slot: "next",   ref: NEXT_REF,   value: Deno.env.get(NEXT_REF)   },
-  ];
-
   let slot_used: Slot | null = null;
   let matched_ref: string | null = null;
   let matched_fp: string | null = null;
   let signatureValid = false;
   const signed = `${opts.timestamp}.${opts.payloadString}`;
 
-  for (const s of slots) {
-    if (!s.value) continue;
-    const expected = await hmacSha256Hex(s.value, signed);
+  for (const s of opts.resolvedSlots) {
+    const value = Deno.env.get(s.ref);
+    if (!value) continue;
+    const expected = await hmacSha256Hex(value, signed);
     if (timingSafeEqualHex(expected, opts.signatureHex)) {
       signatureValid = true;
       slot_used = s.slot;
       matched_ref = s.ref;
-      matched_fp = await fingerprintPrefix(s.value);
+      matched_fp = await fingerprintPrefix(value);
       break;
     }
   }
@@ -128,6 +129,7 @@ async function dualAcceptVerify(opts: {
     reason: signatureValid ? null : "signature_invalid",
   };
 }
+
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
