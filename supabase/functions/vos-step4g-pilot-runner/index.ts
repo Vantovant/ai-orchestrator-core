@@ -150,18 +150,36 @@ Deno.serve(async (req: Request) => {
       .eq("app_key", PILOT_APP).maybeSingle();
     if (!appRow) return json({ ok: false, reason: "pilot_app_missing" }, 500);
 
+    // Step 4K: resolve slot refs from vos_secret_slot_state (reference rails).
+    // Falls back to legacy constants only if the row is missing (should never happen post-seed).
+    const { data: slotRow } = await admin.from("vos_secret_slot_state")
+      .select("active_secret_ref, next_secret_ref, previous_secret_ref, previous_grace_expires_at")
+      .eq("app_key", PILOT_APP).maybeSingle();
+    const ACTIVE_REF = slotRow?.active_secret_ref ?? FALLBACK_ACTIVE_REF;
+    const NEXT_REF = slotRow?.next_secret_ref ?? FALLBACK_NEXT_REF;
+    const PREVIOUS_REF = slotRow?.previous_secret_ref ?? null;
+    const slot_state_resolved_from = slotRow ? "vos_secret_slot_state" : "fallback_constants";
+
     // Kill-switches (read-only)
     const { data: killRows } = await admin.from("vos_kill_switches").select("scope, scope_target, state");
+
+    // Build resolved slot list for dual-accept (active first, then next).
+    // PREVIOUS is verify-only and not used in pilot dual-accept attempts.
+    const resolvedSlots: ResolvedSlot[] = [
+      { slot: "active", ref: ACTIVE_REF },
+      { slot: "next", ref: NEXT_REF },
+    ];
 
     // Slot inventory — values NEVER returned, only presence + fingerprint
     const activeVal = Deno.env.get(ACTIVE_REF);
     const nextVal = Deno.env.get(NEXT_REF);
-    const previousVal = Deno.env.get(PREVIOUS_REF);
+    const previousVal = PREVIOUS_REF ? Deno.env.get(PREVIOUS_REF) : undefined;
     const slot_inventory = {
       active: { secret_ref: ACTIVE_REF, present: !!activeVal, fingerprint_prefix: activeVal ? await fingerprintPrefix(activeVal) : null },
       next:   { secret_ref: NEXT_REF,   present: !!nextVal,   fingerprint_prefix: nextVal   ? await fingerprintPrefix(nextVal)   : null },
       previous: { secret_ref: PREVIOUS_REF, present: !!previousVal, fingerprint_prefix: null }, // never expose fp if unexpectedly present
     };
+
 
     const sample = { event_name: "step4g.host_dryrun", entity_id: "pilot_0001", body: "step-4g-host-only" };
     const payloadString = JSON.stringify(sample);
