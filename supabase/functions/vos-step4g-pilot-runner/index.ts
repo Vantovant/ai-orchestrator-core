@@ -192,7 +192,7 @@ Deno.serve(async (req: Request) => {
       results.push({ id: "P1", name: "ACTIVE verifies", pass: false, actual: "ACTIVE secret missing in env" });
     } else {
       const sig = await hmacSha256Hex(activeVal, `${now}.${payloadString}`);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P1", name: "ACTIVE signature verifies via dual-accept",
         expected: "signature_valid=true, slot_used=active, would_dispatch=false, dispatch_blocked=true",
@@ -207,7 +207,7 @@ Deno.serve(async (req: Request) => {
       results.push({ id: "P2", name: "NEXT verifies", pass: false, actual: "NEXT secret missing in env" });
     } else {
       const sig = await hmacSha256Hex(nextVal, `${now}.${payloadString}`);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P2", name: "NEXT signature verifies via dual-accept",
         expected: `signature_valid=true, slot_used=next, secret_ref=${NEXT_REF}, fingerprint_prefix length=8, would_dispatch=false, dispatch_blocked=true`,
@@ -220,7 +220,7 @@ Deno.serve(async (req: Request) => {
     // Test 3 — Bad signature rejected
     {
       const bad = "0".repeat(64);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: bad, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: bad, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P3", name: "Bad signature rejected",
         expected: "signature_valid=false, would_dispatch=false",
@@ -234,7 +234,7 @@ Deno.serve(async (req: Request) => {
     {
       const stale = now - 3600;
       const sig = activeVal ? await hmacSha256Hex(activeVal, `${stale}.${payloadString}`) : "0".repeat(64);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: stale, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: stale, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P4", name: "Stale timestamp rejected",
         expected: "reason=timestamp_outside_window, would_dispatch=false",
@@ -247,7 +247,7 @@ Deno.serve(async (req: Request) => {
     // Test 5 — Kill-switch still blocks dispatch (with valid NEXT sig)
     if (nextVal) {
       const sig = await hmacSha256Hex(nextVal, `${now}.${payloadString}`);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P5", name: "Kill-switch blocks dispatch even with valid NEXT",
         expected: "signature_valid=true, kill_switch_clear=false, ok=false, would_dispatch=false",
