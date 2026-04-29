@@ -2044,6 +2044,51 @@ export type Database = {
           },
         ]
       }
+      lead_inbox: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          lead_name: string | null
+          phone: string | null
+          raw_payload: Json | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string
+          source_campaign: string | null
+          status: string
+          tags: string[]
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          lead_name?: string | null
+          phone?: string | null
+          raw_payload?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          source_campaign?: string | null
+          status?: string
+          tags?: string[]
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          lead_name?: string | null
+          phone?: string | null
+          raw_payload?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
+          source_campaign?: string | null
+          status?: string
+          tags?: string[]
+        }
+        Relationships: []
+      }
       market_news_cache: {
         Row: {
           created_at: string
