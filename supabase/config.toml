@@ -177,6 +177,3 @@ verify_jwt = false
 [functions.vos-step4g-pilot-runner]
 verify_jwt = false
 
-[functions.facebook-lead-webhook]
-verify_jwt = false
-

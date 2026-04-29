@@ -9,7 +9,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Shield, ShieldAlert, Lock, RefreshCw, AlertTriangle, CheckCircle2, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
-import LeadInboxPanel from "@/components/admin/LeadInboxPanel";
 
 type Row = Record<string, any>;
 
@@ -217,7 +216,6 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="dryrun">Dry-Run Preview</TabsTrigger>
           <TabsTrigger value="test4d">Step 4D Tests</TabsTrigger>
           <TabsTrigger value="test4g">Step 4G Pilot</TabsTrigger>
-          <TabsTrigger value="leads">Lead Inbox</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -347,10 +345,6 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="test4g" className="space-y-4 pt-4">
           <Step4GPilotHarness />
-        </TabsContent>
-
-        <TabsContent value="leads" className="pt-4">
-          <LeadInboxPanel />
         </TabsContent>
       </Tabs>
     </div>
