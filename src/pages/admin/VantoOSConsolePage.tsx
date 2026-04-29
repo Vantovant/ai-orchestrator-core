@@ -233,32 +233,60 @@ export default function VantoOSConsolePage() {
               <div>• No email / WhatsApp send • No contact enrolment • No automation changes</div>
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Schema Fingerprint</CardTitle></CardHeader>
+            <CardContent>
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr><th className="text-left px-3 py-2 font-medium">Table</th><th className="text-left px-3 py-2 font-medium">Column count</th></tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["vos_app_registry", 10],
+                    ["vos_platform_flags", 8],
+                    ["vos_signed_inbox", 16],
+                    ["vos_kill_switches", 8],
+                    ["vos_inbound_log", 8],
+                    ["vos_outbound_log", 7],
+                    ["vos_decision_log", 7],
+                    ["vos_killswitch_log", 8],
+                  ].map(([t, n]) => (
+                    <tr key={t as string} className="border-t border-border">
+                      <td className="px-3 py-2 font-mono text-xs">{t}</td>
+                      <td className="px-3 py-2">{n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-xs text-muted-foreground mt-2">Static reference of expected column counts per table. Drift from these values indicates a schema change requiring console reconciliation.</p>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="registry" className="pt-4">
-          <DataTable rows={registry} cols={["app_code", "app_name", "status", "design_doc_version", "created_at"]} />
+          <DataTable rows={registry} cols={["app_key", "display_name", "role", "owner_scope", "app_status", "created_at"]} />
         </TabsContent>
 
         <TabsContent value="flags" className="pt-4">
-          <DataTable rows={flags} cols={["flag_key", "flag_value", "is_locked", "updated_at"]} />
+          <DataTable rows={flags} cols={["flag_key", "flag_value", "locked", "description", "updated_at"]} />
         </TabsContent>
 
         <TabsContent value="kill" className="pt-4">
-          <DataTable rows={killSwitches} cols={["scope", "app_code", "state", "reason", "updated_at"]} />
+          <DataTable rows={killSwitches} cols={["scope", "scope_target", "state", "reason", "updated_at"]} />
         </TabsContent>
 
         <TabsContent value="inbox" className="pt-4">
-          <DataTable rows={signedInbox} cols={["idempotency_key", "source_app", "event_type", "verified", "created_at"]} />
+          <DataTable rows={signedInbox} cols={["idempotency_key", "source_app", "event_name", "processing_state", "received_at", "created_at"]} />
         </TabsContent>
 
         <TabsContent value="audit" className="space-y-6 pt-4">
           <section>
             <h3 className="font-semibold mb-2">Inbound Log</h3>
-            <DataTable rows={inboundLog} cols={["source_app", "event_type", "result", "created_at"]} />
+            <DataTable rows={inboundLog} cols={["source_app", "event_name", "signature_valid", "outcome", "created_at"]} />
           </section>
           <section>
             <h3 className="font-semibold mb-2">Outbound Log</h3>
-            <DataTable rows={outboundLog} cols={["target_app", "event_type", "result", "created_at"]} />
+            <DataTable rows={outboundLog} cols={["target_app", "event_name", "idempotency_key", "outcome", "created_at"]} />
           </section>
           <section>
             <h3 className="font-semibold mb-2">Decision Log</h3>
