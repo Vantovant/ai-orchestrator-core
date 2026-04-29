@@ -82,7 +82,7 @@ export default function VantoOSConsolePage() {
     setLoading(true);
     try {
       const [r, f, k, s, ib, ob, dl, kl] = await Promise.all([
-        (supabase as any).from("vos_app_registry").select("*").order("app_code"),
+        (supabase as any).from("vos_app_registry").select("*").order("app_key"),
         (supabase as any).from("vos_platform_flags").select("*").order("flag_key"),
         (supabase as any).from("vos_kill_switches").select("*").order("scope"),
         (supabase as any).from("vos_signed_inbox").select("*").order("created_at", { ascending: false }).limit(50),
