@@ -215,6 +215,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
           <TabsTrigger value="dryrun">Dry-Run Preview</TabsTrigger>
           <TabsTrigger value="test4d">Step 4D Tests</TabsTrigger>
+          <TabsTrigger value="test4g">Step 4G Pilot</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -340,6 +341,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="test4d" className="space-y-4 pt-4">
           <Step4DTestHarness apps={registry.map((r) => r.app_key)} />
+        </TabsContent>
+
+        <TabsContent value="test4g" className="space-y-4 pt-4">
+          <Step4GPilotHarness />
         </TabsContent>
       </Tabs>
     </div>
