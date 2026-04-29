@@ -160,14 +160,14 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.vos-verify-signature]
-verify_jwt = false
+verify_jwt = true
 
 [functions.vos-verify-idempotency]
-verify_jwt = false
+verify_jwt = true
 
 [functions.vos-redact-packet]
-verify_jwt = false
+verify_jwt = true
 
 [functions.vos-dry-run]
-verify_jwt = false
+verify_jwt = true
 

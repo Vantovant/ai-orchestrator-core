@@ -1,6 +1,10 @@
-// Vanto OS — Dry-Run Validator (verify-only)
-// Phase 1 Step 2. Accepts a sample packet and runs all 3 verifiers + flag/kill-switch check.
+// Vanto OS — Dry-Run Validator (verify-only, admin-gated)
+// Phase 1 Step 4A — hardened. Accepts a sample packet and runs all 3 verifiers + flag/kill-switch check.
 // MUST NOT dispatch. MUST NOT insert into vos_signed_inbox. MUST NOT call any consumer.
+//
+// Access protection: verify_jwt=true (platform) + in-code admin role check.
+// Per-app HMAC secrets are NOT provisioned in Phase 1; signature path requires
+// admin-supplied `secret_override` to exercise the HMAC verifier.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -11,7 +15,32 @@ const corsHeaders = {
 
 const REPLAY_WINDOW_SECONDS = 300;
 const KEY_REGEX = /^[a-f0-9]{32}$/;
-const TEST_PLACEHOLDER_SECRET = "phase1-test-only-not-a-real-secret";
+const RATE_LIMIT_PER_MIN = 30;
+const RATE: Map<string, { count: number; windowStart: number }> = new Map();
+
+function rateLimit(req: Request): boolean {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim()
+    || req.headers.get("cf-connecting-ip") || "unknown";
+  const now = Date.now();
+  const b = RATE.get(ip);
+  if (!b || now - b.windowStart > 60_000) { RATE.set(ip, { count: 1, windowStart: now }); return true; }
+  b.count += 1;
+  return b.count <= RATE_LIMIT_PER_MIN;
+}
+
+async function requireAdmin(req: Request): Promise<{ ok: boolean; status?: number; reason?: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return { ok: false, status: 401, reason: "missing_bearer_token" };
+  const token = authHeader.replace("Bearer ", "");
+  const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } });
+  const { data: claims, error } = await sb.auth.getClaims(token);
+  if (error || !claims?.claims?.sub) return { ok: false, status: 401, reason: "invalid_token" };
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data: roles } = await admin.from("user_roles").select("id").eq("user_id", claims.claims.sub).eq("role", "admin").limit(1);
+  if (!roles || roles.length === 0) return { ok: false, status: 403, reason: "not_admin" };
+  return { ok: true };
+}
 
 const PATTERNS: Record<string, RegExp> = {
   sa_id: /\b\d{13}\b/g,
@@ -102,6 +131,16 @@ function redactValue(v: any): any {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  if (!rateLimit(req)) {
+    return new Response(JSON.stringify({ ok: false, reason: "rate_limited", limit_per_min: RATE_LIMIT_PER_MIN }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return new Response(JSON.stringify({ ok: false, reason: gate.reason }),
+      { status: gate.status ?? 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   try {
     const {
       source_app,
@@ -161,15 +200,15 @@ Deno.serve(async (req: Request) => {
     report.checks.timestamp_within_window =
       Number.isFinite(ts) && Math.abs(nowSec - ts) <= REPLAY_WINDOW_SECONDS;
 
-    // 6. Signature verification (test-only secret)
+    // 6. Signature verification — Phase 1: NO real per-app secret is provisioned.
+    // Caller MUST supply `secret_override` (admin-only test path) to exercise HMAC.
+    // With no override the signature path returns false (no oracle, no hard-coded fallback).
     const sigMatch = typeof signature_header === "string" ? signature_header.match(/^v(\d+)=([0-9a-f]+)$/i) : null;
     report.checks.signature_format_valid = !!sigMatch;
-    if (sigMatch && report.checks.timestamp_within_window) {
+    report.checks.signature_secret_provided = typeof secret_override === "string" && secret_override.length > 0;
+    if (sigMatch && report.checks.timestamp_within_window && report.checks.signature_secret_provided) {
       const payloadString = JSON.stringify(payload);
-      const secret = typeof secret_override === "string" && secret_override.length > 0
-        ? secret_override
-        : TEST_PLACEHOLDER_SECRET;
-      const expected = await hmacHex(secret, `${ts}.${payloadString}`);
+      const expected = await hmacHex(secret_override as string, `${ts}.${payloadString}`);
       report.checks.signature_valid = tse(hexToBytes(expected), hexToBytes(sigMatch[2].toLowerCase()));
     } else {
       report.checks.signature_valid = false;

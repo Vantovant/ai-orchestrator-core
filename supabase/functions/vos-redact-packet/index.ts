@@ -1,11 +1,40 @@
-// Vanto OS — PII Redactor / Packet Wrapper (verify-only)
-// Phase 1 Step 2. Produces redacted_payload + safe_summary. NO raw PII stored.
+// Vanto OS — PII Redactor / Packet Wrapper (verify-only, admin-gated)
+// Phase 1 Step 4A — hardened. Produces redacted_payload + safe_summary. NO raw PII stored.
 // Patterns: SA ID, bank account, email, phone, confidential tags.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const RATE_LIMIT_PER_MIN = 30;
+const RATE: Map<string, { count: number; windowStart: number }> = new Map();
+
+function rateLimit(req: Request): boolean {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim()
+    || req.headers.get("cf-connecting-ip") || "unknown";
+  const now = Date.now();
+  const b = RATE.get(ip);
+  if (!b || now - b.windowStart > 60_000) { RATE.set(ip, { count: 1, windowStart: now }); return true; }
+  b.count += 1;
+  return b.count <= RATE_LIMIT_PER_MIN;
+}
+
+async function requireAdmin(req: Request): Promise<{ ok: boolean; status?: number; reason?: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return { ok: false, status: 401, reason: "missing_bearer_token" };
+  const token = authHeader.replace("Bearer ", "");
+  const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } });
+  const { data: claims, error } = await sb.auth.getClaims(token);
+  if (error || !claims?.claims?.sub) return { ok: false, status: 401, reason: "invalid_token" };
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data: roles } = await admin.from("user_roles").select("id").eq("user_id", claims.claims.sub).eq("role", "admin").limit(1);
+  if (!roles || roles.length === 0) return { ok: false, status: 403, reason: "not_admin" };
+  return { ok: true };
+}
 
 const PATTERNS: Record<string, RegExp> = {
   sa_id: /\b\d{13}\b/g,
@@ -79,6 +108,16 @@ function buildSafeSummary(redactedPayload: any, sourceApp: string, eventName: st
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  if (!rateLimit(req)) {
+    return new Response(JSON.stringify({ ok: false, reason: "rate_limited", limit_per_min: RATE_LIMIT_PER_MIN }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return new Response(JSON.stringify({ ok: false, reason: gate.reason }),
+      { status: gate.status ?? 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
 
   try {
     const body = await req.json();
