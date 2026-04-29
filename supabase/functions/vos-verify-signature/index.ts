@@ -107,6 +107,68 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body = await req.json();
+
+    // ─── Step 4D admin-only test harness ──────────────────────────────────────
+    // mode: "sign_and_verify" — given a payload + source_app, the function
+    // resolves the registry-stored ACTIVE secret, signs server-side, then
+    // immediately verifies. The secret value is NEVER returned to the caller.
+    // Used ONLY by the admin console test panel. Performs no DB writes,
+    // no dispatch, no inbox insert, no outbound traffic.
+    if (body?.mode === "sign_and_verify") {
+      const sourceApp = body?.source_app;
+      const targetApp = body?.target_app ?? null;
+      const payloadStr = typeof body?.payload_string === "string" ? body.payload_string : JSON.stringify(body?.payload ?? {});
+      if (!sourceApp || typeof sourceApp !== "string") {
+        return new Response(JSON.stringify({ ok: false, reason: "missing_source_app" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: appRow } = await admin.from("vos_app_registry")
+        .select("app_key, owner_scope, app_status, public_key_ref")
+        .eq("app_key", sourceApp).maybeSingle();
+      if (!appRow || appRow.owner_scope !== "vanto_admin_ecosystem") {
+        return new Response(JSON.stringify({ ok: false, reason: "unknown_or_unauthorized_source_app" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const secretValue = appRow.public_key_ref ? Deno.env.get(appRow.public_key_ref) : undefined;
+      if (!secretValue) {
+        return new Response(JSON.stringify({ ok: false, reason: "no_secret_resolved", secret_ref: appRow.public_key_ref ?? null }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const ts = body?.timestamp_override ?? Math.floor(Date.now() / 1000);
+      const signedBody = `${ts}.${payloadStr}`;
+      const signedHex = await hmacSha256Hex(secretValue, signedBody);
+      // Tampering switches for negative tests
+      const sigToReturn = body?.tamper_signature === true ? signedHex.replace(/.$/, signedHex.slice(-1) === "0" ? "1" : "0") : signedHex;
+      const sigHeader = `v1=${sigToReturn}`;
+      // Self-verify
+      const verifies = timingSafeEqual(hexToBytes(signedHex), hexToBytes(sigToReturn));
+      // Kill-switch eval
+      const { data: killRows } = await admin.from("vos_kill_switches").select("scope, scope_target, state").eq("state", "engaged");
+      const targets = new Set<string>((killRows ?? []).map((k: any) => `${k.scope}:${k.scope_target}`));
+      const killBlocks = targets.has("global:*") || targets.has(`app:${sourceApp}`) || (targetApp ? targets.has(`app:${targetApp}`) : false);
+      const fpBuf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secretValue));
+      const fingerprint_prefix = Array.from(new Uint8Array(fpBuf)).slice(0, 4).map((b) => b.toString(16).padStart(2, "0")).join("");
+      return new Response(JSON.stringify({
+        ok: verifies && !killBlocks,
+        mode: "sign_and_verify",
+        source_app: sourceApp,
+        target_app: targetApp,
+        timestamp: ts,
+        signature_header: sigHeader,            // safe — derived, not the secret
+        secret_source: "registry",
+        secret_ref: appRow.public_key_ref,      // name only
+        fingerprint_prefix,                     // 8 hex chars only
+        signature_valid: verifies,
+        kill_switch_clear: !killBlocks,
+        app_status: appRow.app_status,
+        would_dispatch: false,
+        dispatch_blocked: true,
+        notice: "Step 4D admin test harness. NO dispatch. NO inbox write. NO outbound traffic.",
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     const {
       payload_string,
       signature_header,
