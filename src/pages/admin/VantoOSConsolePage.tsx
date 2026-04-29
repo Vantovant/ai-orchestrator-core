@@ -337,6 +337,10 @@ export default function VantoOSConsolePage() {
             </Card>
           )}
         </TabsContent>
+
+        <TabsContent value="test4d" className="space-y-4 pt-4">
+          <Step4DTestHarness apps={registry.map((r) => r.app_key)} />
+        </TabsContent>
       </Tabs>
     </div>
   );
