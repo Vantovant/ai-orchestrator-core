@@ -200,15 +200,15 @@ Deno.serve(async (req: Request) => {
     report.checks.timestamp_within_window =
       Number.isFinite(ts) && Math.abs(nowSec - ts) <= REPLAY_WINDOW_SECONDS;
 
-    // 6. Signature verification (test-only secret)
+    // 6. Signature verification — Phase 1: NO real per-app secret is provisioned.
+    // Caller MUST supply `secret_override` (admin-only test path) to exercise HMAC.
+    // With no override the signature path returns false (no oracle, no hard-coded fallback).
     const sigMatch = typeof signature_header === "string" ? signature_header.match(/^v(\d+)=([0-9a-f]+)$/i) : null;
     report.checks.signature_format_valid = !!sigMatch;
-    if (sigMatch && report.checks.timestamp_within_window) {
+    report.checks.signature_secret_provided = typeof secret_override === "string" && secret_override.length > 0;
+    if (sigMatch && report.checks.timestamp_within_window && report.checks.signature_secret_provided) {
       const payloadString = JSON.stringify(payload);
-      const secret = typeof secret_override === "string" && secret_override.length > 0
-        ? secret_override
-        : TEST_PLACEHOLDER_SECRET;
-      const expected = await hmacHex(secret, `${ts}.${payloadString}`);
+      const expected = await hmacHex(secret_override as string, `${ts}.${payloadString}`);
       report.checks.signature_valid = tse(hexToBytes(expected), hexToBytes(sigMatch[2].toLowerCase()));
     } else {
       report.checks.signature_valid = false;
