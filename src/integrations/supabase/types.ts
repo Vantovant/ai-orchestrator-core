@@ -3653,6 +3653,294 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_app_registry: {
+        Row: {
+          app_key: string
+          app_status: string
+          created_at: string
+          display_name: string
+          id: string
+          notes: string | null
+          owner_scope: string
+          public_key_ref: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          app_key: string
+          app_status?: string
+          created_at?: string
+          display_name: string
+          id?: string
+          notes?: string | null
+          owner_scope: string
+          public_key_ref?: string | null
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          app_key?: string
+          app_status?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          notes?: string | null
+          owner_scope?: string
+          public_key_ref?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vos_decision_log: {
+        Row: {
+          created_at: string
+          decided_by: string
+          decision: string
+          detail: Json
+          id: string
+          inbox_id: string | null
+          reason: string | null
+        }
+        Insert: {
+          created_at?: string
+          decided_by?: string
+          decision: string
+          detail?: Json
+          id?: string
+          inbox_id?: string | null
+          reason?: string | null
+        }
+        Update: {
+          created_at?: string
+          decided_by?: string
+          decision?: string
+          detail?: Json
+          id?: string
+          inbox_id?: string | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      vos_inbound_log: {
+        Row: {
+          created_at: string
+          detail: Json
+          event_name: string
+          id: string
+          idempotency_key: string | null
+          outcome: string
+          signature_valid: boolean | null
+          source_app: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json
+          event_name: string
+          id?: string
+          idempotency_key?: string | null
+          outcome: string
+          signature_valid?: boolean | null
+          source_app: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json
+          event_name?: string
+          id?: string
+          idempotency_key?: string | null
+          outcome?: string
+          signature_valid?: boolean | null
+          source_app?: string
+        }
+        Relationships: []
+      }
+      vos_kill_switches: {
+        Row: {
+          created_at: string
+          id: string
+          reason: string | null
+          scope: string
+          scope_target: string
+          state: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reason?: string | null
+          scope: string
+          scope_target: string
+          state?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reason?: string | null
+          scope?: string
+          scope_target?: string
+          state?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      vos_killswitch_log: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          id: string
+          new_state: string
+          prev_state: string | null
+          reason: string | null
+          scope: string
+          scope_target: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_state: string
+          prev_state?: string | null
+          reason?: string | null
+          scope: string
+          scope_target: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          id?: string
+          new_state?: string
+          prev_state?: string | null
+          reason?: string | null
+          scope?: string
+          scope_target?: string
+        }
+        Relationships: []
+      }
+      vos_outbound_log: {
+        Row: {
+          created_at: string
+          detail: Json
+          event_name: string
+          id: string
+          idempotency_key: string | null
+          outcome: string
+          target_app: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json
+          event_name: string
+          id?: string
+          idempotency_key?: string | null
+          outcome: string
+          target_app: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json
+          event_name?: string
+          id?: string
+          idempotency_key?: string | null
+          outcome?: string
+          target_app?: string
+        }
+        Relationships: []
+      }
+      vos_platform_flags: {
+        Row: {
+          created_at: string
+          description: string | null
+          flag_key: string
+          flag_value: string
+          id: string
+          locked: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          flag_key: string
+          flag_value: string
+          id?: string
+          locked?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          flag_key?: string
+          flag_value?: string
+          id?: string
+          locked?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      vos_signed_inbox: {
+        Row: {
+          attempt_count: number
+          created_at: string
+          event_name: string
+          id: string
+          idempotency_key: string
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+          processing_state: string
+          received_at: string
+          redacted_payload: Json | null
+          safe_summary: string | null
+          signature: string
+          signature_version: string
+          source_app: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          created_at?: string
+          event_name: string
+          id?: string
+          idempotency_key: string
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          processing_state?: string
+          received_at?: string
+          redacted_payload?: Json | null
+          safe_summary?: string | null
+          signature: string
+          signature_version?: string
+          source_app: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          created_at?: string
+          event_name?: string
+          id?: string
+          idempotency_key?: string
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+          processing_state?: string
+          received_at?: string
+          redacted_payload?: Json | null
+          safe_summary?: string | null
+          signature?: string
+          signature_version?: string
+          source_app?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       whatsapp_action_log: {
         Row: {
           action_type: string
