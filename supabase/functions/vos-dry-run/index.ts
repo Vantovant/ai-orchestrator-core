@@ -131,6 +131,16 @@ function redactValue(v: any): any {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  if (!rateLimit(req)) {
+    return new Response(JSON.stringify({ ok: false, reason: "rate_limited", limit_per_min: RATE_LIMIT_PER_MIN }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+  const gate = await requireAdmin(req);
+  if (!gate.ok) {
+    return new Response(JSON.stringify({ ok: false, reason: gate.reason }),
+      { status: gate.status ?? 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }
+
   try {
     const {
       source_app,
