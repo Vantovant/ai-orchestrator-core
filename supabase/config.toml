@@ -174,3 +174,6 @@ verify_jwt = true
 [functions.vos-step4d-test-runner]
 verify_jwt = false
 
+[functions.vos-step4g-pilot-runner]
+verify_jwt = false
+

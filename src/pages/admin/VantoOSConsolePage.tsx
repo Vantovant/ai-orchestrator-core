@@ -215,6 +215,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
           <TabsTrigger value="dryrun">Dry-Run Preview</TabsTrigger>
           <TabsTrigger value="test4d">Step 4D Tests</TabsTrigger>
+          <TabsTrigger value="test4g">Step 4G Pilot</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -340,6 +341,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="test4d" className="space-y-4 pt-4">
           <Step4DTestHarness apps={registry.map((r) => r.app_key)} />
+        </TabsContent>
+
+        <TabsContent value="test4g" className="space-y-4 pt-4">
+          <Step4GPilotHarness />
         </TabsContent>
       </Tabs>
     </div>
@@ -590,6 +595,89 @@ function Step4DTestHarness({ apps }: { apps: string[] }) {
               </pre>
             )}
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Step 4G Pilot Harness — host-only NEXT slot dry-run (admin-only) ─────
+function Step4GPilotHarness() {
+  const [running, setRunning] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
+  const RUNNER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vos-step4g-pilot-runner`;
+  const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+
+  async function run() {
+    setRunning(true);
+    setSummary(null);
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    if (!token) {
+      toast.error("NO_ADMIN_SESSION — please log in again.");
+      setRunning(false);
+      return;
+    }
+    try {
+      const resp = await fetch(RUNNER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, apikey: ANON_KEY },
+        body: JSON.stringify({ mode: "run_step4g" }),
+      });
+      const text = await resp.text();
+      let parsed: any = null;
+      try { parsed = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+      setSummary(parsed ?? { _error: "non_json_response", _http_status: resp.status, _raw_body: text.slice(0, 400) });
+      if (parsed?.passed === parsed?.total) toast.success(`Step 4G: ${parsed.passed}/${parsed.total} host-only checks passed`);
+      else toast.error(`Step 4G: ${parsed?.passed ?? 0}/${parsed?.total ?? 0} host-only checks passed`);
+    } catch (e: any) {
+      setSummary({ _error: `network_error: ${e?.message ?? String(e)}` });
+      toast.error("Step 4G runner failed");
+    }
+    setRunning(false);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FlaskConical className="h-5 w-5 text-amber-500" />
+          Step 4G Gate #1 — Host-Only NEXT Slot Dry-Run
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="text-sm text-muted-foreground space-y-1">
+          <div>Pilot app: <span className="font-mono">app_vantoos_host</span></div>
+          <div>Tests dual-accept (ACTIVE ∪ NEXT). PREVIOUS must remain absent.</div>
+          <div className="font-medium text-foreground">Safety: NO dispatch · NO promotion · NO inbox writes · NO sends · secret values NEVER returned.</div>
+        </div>
+        <Button onClick={run} disabled={running}>
+          {running ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <FlaskConical className="h-4 w-4 mr-2" />}
+          {running ? "Running…" : "Run Step 4G Pilot Suite"}
+        </Button>
+        {summary && (
+          <>
+            {Array.isArray(summary?.results) && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium">{summary.passed}/{summary.total} passed</div>
+                <div className="border rounded-md divide-y max-h-[500px] overflow-auto">
+                  {summary.results.map((r: any) => (
+                    <div key={r.id} className="p-3 text-xs space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="font-medium">{r.id} — {r.name}</div>
+                        <StatusPill ok={r.pass} label={r.pass ? "PASS" : "FAIL"} />
+                      </div>
+                      <div className="text-muted-foreground"><span className="font-medium">Expected:</span> {r.expected}</div>
+                      <div className="text-muted-foreground break-all"><span className="font-medium">Actual:</span> {r.actual}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-96">
+              {JSON.stringify({ slot_inventory: summary.slot_inventory, postflight: summary.postflight, _error: summary._error, _http_status: summary._http_status, _raw_body: summary._raw_body }, null, 2)}
+            </pre>
+          </>
         )}
       </CardContent>
     </Card>
