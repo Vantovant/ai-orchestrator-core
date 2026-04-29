@@ -1,6 +1,10 @@
-// Vanto OS — Dry-Run Validator (verify-only)
-// Phase 1 Step 2. Accepts a sample packet and runs all 3 verifiers + flag/kill-switch check.
+// Vanto OS — Dry-Run Validator (verify-only, admin-gated)
+// Phase 1 Step 4A — hardened. Accepts a sample packet and runs all 3 verifiers + flag/kill-switch check.
 // MUST NOT dispatch. MUST NOT insert into vos_signed_inbox. MUST NOT call any consumer.
+//
+// Access protection: verify_jwt=true (platform) + in-code admin role check.
+// Per-app HMAC secrets are NOT provisioned in Phase 1; signature path requires
+// admin-supplied `secret_override` to exercise the HMAC verifier.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -11,7 +15,32 @@ const corsHeaders = {
 
 const REPLAY_WINDOW_SECONDS = 300;
 const KEY_REGEX = /^[a-f0-9]{32}$/;
-const TEST_PLACEHOLDER_SECRET = "phase1-test-only-not-a-real-secret";
+const RATE_LIMIT_PER_MIN = 30;
+const RATE: Map<string, { count: number; windowStart: number }> = new Map();
+
+function rateLimit(req: Request): boolean {
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim()
+    || req.headers.get("cf-connecting-ip") || "unknown";
+  const now = Date.now();
+  const b = RATE.get(ip);
+  if (!b || now - b.windowStart > 60_000) { RATE.set(ip, { count: 1, windowStart: now }); return true; }
+  b.count += 1;
+  return b.count <= RATE_LIMIT_PER_MIN;
+}
+
+async function requireAdmin(req: Request): Promise<{ ok: boolean; status?: number; reason?: string }> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return { ok: false, status: 401, reason: "missing_bearer_token" };
+  const token = authHeader.replace("Bearer ", "");
+  const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } });
+  const { data: claims, error } = await sb.auth.getClaims(token);
+  if (error || !claims?.claims?.sub) return { ok: false, status: 401, reason: "invalid_token" };
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const { data: roles } = await admin.from("user_roles").select("id").eq("user_id", claims.claims.sub).eq("role", "admin").limit(1);
+  if (!roles || roles.length === 0) return { ok: false, status: 403, reason: "not_admin" };
+  return { ok: true };
+}
 
 const PATTERNS: Record<string, RegExp> = {
   sa_id: /\b\d{13}\b/g,
