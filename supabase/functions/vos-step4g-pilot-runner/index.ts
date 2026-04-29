@@ -272,13 +272,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // Test 7 — PREVIOUS slot absent (must NOT be provisioned in Gate #1)
-    results.push({
-      id: "P7", name: "PREVIOUS slot absent",
-      expected: `${PREVIOUS_REF} not provisioned (present=false)`,
-      actual: `present=${!!previousVal}`,
-      pass: !previousVal,
-      safe: { secret_ref: PREVIOUS_REF, present: !!previousVal },
-    });
+    {
+      const prevLabel = PREVIOUS_REF ?? "VOS_HMAC_VANTO_OS_INTERNAL_PREVIOUS";
+      results.push({
+        id: "P7", name: "PREVIOUS slot absent",
+        expected: `${prevLabel} not provisioned (present=false)`,
+        actual: `previous_secret_ref=${PREVIOUS_REF ?? "null"}, present=${!!previousVal}`,
+        pass: !previousVal && PREVIOUS_REF === null,
+        safe: { secret_ref: PREVIOUS_REF, present: !!previousVal },
+      });
+    }
+
 
     // Postflight log counts
     const tableCount = async (t: string) => {
