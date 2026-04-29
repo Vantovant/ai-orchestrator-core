@@ -13,9 +13,10 @@ const corsHeaders = {
 };
 
 const PILOT_APP = "app_vantoos_host";
-const ACTIVE_REF = "VOS_HMAC_VANTO_OS_INTERNAL_ACTIVE";
-const NEXT_REF = "VOS_HMAC_VANTO_OS_INTERNAL_NEXT";
-const PREVIOUS_REF = "VOS_HMAC_VANTO_OS_INTERNAL_PREVIOUS";
+// Step 4K: slot refs are now resolved via vos_secret_slot_state, not hardcoded.
+// These constants are fallbacks ONLY if the slot-state row is missing (should never happen post-seed).
+const FALLBACK_ACTIVE_REF = "VOS_HMAC_VANTO_OS_INTERNAL_ACTIVE";
+const FALLBACK_NEXT_REF = "VOS_HMAC_VANTO_OS_INTERNAL_NEXT";
 const REPLAY_WINDOW_SECONDS = 300;
 
 function json(body: unknown, status = 200) {
@@ -69,11 +70,15 @@ async function fingerprintPrefix(secret: string): Promise<string> {
   return Array.from(new Uint8Array(fp)).slice(0, 4).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type Slot = "active" | "next";
+type Slot = "active" | "next" | "previous";
+
+type ResolvedSlot = { slot: Slot; ref: string };
 
 /**
  * Dual-accept dry-run verifier for app_vantoos_host only.
- * Tries ACTIVE first, then NEXT. Returns slot_used + secret_ref + fingerprint_prefix only.
+ * Resolves slots through vos_secret_slot_state (Step 4K reference rails).
+ * Tries ACTIVE first, then NEXT (NEXT only allowed in pilot mode).
+ * Returns slot_used + secret_ref + fingerprint_prefix only.
  * Never returns secret values. would_dispatch is hard-coded false.
  */
 async function dualAcceptVerify(opts: {
@@ -82,6 +87,7 @@ async function dualAcceptVerify(opts: {
   timestamp: number;
   killRows: any[];
   appStatus: string;
+  resolvedSlots: ResolvedSlot[]; // ordered by attempt priority
 }) {
   const base = { ok: false, would_dispatch: false, dispatch_blocked: true, app_status: opts.appStatus };
   const nowSec = Math.floor(Date.now() / 1000);
@@ -89,25 +95,21 @@ async function dualAcceptVerify(opts: {
     return { ...base, signature_valid: false, kill_switch_clear: false, slot_used: null as Slot | null, secret_ref: null, fingerprint_prefix: null, reason: "timestamp_outside_window" };
   }
 
-  const slots: { slot: Slot; ref: string; value: string | undefined }[] = [
-    { slot: "active", ref: ACTIVE_REF, value: Deno.env.get(ACTIVE_REF) },
-    { slot: "next",   ref: NEXT_REF,   value: Deno.env.get(NEXT_REF)   },
-  ];
-
   let slot_used: Slot | null = null;
   let matched_ref: string | null = null;
   let matched_fp: string | null = null;
   let signatureValid = false;
   const signed = `${opts.timestamp}.${opts.payloadString}`;
 
-  for (const s of slots) {
-    if (!s.value) continue;
-    const expected = await hmacSha256Hex(s.value, signed);
+  for (const s of opts.resolvedSlots) {
+    const value = Deno.env.get(s.ref);
+    if (!value) continue;
+    const expected = await hmacSha256Hex(value, signed);
     if (timingSafeEqualHex(expected, opts.signatureHex)) {
       signatureValid = true;
       slot_used = s.slot;
       matched_ref = s.ref;
-      matched_fp = await fingerprintPrefix(s.value);
+      matched_fp = await fingerprintPrefix(value);
       break;
     }
   }
@@ -128,6 +130,7 @@ async function dualAcceptVerify(opts: {
   };
 }
 
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, reason: "method_not_allowed" }, 405);
@@ -147,18 +150,36 @@ Deno.serve(async (req: Request) => {
       .eq("app_key", PILOT_APP).maybeSingle();
     if (!appRow) return json({ ok: false, reason: "pilot_app_missing" }, 500);
 
+    // Step 4K: resolve slot refs from vos_secret_slot_state (reference rails).
+    // Falls back to legacy constants only if the row is missing (should never happen post-seed).
+    const { data: slotRow } = await admin.from("vos_secret_slot_state")
+      .select("active_secret_ref, next_secret_ref, previous_secret_ref, previous_grace_expires_at")
+      .eq("app_key", PILOT_APP).maybeSingle();
+    const ACTIVE_REF = slotRow?.active_secret_ref ?? FALLBACK_ACTIVE_REF;
+    const NEXT_REF = slotRow?.next_secret_ref ?? FALLBACK_NEXT_REF;
+    const PREVIOUS_REF = slotRow?.previous_secret_ref ?? null;
+    const slot_state_resolved_from = slotRow ? "vos_secret_slot_state" : "fallback_constants";
+
     // Kill-switches (read-only)
     const { data: killRows } = await admin.from("vos_kill_switches").select("scope, scope_target, state");
+
+    // Build resolved slot list for dual-accept (active first, then next).
+    // PREVIOUS is verify-only and not used in pilot dual-accept attempts.
+    const resolvedSlots: ResolvedSlot[] = [
+      { slot: "active", ref: ACTIVE_REF },
+      { slot: "next", ref: NEXT_REF },
+    ];
 
     // Slot inventory — values NEVER returned, only presence + fingerprint
     const activeVal = Deno.env.get(ACTIVE_REF);
     const nextVal = Deno.env.get(NEXT_REF);
-    const previousVal = Deno.env.get(PREVIOUS_REF);
+    const previousVal = PREVIOUS_REF ? Deno.env.get(PREVIOUS_REF) : undefined;
     const slot_inventory = {
       active: { secret_ref: ACTIVE_REF, present: !!activeVal, fingerprint_prefix: activeVal ? await fingerprintPrefix(activeVal) : null },
       next:   { secret_ref: NEXT_REF,   present: !!nextVal,   fingerprint_prefix: nextVal   ? await fingerprintPrefix(nextVal)   : null },
       previous: { secret_ref: PREVIOUS_REF, present: !!previousVal, fingerprint_prefix: null }, // never expose fp if unexpectedly present
     };
+
 
     const sample = { event_name: "step4g.host_dryrun", entity_id: "pilot_0001", body: "step-4g-host-only" };
     const payloadString = JSON.stringify(sample);
@@ -171,7 +192,7 @@ Deno.serve(async (req: Request) => {
       results.push({ id: "P1", name: "ACTIVE verifies", pass: false, actual: "ACTIVE secret missing in env" });
     } else {
       const sig = await hmacSha256Hex(activeVal, `${now}.${payloadString}`);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P1", name: "ACTIVE signature verifies via dual-accept",
         expected: "signature_valid=true, slot_used=active, would_dispatch=false, dispatch_blocked=true",
@@ -186,7 +207,7 @@ Deno.serve(async (req: Request) => {
       results.push({ id: "P2", name: "NEXT verifies", pass: false, actual: "NEXT secret missing in env" });
     } else {
       const sig = await hmacSha256Hex(nextVal, `${now}.${payloadString}`);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P2", name: "NEXT signature verifies via dual-accept",
         expected: `signature_valid=true, slot_used=next, secret_ref=${NEXT_REF}, fingerprint_prefix length=8, would_dispatch=false, dispatch_blocked=true`,
@@ -199,7 +220,7 @@ Deno.serve(async (req: Request) => {
     // Test 3 — Bad signature rejected
     {
       const bad = "0".repeat(64);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: bad, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: bad, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P3", name: "Bad signature rejected",
         expected: "signature_valid=false, would_dispatch=false",
@@ -213,7 +234,7 @@ Deno.serve(async (req: Request) => {
     {
       const stale = now - 3600;
       const sig = activeVal ? await hmacSha256Hex(activeVal, `${stale}.${payloadString}`) : "0".repeat(64);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: stale, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: stale, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P4", name: "Stale timestamp rejected",
         expected: "reason=timestamp_outside_window, would_dispatch=false",
@@ -226,7 +247,7 @@ Deno.serve(async (req: Request) => {
     // Test 5 — Kill-switch still blocks dispatch (with valid NEXT sig)
     if (nextVal) {
       const sig = await hmacSha256Hex(nextVal, `${now}.${payloadString}`);
-      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status });
+      const r = await dualAcceptVerify({ payloadString, signatureHex: sig, timestamp: now, killRows: killRows ?? [], appStatus: appRow.app_status, resolvedSlots });
       results.push({
         id: "P5", name: "Kill-switch blocks dispatch even with valid NEXT",
         expected: "signature_valid=true, kill_switch_clear=false, ok=false, would_dispatch=false",
@@ -251,13 +272,17 @@ Deno.serve(async (req: Request) => {
     }
 
     // Test 7 — PREVIOUS slot absent (must NOT be provisioned in Gate #1)
-    results.push({
-      id: "P7", name: "PREVIOUS slot absent",
-      expected: `${PREVIOUS_REF} not provisioned (present=false)`,
-      actual: `present=${!!previousVal}`,
-      pass: !previousVal,
-      safe: { secret_ref: PREVIOUS_REF, present: !!previousVal },
-    });
+    {
+      const prevLabel = PREVIOUS_REF ?? "VOS_HMAC_VANTO_OS_INTERNAL_PREVIOUS";
+      results.push({
+        id: "P7", name: "PREVIOUS slot absent",
+        expected: `${prevLabel} not provisioned (present=false)`,
+        actual: `previous_secret_ref=${PREVIOUS_REF ?? "null"}, present=${!!previousVal}`,
+        pass: !previousVal && PREVIOUS_REF === null,
+        safe: { secret_ref: PREVIOUS_REF, present: !!previousVal },
+      });
+    }
+
 
     // Postflight log counts
     const tableCount = async (t: string) => {
@@ -288,6 +313,8 @@ Deno.serve(async (req: Request) => {
       total: results.length,
       passed,
       failed: results.length - passed,
+      slot_state_resolved_from,        // ← "vos_secret_slot_state" or "fallback_constants"
+      slot_state_row: slotRow ?? null, // ← refs only, no values
       slot_inventory,                  // ← presence + fingerprint_prefix only, NEVER values
       results,
       postflight: {

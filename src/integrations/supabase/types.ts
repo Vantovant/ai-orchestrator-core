@@ -3926,6 +3926,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_secret_slot_state: {
+        Row: {
+          active_secret_ref: string
+          app_key: string
+          id: string
+          next_secret_ref: string | null
+          previous_grace_expires_at: string | null
+          previous_secret_ref: string | null
+          rotation_correlation_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          active_secret_ref: string
+          app_key: string
+          id?: string
+          next_secret_ref?: string | null
+          previous_grace_expires_at?: string | null
+          previous_secret_ref?: string | null
+          rotation_correlation_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          active_secret_ref?: string
+          app_key?: string
+          id?: string
+          next_secret_ref?: string | null
+          previous_grace_expires_at?: string | null
+          previous_secret_ref?: string | null
+          rotation_correlation_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       vos_signed_inbox: {
         Row: {
           attempt_count: number
