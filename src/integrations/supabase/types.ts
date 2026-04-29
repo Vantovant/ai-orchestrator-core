@@ -3884,6 +3884,48 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_rotation_log: {
+        Row: {
+          actor_user_id: string | null
+          app_key: string
+          correlation_id: string
+          created_at: string
+          event: string
+          fingerprint_prefix: string | null
+          id: string
+          notes: Json | null
+          reason_code: string | null
+          secret_ref: string | null
+          slot: string | null
+        }
+        Insert: {
+          actor_user_id?: string | null
+          app_key: string
+          correlation_id: string
+          created_at?: string
+          event: string
+          fingerprint_prefix?: string | null
+          id?: string
+          notes?: Json | null
+          reason_code?: string | null
+          secret_ref?: string | null
+          slot?: string | null
+        }
+        Update: {
+          actor_user_id?: string | null
+          app_key?: string
+          correlation_id?: string
+          created_at?: string
+          event?: string
+          fingerprint_prefix?: string | null
+          id?: string
+          notes?: Json | null
+          reason_code?: string | null
+          secret_ref?: string | null
+          slot?: string | null
+        }
+        Relationships: []
+      }
       vos_signed_inbox: {
         Row: {
           attempt_count: number
