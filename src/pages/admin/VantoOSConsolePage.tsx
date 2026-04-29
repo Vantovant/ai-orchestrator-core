@@ -348,6 +348,10 @@ export default function VantoOSConsolePage() {
         <TabsContent value="test4g" className="space-y-4 pt-4">
           <Step4GPilotHarness />
         </TabsContent>
+
+        <TabsContent value="leads" className="pt-4">
+          <LeadInboxPanel />
+        </TabsContent>
       </Tabs>
     </div>
   );
