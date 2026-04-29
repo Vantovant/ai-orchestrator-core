@@ -290,11 +290,11 @@ export default function VantoOSConsolePage() {
           </section>
           <section>
             <h3 className="font-semibold mb-2">Decision Log</h3>
-            <DataTable rows={decisionLog} cols={["decision", "rationale", "created_at"]} />
+            <DataTable rows={decisionLog} cols={["decision", "reason", "detail", "decided_by", "created_at"]} />
           </section>
           <section>
             <h3 className="font-semibold mb-2">Kill-Switch Log</h3>
-            <DataTable rows={killswitchLog} cols={["scope", "app_code", "from_state", "to_state", "actor", "created_at"]} />
+            <DataTable rows={killswitchLog} cols={["scope", "scope_target", "prev_state", "new_state", "reason", "changed_by", "created_at"]} />
           </section>
         </TabsContent>
 
