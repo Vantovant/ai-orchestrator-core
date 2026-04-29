@@ -423,8 +423,10 @@ function Step4DTestHarness({ apps }: { apps: string[] }) {
   // Explicit admin-authenticated fetch. Surfaces HTTP status + body, never the token.
   async function callFn(url: string, body: any) {
     const token = await getAdminToken();
+    const projectUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const safeUrl = url.startsWith(projectUrl) ? url : "(masked)";
     if (!token) {
-      return { _error: "NO_ADMIN_SESSION", _http_status: null, _raw_body: null, _auth_attached: false };
+      return { _error: "NO_ADMIN_SESSION", _http_status: null, _raw_body: null, _auth_attached: false, _apikey_attached: false, _fn_url: safeUrl };
     }
     let resp: Response;
     let rawText = "";
@@ -440,24 +442,37 @@ function Step4DTestHarness({ apps }: { apps: string[] }) {
       });
       rawText = await resp.text();
     } catch (e: any) {
-      return { _error: `network_error: ${e?.message ?? String(e)}`, _http_status: null, _raw_body: null, _auth_attached: true };
+      const msg = e?.message ?? String(e);
+      const preflightSuspect = /failed to fetch|networkerror|cors/i.test(msg);
+      return {
+        _error: `network_error: ${msg}`,
+        _http_status: null,
+        _raw_body: null,
+        _auth_attached: true,
+        _apikey_attached: !!ANON_KEY,
+        _preflight_suspect: preflightSuspect,
+        _fn_url: safeUrl,
+      };
     }
     let parsed: any = null;
     try { parsed = rawText ? JSON.parse(rawText) : null; } catch { /* keep raw */ }
     if (parsed && typeof parsed === "object") {
-      return { ...parsed, _http_status: resp.status, _raw_body: rawText, _auth_attached: true };
+      return { ...parsed, _http_status: resp.status, _raw_body: rawText, _auth_attached: true, _apikey_attached: !!ANON_KEY, _fn_url: safeUrl };
     }
-    return { _error: `non_json_response`, _http_status: resp.status, _raw_body: rawText, _auth_attached: true };
+    return { _error: `non_json_response`, _http_status: resp.status, _raw_body: rawText, _auth_attached: true, _apikey_attached: !!ANON_KEY, _fn_url: safeUrl };
   }
 
   function fmtError(r: any): string {
     const parts: string[] = [];
+    if (r?._fn_url) parts.push(`url=${r._fn_url}`);
     if (r?._http_status != null) parts.push(`http=${r._http_status}`);
     if (r?._error) parts.push(`_error=${r._error}`);
     if (r?.reason) parts.push(`reason=${r.reason}`);
     if (r?.message) parts.push(`message=${r.message}`);
-    parts.push(`auth_attached=${r?._auth_attached === true}`);
-    if (r?._raw_body) parts.push(`body=${String(r._raw_body).slice(0, 240)}`);
+    parts.push(`auth=${r?._auth_attached === true}`);
+    parts.push(`apikey=${r?._apikey_attached === true}`);
+    if (r?._preflight_suspect) parts.push(`preflight_suspect=true`);
+    if (r?._raw_body) parts.push(`body=${String(r._raw_body).slice(0, 200)}`);
     return parts.join(" | ");
   }
 
