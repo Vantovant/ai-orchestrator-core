@@ -214,6 +214,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="inbox">Signed Inbox</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
           <TabsTrigger value="dryrun">Dry-Run Preview</TabsTrigger>
+          <TabsTrigger value="test4d">Step 4D Tests</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
