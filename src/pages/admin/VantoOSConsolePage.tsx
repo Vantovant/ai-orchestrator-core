@@ -22,12 +22,11 @@ const LOCKED_FLAGS = [
 
 const SAMPLE_PACKET = JSON.stringify(
   {
-    packet_id: "pkt_test_0001",
-    source_app: "vanto_crm",
-    target_app: "vantoos_executive",
-    event_type: "lead_captured",
+    source_app: "app_vanto_crm",
+    event_name: "lead_captured",
     timestamp: Math.floor(Date.now() / 1000),
     idempotency_key: "a".repeat(32),
+    signature_header: "v1=" + "0".repeat(64),
     payload: {
       name: "Test Lead",
       email: "test@example.com",
@@ -116,7 +115,7 @@ export default function VantoOSConsolePage() {
     try {
       const parsed = JSON.parse(packetText);
       const { data, error } = await supabase.functions.invoke("vos-dry-run", {
-        body: { packet: parsed },
+        body: parsed,
       });
       if (error) throw error;
       setDryRunResult(data);
