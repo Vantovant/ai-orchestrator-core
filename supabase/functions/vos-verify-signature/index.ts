@@ -91,7 +91,7 @@ function parseSignatureHeader(header: string | null): { version: string; hex: st
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   // 1. Rate limit (per IP, in-memory)
   const rl = rateLimit(req);
