@@ -3983,6 +3983,78 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_proposal_queue: {
+        Row: {
+          app_id: string
+          confidence: string
+          created_at: string
+          created_by_system: string
+          dedupe_key: string
+          dispatch_blocked: boolean
+          event_name: string | null
+          id: string
+          intelligence_category: string
+          proposal_status: string
+          proposal_summary: string
+          proposal_title: string
+          proposal_type: string
+          reason: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          risk_level: string
+          safety_blocked: boolean
+          source_audit_id: string | null
+          source_receipt_id: string | null
+          would_dispatch: boolean
+        }
+        Insert: {
+          app_id: string
+          confidence: string
+          created_at?: string
+          created_by_system?: string
+          dedupe_key: string
+          dispatch_blocked?: boolean
+          event_name?: string | null
+          id?: string
+          intelligence_category: string
+          proposal_status?: string
+          proposal_summary: string
+          proposal_title: string
+          proposal_type: string
+          reason: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_level: string
+          safety_blocked?: boolean
+          source_audit_id?: string | null
+          source_receipt_id?: string | null
+          would_dispatch?: boolean
+        }
+        Update: {
+          app_id?: string
+          confidence?: string
+          created_at?: string
+          created_by_system?: string
+          dedupe_key?: string
+          dispatch_blocked?: boolean
+          event_name?: string | null
+          id?: string
+          intelligence_category?: string
+          proposal_status?: string
+          proposal_summary?: string
+          proposal_title?: string
+          proposal_type?: string
+          reason?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_level?: string
+          safety_blocked?: boolean
+          source_audit_id?: string | null
+          source_receipt_id?: string | null
+          would_dispatch?: boolean
+        }
+        Relationships: []
+      }
       vos_rate_limit_counters: {
         Row: {
           bucket_key: string
