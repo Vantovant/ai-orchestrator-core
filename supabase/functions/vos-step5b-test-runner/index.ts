@@ -308,10 +308,11 @@ Deno.serve(async (req) => {
       setResult("T10","axis_b_drift_blocked","CHECK axis_b", error?.message?.slice(0,120) ?? "no_error", !!error);
     }
 
-    // T11 — banned wording
+    // T11 — banned wording (must use admin-authenticated client so we pass the
+    // admin gate in the guard trigger and reach the banned-wording branch).
     {
       const row = await buildRow({ note_body: "please send the WhatsApp now" }, "T11");
-      const { error } = await sb.from("vos_crm_internal_notes").insert(row);
+      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
       setResult("T11","banned_wording_blocked","forbidden_note_wording", error?.message?.slice(0,120) ?? "no_error", !!error && /forbidden_note_wording/.test(error.message));
     }
 
@@ -367,21 +368,33 @@ Deno.serve(async (req) => {
         !!error && /hard_delete_forbidden/.test(error.message));
     } else setResult("T14","hard_delete_blocked","hard_delete_forbidden","no_good_note", false);
 
-    // T15 — Archive: admin allowed; non-admin denied
-    let archivePass = false;
+    // T15 — Archive: admin allowed (admin JWT path); non-admin (anon) must NOT
+    // mutate the row. Anon may receive no error because RLS hides the row, so
+    // we additionally assert that no rows were affected and the row is unchanged.
     if (goodNoteId) {
-      const { error: e1 } = await sb.from("vos_crm_internal_notes").update({
+      const { error: e1, data: adminUpdated } = await sbCaller.from("vos_crm_internal_notes").update({
         note_status: "archived",
         archived_at: new Date().toISOString(),
         archived_by: userA,
         archive_reason: "step5b test archive",
-      }).eq("id", goodNoteId);
-      const { error: e2 } = await sbAnon.from("vos_crm_internal_notes").update({
+      }).eq("id", goodNoteId).select("id, note_status");
+
+      const { error: e2, data: anonUpdated } = await sbAnon.from("vos_crm_internal_notes").update({
         note_status: "archived", archived_at: new Date().toISOString(), archived_by: userA, archive_reason: "anon try"
-      }).eq("id", goodNoteId);
-      archivePass = !e1 && !!e2;
-      setResult("T15","archive_admin_only", "admin ok / anon denied",
-        `admin_err=${e1?.message ?? "ok"} anon_err=${e2?.message ?? "no_error"}`, archivePass);
+      }).eq("id", goodNoteId).select("id");
+
+      // Verify post-state: row remains 'archived' (from admin update), not mutated by anon
+      const { data: postRow } = await sb.from("vos_crm_internal_notes")
+        .select("note_status, archive_reason").eq("id", goodNoteId).maybeSingle();
+
+      const adminOk = !e1 && Array.isArray(adminUpdated) && adminUpdated.length === 1;
+      const anonBlocked = !!e2 || !anonUpdated || anonUpdated.length === 0;
+      const stateOk = postRow?.note_status === "archived" && postRow?.archive_reason === "step5b test archive";
+
+      const archivePass = adminOk && anonBlocked && stateOk;
+      setResult("T15","archive_admin_only", "admin ok / anon denied or zero-rows",
+        `admin_err=${e1?.message ?? "ok"} admin_rows=${adminUpdated?.length ?? 0} anon_err=${e2?.message ?? "no_error"} anon_rows=${anonUpdated?.length ?? 0} post_status=${postRow?.note_status}`,
+        archivePass);
     } else setResult("T15","archive_admin_only","admin ok / anon denied","no_good_note",false);
 
     // T16 — Correction requires corrects_note_id (recorder rejects without it)
@@ -404,11 +417,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // T17 — Invalid lead_inbox reference
+    // T17 — Invalid lead_inbox reference (must use admin-authenticated client
+    // so we pass the admin gate and reach the lead_inbox FK branch in the trigger).
     {
       const fakeLead = crypto.randomUUID();
       const row = await buildRow({ contact_ref_type: "lead_inbox", contact_ref_id: fakeLead }, "T17");
-      const { error } = await sb.from("vos_crm_internal_notes").insert(row);
+      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
       setResult("T17","invalid_lead_ref_blocked","lead_inbox_not_found", error?.message?.slice(0,120) ?? "no_error",
         !!error && /lead_inbox_not_found/.test(error.message));
     }
@@ -521,8 +535,10 @@ Deno.serve(async (req) => {
       if (expiredDraftId) cleanup.push({ table: "vos_integration_action_drafts", ids: [expiredDraftId] });
     }
     {
+      // Use admin-authenticated client so we pass the admin gate first and
+      // reach the approval_expired branch in the trigger.
       const row = await buildRow({ source_manual_action_id: expiredManualId, source_approval_request_id: expiredApprovalId, source_integration_draft_id: expiredDraftId }, "T23");
-      const { error } = await sb.from("vos_crm_internal_notes").insert(row);
+      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
       setResult("T23","expired_approval_blocked","approval_expired", error?.message?.slice(0,120) ?? "no_error",
         !!error && /approval_expired/.test(error.message));
     }
