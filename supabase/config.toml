@@ -183,3 +183,9 @@ verify_jwt = false
 [functions.vos-step4l-test-runner]
 verify_jwt = false
 
+[functions.vos-integration-draft-recorder]
+verify_jwt = false
+
+[functions.vos-step4y-test-runner]
+verify_jwt = false
+
