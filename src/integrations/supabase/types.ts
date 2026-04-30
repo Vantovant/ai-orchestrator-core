@@ -4090,6 +4090,99 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_manual_action_log: {
+        Row: {
+          action_result: Json
+          action_status: string
+          action_summary: string
+          action_title: string
+          action_type: string
+          admin_note: string | null
+          app_id: string
+          axis_a_snapshot: string
+          axis_b_snapshot: string
+          created_at: string
+          customer_visible: boolean
+          dedupe_key: string
+          downstream_target: string
+          downstream_write_performed: boolean
+          event_name: string | null
+          external_call_performed: boolean
+          id: string
+          performed_at: string
+          performed_by: string
+          reviewed_by: string
+          rollback_available: boolean
+          rollback_status: string | null
+          safety_blocked_snapshot: boolean
+          second_reviewed_by: string
+          source_approval_request_id: string
+          source_dry_run_id: string
+          source_proposal_id: string
+          source_receipt_id: string | null
+        }
+        Insert: {
+          action_result?: Json
+          action_status?: string
+          action_summary: string
+          action_title: string
+          action_type: string
+          admin_note?: string | null
+          app_id: string
+          axis_a_snapshot?: string
+          axis_b_snapshot?: string
+          created_at?: string
+          customer_visible?: boolean
+          dedupe_key: string
+          downstream_target?: string
+          downstream_write_performed?: boolean
+          event_name?: string | null
+          external_call_performed?: boolean
+          id?: string
+          performed_at?: string
+          performed_by: string
+          reviewed_by: string
+          rollback_available?: boolean
+          rollback_status?: string | null
+          safety_blocked_snapshot?: boolean
+          second_reviewed_by: string
+          source_approval_request_id: string
+          source_dry_run_id: string
+          source_proposal_id: string
+          source_receipt_id?: string | null
+        }
+        Update: {
+          action_result?: Json
+          action_status?: string
+          action_summary?: string
+          action_title?: string
+          action_type?: string
+          admin_note?: string | null
+          app_id?: string
+          axis_a_snapshot?: string
+          axis_b_snapshot?: string
+          created_at?: string
+          customer_visible?: boolean
+          dedupe_key?: string
+          downstream_target?: string
+          downstream_write_performed?: boolean
+          event_name?: string | null
+          external_call_performed?: boolean
+          id?: string
+          performed_at?: string
+          performed_by?: string
+          reviewed_by?: string
+          rollback_available?: boolean
+          rollback_status?: string | null
+          safety_blocked_snapshot?: boolean
+          second_reviewed_by?: string
+          source_approval_request_id?: string
+          source_dry_run_id?: string
+          source_proposal_id?: string
+          source_receipt_id?: string | null
+        }
+        Relationships: []
+      }
       vos_outbound_log: {
         Row: {
           created_at: string
