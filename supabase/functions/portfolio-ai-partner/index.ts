@@ -72,6 +72,35 @@ function detectDiaryTimeFilter(prompt: string): "today" | "week" | "all" {
   return "all";
 }
 
+// ─── Central Brain (governance/console) intent detection ───
+const CENTRAL_BRAIN_PATTERNS = [
+  /\bcentral\s+brain\b/i,
+  /\b(vos|vanto\s*os)\s+(console|admin|governance|activity)\b/i,
+  /\b(admin|vos)\s+console\b/i,
+  /\b(receipts?|approvals?|dry[\s-]*runs?|manual\s+actions?|integration\s+drafts?|crm\s+internal\s+notes?|kill[\s-]*switch(?:es)?|killswitches?|inbound\s+log|outbound\s+log|decision\s+log|audit\s+log|signed\s+inbox|inbox\s+receipts?|proposal\s+queue|platform\s+flags?)\b/i,
+  /\b(axis\s*[abc]|master\s+prospector|phase\s*4a|step\s*5[a-g])\b/i,
+  /\bgovernance\s+(activity|state|status|review)\b/i,
+  /\bwhat\s+(is\s+)?happening\s+in\s+(the\s+)?(central\s+brain|console|admin|vos)\b/i,
+  /\bwhat\s+did\s+(i|we)\s+(approve|archive|record|review)\b/i,
+];
+function detectCentralBrainIntent(prompt: string, tags: string[]): boolean {
+  if (tags.some(t => /^@(central[_-]?brain|console|admin|governance)$/i.test(t))) return true;
+  return CENTRAL_BRAIN_PATTERNS.some(p => p.test(prompt));
+}
+
+const CENTRAL_BRAIN_SYSTEM_SUPPLEMENT = `CENTRAL BRAIN (GOVERNANCE) MODE:
+You have read-only visibility into the VantoOS Admin Console / Central Brain governance tables.
+This includes Receipts, Inbound/Outbound/Decision/Killswitch logs, Inbox Receipts, Proposal Queue,
+Dry-Run Actions, Approval Requests (two-key state machine), Manual Action log, Integration Drafts,
+CRM Internal Notes, and Platform Flags (Axis A/B/C state).
+
+Rules in this mode:
+- Report what is recorded in these tables. Cite the table or surface (e.g. "Approval Gate", "Receipts").
+- Surface counts, recent activity, status transitions, and anomalies (e.g. axis drift, expired approvals).
+- Never propose, suggest, or describe an external write. Axis A is RED, Axis B is OFF; honor that.
+- Never invent records. If a table is empty in the retrieved context, say so plainly.
+- Translate to executive language: "Receipts" not "logs", "Approvals" not "rows in vos_approval_requests".`;
+
 function getTodayRange(tzOffsetMinutes?: number): { todayStart: string; todayEnd: string; todayDate: string } {
   const now = new Date();
   if (tzOffsetMinutes != null && !isNaN(tzOffsetMinutes)) {
@@ -778,9 +807,81 @@ STRICT RULES:
 
 
 
+// ─── Central Brain retrieval (admin-only governance/console activity) ───
+async function isAdmin(supabase: any, userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (error) return false;
+  return !!data;
+}
+
+async function retrieveCentralBrain(supabase: any): Promise<{ text: string; counts: Record<string, number> }> {
+  const counts: Record<string, number> = {};
+  const lim = 25;
+
+  const safe = async (table: string, sel: string, order = "created_at") => {
+    const { data, error } = await supabase
+      .from(table).select(sel).order(order, { ascending: false }).limit(lim);
+    if (error) { counts[table] = -1; return [] as any[]; }
+    counts[table] = (data || []).length;
+    return (data || []) as any[];
+  };
+
+  const [
+    flags,
+    inbound, outbound, decision, killswitchLog,
+    inboxReceipts, proposals, dryRuns, approvals,
+    manualActions, drafts, crmNotes,
+  ] = await Promise.all([
+    supabase.from("vos_platform_flags").select("flag_key,flag_value,updated_at").order("flag_key").limit(50).then((r: any) => { counts["vos_platform_flags"] = (r.data||[]).length; return r.data || []; }, () => []),
+    safe("vos_inbound_log", "id,source_app,event_name,received_at,verification_status", "received_at"),
+    safe("vos_outbound_log", "id,target_app,event_name,sent_at,delivery_status", "sent_at"),
+    safe("vos_decision_log", "id,decision_type,decision_outcome,created_at"),
+    safe("vos_killswitch_log", "id,flag_key,old_value,new_value,changed_at,reason", "changed_at"),
+    safe("vos_inbox_receipts", "id,source_app,event_name,receipt_status,created_at"),
+    safe("vos_proposal_queue", "id,proposal_type,proposal_status,proposal_title,risk_level,created_at"),
+    safe("vos_dry_run_actions", "id,dry_run_type,dry_run_status,dry_run_title,created_at"),
+    safe("vos_approval_requests", "id,approval_type,approval_status,approval_title,reviewed_by,second_reviewed_by,expires_at,created_at"),
+    safe("vos_manual_action_log", "id,action_type,action_status,action_title,performed_at,axis_a_snapshot,axis_b_snapshot", "performed_at"),
+    safe("vos_integration_action_drafts", "id,target_app,integration_action_type,draft_status,draft_title,created_at"),
+    safe("vos_crm_internal_notes", "id,note_kind,note_status,contact_ref_type,created_at,archived_at,archive_reason"),
+  ]);
+
+  const fmt = (rows: any[], fields: string[]) =>
+    rows.length === 0
+      ? "  (none)"
+      : rows.slice(0, 10).map(r => "  • " + fields.map(f => `${f}=${JSON.stringify(r[f] ?? null)}`).join(" ")).join("\n");
+
+  const sections: string[] = [];
+  sections.push("═══ CENTRAL BRAIN — GOVERNANCE & CONSOLE ACTIVITY ═══");
+  sections.push("(read-only snapshot, last " + lim + " rows per table)");
+  sections.push("");
+  sections.push("PLATFORM FLAGS (Axis state):");
+  sections.push(flags.length ? flags.map((f: any) => `  • ${f.flag_key} = ${f.flag_value}`).join("\n") : "  (none)");
+  sections.push("");
+  sections.push(`INBOUND LOG (${counts["vos_inbound_log"]}):`);   sections.push(fmt(inbound, ["source_app","event_name","received_at","verification_status"]));
+  sections.push(`OUTBOUND LOG (${counts["vos_outbound_log"]}):`); sections.push(fmt(outbound, ["target_app","event_name","sent_at","delivery_status"]));
+  sections.push(`DECISION LOG (${counts["vos_decision_log"]}):`); sections.push(fmt(decision, ["decision_type","decision_outcome","created_at"]));
+  sections.push(`KILLSWITCH CHANGES (${counts["vos_killswitch_log"]}):`); sections.push(fmt(killswitchLog, ["flag_key","old_value","new_value","changed_at","reason"]));
+  sections.push(`INBOX RECEIPTS (${counts["vos_inbox_receipts"]}):`); sections.push(fmt(inboxReceipts, ["source_app","event_name","receipt_status","created_at"]));
+  sections.push(`PROPOSAL QUEUE (${counts["vos_proposal_queue"]}):`); sections.push(fmt(proposals, ["proposal_type","proposal_status","proposal_title","risk_level","created_at"]));
+  sections.push(`DRY-RUN ACTIONS (${counts["vos_dry_run_actions"]}):`); sections.push(fmt(dryRuns, ["dry_run_type","dry_run_status","dry_run_title","created_at"]));
+  sections.push(`APPROVAL REQUESTS (${counts["vos_approval_requests"]}):`); sections.push(fmt(approvals, ["approval_type","approval_status","approval_title","reviewed_by","second_reviewed_by","expires_at","created_at"]));
+  sections.push(`MANUAL ACTION LOG (${counts["vos_manual_action_log"]}):`); sections.push(fmt(manualActions, ["action_type","action_status","action_title","performed_at","axis_a_snapshot","axis_b_snapshot"]));
+  sections.push(`INTEGRATION DRAFTS (${counts["vos_integration_action_drafts"]}):`); sections.push(fmt(drafts, ["target_app","integration_action_type","draft_status","draft_title","created_at"]));
+  sections.push(`CRM INTERNAL NOTES (${counts["vos_crm_internal_notes"]}):`); sections.push(fmt(crmNotes, ["note_kind","note_status","contact_ref_type","created_at","archived_at","archive_reason"]));
+  sections.push("═══ END CENTRAL BRAIN ═══");
+
+  return { text: sections.join("\n"), counts };
+}
+
 async function buildRetrievalContext(
   supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
-): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number>; isDiaryOnly: boolean; diaryEvidence: DiaryEvidence | null }> {
+): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number>; isDiaryOnly: boolean; diaryEvidence: DiaryEvidence | null; isCentralBrain: boolean; centralBrainCounts: Record<string, number> }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
   const isDiaryOnly = detectDiaryOnlyIntent(prompt);
 
@@ -798,7 +899,24 @@ async function buildRetrievalContext(
     const context = diaryResult.text
       ? "═══ VOICE DIARY (EXCLUSIVE SOURCE — no other data included) ═══\n\n" + diaryResult.text + "\n\n═══ END DIARY ═══"
       : "No Voice Diary entries found for the requested period.";
-    return { context: redact(context), retrievalMeta: emptyMeta, dataSources, isDailyReview: false, dailyReviewCounts: {}, isDiaryOnly: true, diaryEvidence: diaryResult.evidence };
+    return { context: redact(context), retrievalMeta: emptyMeta, dataSources, isDailyReview: false, dailyReviewCounts: {}, isDiaryOnly: true, diaryEvidence: diaryResult.evidence, isCentralBrain: false, centralBrainCounts: {} };
+  }
+
+  // ─── CENTRAL BRAIN MODE (admin-only governance/console activity) ───
+  const wantsCentralBrain = detectCentralBrainIntent(prompt, tags);
+  let centralBrainText = "";
+  let centralBrainCounts: Record<string, number> = {};
+  let isCentralBrain = false;
+  if (wantsCentralBrain) {
+    if (await isAdmin(supabase, userId)) {
+      const cb = await retrieveCentralBrain(supabase);
+      centralBrainText = cb.text;
+      centralBrainCounts = cb.counts;
+      isCentralBrain = true;
+    } else {
+      centralBrainText = "═══ CENTRAL BRAIN ═══\nAccess denied: Central Brain (governance) data is restricted to admin roles.\n═══ END CENTRAL BRAIN ═══";
+      isCentralBrain = true;
+    }
   }
 
   // ─── NORMAL MODE (unchanged) ───
@@ -833,20 +951,25 @@ async function buildRetrievalContext(
   }
   if (diaryResult.text) dataSources.push("voice_diary");
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
+  if (isCentralBrain) dataSources.push("central_brain");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
   const contextParts = [knowledgeResult.text, ...parts, diaryResult.text].filter(Boolean);
 
   let context = "";
+  if (isCentralBrain && centralBrainText) {
+    context = centralBrainText + "\n\n";
+  }
   if (isDailyReview && todayResult.text) {
-    context = "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
+    context += "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
   }
   context += "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
-  if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
+  const cap = isCentralBrain ? RETRIEVAL_CAP + 8000 : RETRIEVAL_CAP;
+  if (context.length > cap) context = context.slice(0, cap) + "\n[CONTEXT_TRIMMED]";
 
   knowledgeResult.meta.data_sources = [...new Set([...dataSources, ...knowledgeResult.meta.data_sources])];
 
-  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts, isDiaryOnly: false, diaryEvidence: diaryResult.evidence };
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts, isDiaryOnly: false, diaryEvidence: diaryResult.evidence, isCentralBrain, centralBrainCounts };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────
@@ -1008,7 +1131,7 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts, isDiaryOnly, diaryEvidence } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts, isDiaryOnly, diaryEvidence, isCentralBrain, centralBrainCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
 
       // Enrich retrieval meta with mode info
       if (isDailyReview) {
@@ -1018,6 +1141,10 @@ serve(async (req) => {
       if (isDiaryOnly) {
         (retrievalMeta as any).is_diary_only = true;
         (retrievalMeta as any).diary_evidence = diaryEvidence;
+      }
+      if (isCentralBrain) {
+        (retrievalMeta as any).is_central_brain = true;
+        (retrievalMeta as any).central_brain_counts = centralBrainCounts;
       }
 
       const retrievalNotes = [
@@ -1042,6 +1169,9 @@ serve(async (req) => {
       let systemSupplement = "";
       if (isDiaryOnly) systemSupplement = DIARY_ONLY_SYSTEM_SUPPLEMENT;
       else if (isDailyReview) systemSupplement = DAILY_REVIEW_SYSTEM_SUPPLEMENT;
+      if (isCentralBrain) {
+        systemSupplement = (systemSupplement ? systemSupplement + "\n\n" : "") + CENTRAL_BRAIN_SYSTEM_SUPPLEMENT;
+      }
 
       const messages: any[] = [
         { role: "system", content: SYSTEM_PROMPT + (systemSupplement ? "\n\n" + systemSupplement : "") },
