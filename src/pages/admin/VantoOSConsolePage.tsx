@@ -366,6 +366,10 @@ export default function VantoOSConsolePage() {
         <TabsContent value="test4o" className="space-y-4 pt-4">
           <Step4OTestsTab />
         </TabsContent>
+
+        <TabsContent value="proposals" className="space-y-4 pt-4">
+          <ProposalQueueTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
