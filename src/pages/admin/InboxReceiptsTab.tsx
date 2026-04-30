@@ -147,6 +147,22 @@ export default function InboxReceiptsTab() {
         </CardContent>
       </Card>
 
+      {testResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Step 4L Test Suite — Last Run</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Toggles Axis B for the test only, then restores OFF + engaged. Axis A never touched.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto max-h-96">
+              {JSON.stringify(testResult, null, 2)}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
