@@ -535,8 +535,10 @@ Deno.serve(async (req) => {
       if (expiredDraftId) cleanup.push({ table: "vos_integration_action_drafts", ids: [expiredDraftId] });
     }
     {
+      // Use admin-authenticated client so we pass the admin gate first and
+      // reach the approval_expired branch in the trigger.
       const row = await buildRow({ source_manual_action_id: expiredManualId, source_approval_request_id: expiredApprovalId, source_integration_draft_id: expiredDraftId }, "T23");
-      const { error } = await sb.from("vos_crm_internal_notes").insert(row);
+      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
       setResult("T23","expired_approval_blocked","approval_expired", error?.message?.slice(0,120) ?? "no_error",
         !!error && /approval_expired/.test(error.message));
     }
