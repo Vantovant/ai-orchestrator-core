@@ -899,7 +899,24 @@ async function buildRetrievalContext(
     const context = diaryResult.text
       ? "═══ VOICE DIARY (EXCLUSIVE SOURCE — no other data included) ═══\n\n" + diaryResult.text + "\n\n═══ END DIARY ═══"
       : "No Voice Diary entries found for the requested period.";
-    return { context: redact(context), retrievalMeta: emptyMeta, dataSources, isDailyReview: false, dailyReviewCounts: {}, isDiaryOnly: true, diaryEvidence: diaryResult.evidence };
+    return { context: redact(context), retrievalMeta: emptyMeta, dataSources, isDailyReview: false, dailyReviewCounts: {}, isDiaryOnly: true, diaryEvidence: diaryResult.evidence, isCentralBrain: false, centralBrainCounts: {} };
+  }
+
+  // ─── CENTRAL BRAIN MODE (admin-only governance/console activity) ───
+  const wantsCentralBrain = detectCentralBrainIntent(prompt, tags);
+  let centralBrainText = "";
+  let centralBrainCounts: Record<string, number> = {};
+  let isCentralBrain = false;
+  if (wantsCentralBrain) {
+    if (await isAdmin(supabase, userId)) {
+      const cb = await retrieveCentralBrain(supabase);
+      centralBrainText = cb.text;
+      centralBrainCounts = cb.counts;
+      isCentralBrain = true;
+    } else {
+      centralBrainText = "═══ CENTRAL BRAIN ═══\nAccess denied: Central Brain (governance) data is restricted to admin roles.\n═══ END CENTRAL BRAIN ═══";
+      isCentralBrain = true;
+    }
   }
 
   // ─── NORMAL MODE (unchanged) ───
