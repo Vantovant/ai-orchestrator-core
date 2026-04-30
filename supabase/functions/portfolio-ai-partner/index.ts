@@ -1169,6 +1169,9 @@ serve(async (req) => {
       let systemSupplement = "";
       if (isDiaryOnly) systemSupplement = DIARY_ONLY_SYSTEM_SUPPLEMENT;
       else if (isDailyReview) systemSupplement = DAILY_REVIEW_SYSTEM_SUPPLEMENT;
+      if (isCentralBrain) {
+        systemSupplement = (systemSupplement ? systemSupplement + "\n\n" : "") + CENTRAL_BRAIN_SYSTEM_SUPPLEMENT;
+      }
 
       const messages: any[] = [
         { role: "system", content: SYSTEM_PROMPT + (systemSupplement ? "\n\n" + systemSupplement : "") },
