@@ -11,6 +11,7 @@ import { Shield, ShieldAlert, Lock, RefreshCw, AlertTriangle, CheckCircle2, Flas
 import { toast } from "sonner";
 import InboxReceiptsTab from "./InboxReceiptsTab";
 import ReceiptIntelligenceTab from "./ReceiptIntelligenceTab";
+import Step4OTestsTab from "./Step4OTestsTab";
 
 type Row = Record<string, any>;
 
@@ -220,6 +221,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="test4g">Step 4G Pilot</TabsTrigger>
           <TabsTrigger value="receipts">Inbox Receipts</TabsTrigger>
           <TabsTrigger value="intel">Receipt Intelligence</TabsTrigger>
+          <TabsTrigger value="test4o">Step 4O Tests</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -357,6 +359,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="intel" className="space-y-4 pt-4">
           <ReceiptIntelligenceTab />
+        </TabsContent>
+
+        <TabsContent value="test4o" className="space-y-4 pt-4">
+          <Step4OTestsTab />
         </TabsContent>
       </Tabs>
     </div>
