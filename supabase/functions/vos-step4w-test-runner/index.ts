@@ -87,19 +87,13 @@ Deno.serve(async (req) => {
   const userB = (otherAdmins && otherAdmins[0]?.user_id) || crypto.randomUUID();
 
   try {
-    // Receipt
-    const { data: rec, error: recErr } = await sb.from("vos_inbox_receipts").insert({
-      source_app: TAG,
-      event_name: "test_event",
-      idempotency_key: `${TAG}-${crypto.randomUUID()}`,
-      payload_redacted: {},
-      processing_state: "received",
-    }).select("id").maybeSingle();
-    if (recErr) details["receipt_insert_error"] = recErr.message;
-    receiptId = rec?.id ?? null;
-    if (receiptId) cleanup.push({ table: "vos_inbox_receipts", ids: [receiptId] });
+    // Receipt step skipped — table public.vos_inbox_receipts is not present in this schema
+    // and source_receipt_id on downstream tables is nullable. Leaving the chain receipt-less
+    // is the verified pattern for synthetic Step 4W fixtures.
+    receiptId = null;
 
-    // Proposal — built directly without intelligence row (intelligence FK may be optional)
+    // Proposal — built directly without intelligence/receipt rows.
+    // NOTE: vos_proposal_queue.confidence is TEXT enum (low|medium|high), not numeric.
     const propRow: any = {
       app_id: TAG,
       event_name: "test_event",
@@ -108,7 +102,7 @@ Deno.serve(async (req) => {
       proposal_type: "manual_review",
       proposal_title: "Test proposal title",
       proposal_summary: "Test proposal summary for step 4w runner.",
-      confidence: 0.9,
+      confidence: "high",
       reason: "test_runner",
       proposal_status: "proposed",
       safety_blocked: true,
@@ -116,7 +110,6 @@ Deno.serve(async (req) => {
       dispatch_blocked: true,
       created_by_system: "step4w-test-runner",
       dedupe_key: `${TAG}-prop-${crypto.randomUUID()}`,
-      source_receipt_id: receiptId,
     };
     const { data: prop, error: propErr } = await sb.from("vos_proposal_queue").insert(propRow).select("id").maybeSingle();
     if (propErr) details["proposal_insert_error"] = propErr.message;
