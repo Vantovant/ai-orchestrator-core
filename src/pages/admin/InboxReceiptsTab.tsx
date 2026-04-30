@@ -52,11 +52,73 @@ export default function InboxReceiptsTab() {
   const runTests = async () => {
     setTestBusy(true);
     setTestResult(null);
+    const fnName = "vos-step4l-test-runner";
+    const diagnostics: Record<string, unknown> = {
+      function: fnName,
+      admin_session_exists: false,
+      access_token_exists: false,
+      authorization_header_attached: false,
+      apikey_attached: false,
+    };
     try {
-      const { data, error } = await supabase.functions.invoke("vos-step4l-test-runner", { body: {} });
-      if (error) setTestResult({ ok: false, error: error.message });
-      else setTestResult(data);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token ?? null;
+      diagnostics.admin_session_exists = !!sessionData?.session;
+      diagnostics.access_token_exists = !!accessToken;
+
+      if (!accessToken) {
+        setTestResult({ ok: false, error: "No active session — please sign in again.", diagnostics });
+        return;
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const url = `${supabaseUrl}/functions/v1/${fnName}`;
+
+      diagnostics.authorization_header_attached = true;
+      diagnostics.apikey_attached = !!anonKey;
+
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: anonKey,
+          },
+          body: JSON.stringify({}),
+        });
+      } catch (networkErr: any) {
+        setTestResult({
+          ok: false,
+          error: "Network error reaching Edge Function",
+          network_error: String(networkErr?.message ?? networkErr),
+          diagnostics,
+        });
+        return;
+      }
+
+      diagnostics.http_status = res.status;
+      const rawText = await res.text();
+      let parsed: any = null;
+      try { parsed = JSON.parse(rawText); } catch { parsed = null; }
+
+      if (!res.ok) {
+        setTestResult({
+          ok: false,
+          error: parsed?.reason || parsed?.error || `Edge function returned ${res.status}`,
+          http_status: res.status,
+          response_body: parsed ?? rawText.slice(0, 2000),
+          diagnostics,
+        });
+        return;
+      }
+
+      setTestResult(parsed ?? { ok: true, _raw: rawText.slice(0, 2000), diagnostics });
       await load();
+    } catch (e: any) {
+      setTestResult({ ok: false, error: String(e?.message ?? e), diagnostics });
     } finally {
       setTestBusy(false);
     }

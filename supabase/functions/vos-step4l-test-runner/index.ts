@@ -27,10 +27,11 @@ async function requireAdmin(req: Request) {
   const token = auth.replace("Bearer ", "");
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: auth } } });
-  const { data: claims, error } = await sb.auth.getClaims(token);
-  if (error || !claims?.claims?.sub) return { ok: false, status: 401, reason: "invalid_token" };
+  const { data: userData, error } = await sb.auth.getUser(token);
+  const userId = userData?.user?.id;
+  if (error || !userId) return { ok: false, status: 401, reason: "invalid_token" };
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-  const { data: roles } = await admin.from("user_roles").select("id").eq("user_id", claims.claims.sub).eq("role", "admin").limit(1);
+  const { data: roles } = await admin.from("user_roles").select("id").eq("user_id", userId).eq("role", "admin").limit(1);
   if (!roles || roles.length === 0) return { ok: false, status: 403, reason: "not_admin" };
   return { ok: true };
 }
