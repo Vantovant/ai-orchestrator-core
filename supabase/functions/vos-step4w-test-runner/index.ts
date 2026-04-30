@@ -316,7 +316,7 @@ Deno.serve(async (req) => {
 
   } finally {
     // Cleanup test rows in reverse dependency order.
-    const order = ["vos_manual_action_log","vos_approval_requests","vos_dry_run_actions","vos_proposal_queue","vos_inbox_receipts"];
+    const order = ["vos_manual_action_log","vos_approval_requests","vos_dry_run_actions","vos_proposal_queue"];
     for (const t of order) {
       const ids = cleanup.filter(c => c.table === t).flatMap(c => c.ids);
       if (ids.length) await sb.from(t).delete().in("id", ids);
