@@ -17,6 +17,7 @@ import DryRunActionsTab from "./DryRunActionsTab";
 import ApprovalGateTab from "./ApprovalGateTab";
 import ManualActionPilotTab from "./ManualActionPilotTab";
 import IntegrationDraftsTab from "./IntegrationDraftsTab";
+import CRMInternalNotesTab from "./CRMInternalNotesTab";
 
 type Row = Record<string, any>;
 
