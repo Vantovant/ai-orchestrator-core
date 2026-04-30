@@ -807,7 +807,79 @@ STRICT RULES:
 
 
 
-async function buildRetrievalContext(
+// ─── Central Brain retrieval (admin-only governance/console activity) ───
+async function isAdmin(supabase: any, userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (error) return false;
+  return !!data;
+}
+
+async function retrieveCentralBrain(supabase: any): Promise<{ text: string; counts: Record<string, number> }> {
+  const counts: Record<string, number> = {};
+  const lim = 25;
+
+  const safe = async (table: string, sel: string, order = "created_at") => {
+    const { data, error } = await supabase
+      .from(table).select(sel).order(order, { ascending: false }).limit(lim);
+    if (error) { counts[table] = -1; return [] as any[]; }
+    counts[table] = (data || []).length;
+    return (data || []) as any[];
+  };
+
+  const [
+    flags,
+    inbound, outbound, decision, killswitchLog,
+    inboxReceipts, proposals, dryRuns, approvals,
+    manualActions, drafts, crmNotes,
+  ] = await Promise.all([
+    supabase.from("vos_platform_flags").select("flag_key,flag_value,updated_at").order("flag_key").limit(50).then((r: any) => { counts["vos_platform_flags"] = (r.data||[]).length; return r.data || []; }, () => []),
+    safe("vos_inbound_log", "id,source_app,event_name,received_at,verification_status", "received_at"),
+    safe("vos_outbound_log", "id,target_app,event_name,sent_at,delivery_status", "sent_at"),
+    safe("vos_decision_log", "id,decision_type,decision_outcome,created_at"),
+    safe("vos_killswitch_log", "id,flag_key,old_value,new_value,changed_at,reason", "changed_at"),
+    safe("vos_inbox_receipts", "id,source_app,event_name,receipt_status,created_at"),
+    safe("vos_proposal_queue", "id,proposal_type,proposal_status,proposal_title,risk_level,created_at"),
+    safe("vos_dry_run_actions", "id,dry_run_type,dry_run_status,dry_run_title,created_at"),
+    safe("vos_approval_requests", "id,approval_type,approval_status,approval_title,reviewed_by,second_reviewed_by,expires_at,created_at"),
+    safe("vos_manual_action_log", "id,action_type,action_status,action_title,performed_at,axis_a_snapshot,axis_b_snapshot", "performed_at"),
+    safe("vos_integration_action_drafts", "id,target_app,integration_action_type,draft_status,draft_title,created_at"),
+    safe("vos_crm_internal_notes", "id,note_kind,note_status,contact_ref_type,created_at,archived_at,archive_reason"),
+  ]);
+
+  const fmt = (rows: any[], fields: string[]) =>
+    rows.length === 0
+      ? "  (none)"
+      : rows.slice(0, 10).map(r => "  • " + fields.map(f => `${f}=${JSON.stringify(r[f] ?? null)}`).join(" ")).join("\n");
+
+  const sections: string[] = [];
+  sections.push("═══ CENTRAL BRAIN — GOVERNANCE & CONSOLE ACTIVITY ═══");
+  sections.push("(read-only snapshot, last " + lim + " rows per table)");
+  sections.push("");
+  sections.push("PLATFORM FLAGS (Axis state):");
+  sections.push(flags.length ? flags.map((f: any) => `  • ${f.flag_key} = ${f.flag_value}`).join("\n") : "  (none)");
+  sections.push("");
+  sections.push(`INBOUND LOG (${counts["vos_inbound_log"]}):`);   sections.push(fmt(inbound, ["source_app","event_name","received_at","verification_status"]));
+  sections.push(`OUTBOUND LOG (${counts["vos_outbound_log"]}):`); sections.push(fmt(outbound, ["target_app","event_name","sent_at","delivery_status"]));
+  sections.push(`DECISION LOG (${counts["vos_decision_log"]}):`); sections.push(fmt(decision, ["decision_type","decision_outcome","created_at"]));
+  sections.push(`KILLSWITCH CHANGES (${counts["vos_killswitch_log"]}):`); sections.push(fmt(killswitchLog, ["flag_key","old_value","new_value","changed_at","reason"]));
+  sections.push(`INBOX RECEIPTS (${counts["vos_inbox_receipts"]}):`); sections.push(fmt(inboxReceipts, ["source_app","event_name","receipt_status","created_at"]));
+  sections.push(`PROPOSAL QUEUE (${counts["vos_proposal_queue"]}):`); sections.push(fmt(proposals, ["proposal_type","proposal_status","proposal_title","risk_level","created_at"]));
+  sections.push(`DRY-RUN ACTIONS (${counts["vos_dry_run_actions"]}):`); sections.push(fmt(dryRuns, ["dry_run_type","dry_run_status","dry_run_title","created_at"]));
+  sections.push(`APPROVAL REQUESTS (${counts["vos_approval_requests"]}):`); sections.push(fmt(approvals, ["approval_type","approval_status","approval_title","reviewed_by","second_reviewed_by","expires_at","created_at"]));
+  sections.push(`MANUAL ACTION LOG (${counts["vos_manual_action_log"]}):`); sections.push(fmt(manualActions, ["action_type","action_status","action_title","performed_at","axis_a_snapshot","axis_b_snapshot"]));
+  sections.push(`INTEGRATION DRAFTS (${counts["vos_integration_action_drafts"]}):`); sections.push(fmt(drafts, ["target_app","integration_action_type","draft_status","draft_title","created_at"]));
+  sections.push(`CRM INTERNAL NOTES (${counts["vos_crm_internal_notes"]}):`); sections.push(fmt(crmNotes, ["note_kind","note_status","contact_ref_type","created_at","archived_at","archive_reason"]));
+  sections.push("═══ END CENTRAL BRAIN ═══");
+
+  return { text: sections.join("\n"), counts };
+}
+
+
   supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
 ): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number>; isDiaryOnly: boolean; diaryEvidence: DiaryEvidence | null }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
