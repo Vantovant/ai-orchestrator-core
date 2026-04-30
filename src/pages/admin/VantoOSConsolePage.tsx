@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Shield, ShieldAlert, Lock, RefreshCw, AlertTriangle, CheckCircle2, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import InboxReceiptsTab from "./InboxReceiptsTab";
+import ReceiptIntelligenceTab from "./ReceiptIntelligenceTab";
 
 type Row = Record<string, any>;
 
