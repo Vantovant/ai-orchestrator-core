@@ -93,3 +93,38 @@ describe("Step 4N — Receipt Intelligence classifier", () => {
     }
   });
 });
+
+describe("Step 4O — Receipt Intelligence classifier (host telemetry)", () => {
+  it("persisted vantoos.health.ping → system_telemetry / info / high", () => {
+    const c = classify("persisted", "vantoos.health.ping", "app_vantoos_host");
+    expect(c.category).toBe("system_telemetry");
+    expect(c.risk).toBe("info");
+    expect(c.confidence).toBe("high");
+    expect(c.insight).toBe(
+      "Host node reported a healthy heartbeat. Observation only — no customer activity implied.",
+    );
+  });
+
+  it("host telemetry insight contains no banned action verbs", () => {
+    const banned = [
+      "send", "reply", "enrol", "enroll", "follow up", "push", "dispatch",
+      "forward", "contact", "message", "notify", "automate", "trigger", "schedule",
+    ];
+    const c = classify("persisted", "vantoos.health.ping", "app_vantoos_host");
+    const lower = c.insight.toLowerCase();
+    for (const word of banned) {
+      expect(lower.includes(word)).toBe(false);
+    }
+  });
+
+  it("vantoos.health.ping with wrong app falls through to manual review", () => {
+    const c = classify("persisted", "vantoos.health.ping", "app_aplgo_mlm");
+    expect(c.category).toBe("needs_manual_review");
+  });
+
+  it("APLGO lead magnet still classifies correctly when app_id passed", () => {
+    const c = classify("persisted", "aplgo.lead_magnet.downloaded", "app_aplgo_mlm");
+    expect(c.category).toBe("lead_interest");
+    expect(c.risk).toBe("low");
+  });
+});
