@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import InboxReceiptsTab from "./InboxReceiptsTab";
 import ReceiptIntelligenceTab from "./ReceiptIntelligenceTab";
 import Step4OTestsTab from "./Step4OTestsTab";
+import ProposalQueueTab from "./ProposalQueueTab";
 
 type Row = Record<string, any>;
 
