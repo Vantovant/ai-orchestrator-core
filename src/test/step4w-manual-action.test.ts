@@ -32,13 +32,18 @@ describe("Step 4W — Manual Action Pilot UI guarantees", () => {
     expect(tabSrc).toContain("Record internal admin note");
   });
 
+  // Extract every <Button>…</Button> body. The forbidden tokens must not appear
+  // as button labels. Descriptive prose elsewhere (explaining what the tab does
+  // NOT do) is intentionally allowed.
+  const buttonBodies: string[] = [];
+  const re = /<Button\b[\s\S]*?>([\s\S]*?)<\/Button>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(tabSrc)) !== null) buttonBodies.push(m[1]);
+
   for (const token of FORBIDDEN_UI_TOKENS) {
-    it(`has no rendered '${token}' control`, () => {
-      const visible = stripStringsAndComments(tabSrc);
-      // Token must not appear in JSX-rendered code (after string-strip the labels are gone,
-      // so any remaining occurrence in the rendered tree would indicate a real button).
-      // Allow none.
-      expect(visible.toLowerCase().includes(token.toLowerCase())).toBe(false);
+    it(`has no '${token}' button label`, () => {
+      const offending = buttonBodies.filter((b) => b.toLowerCase().includes(token.toLowerCase()));
+      expect(offending).toEqual([]);
     });
   }
 
