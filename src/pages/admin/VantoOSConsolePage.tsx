@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Shield, ShieldAlert, Lock, RefreshCw, AlertTriangle, CheckCircle2, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
+import InboxReceiptsTab from "./InboxReceiptsTab";
 
 type Row = Record<string, any>;
 
@@ -216,6 +217,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="dryrun">Dry-Run Preview</TabsTrigger>
           <TabsTrigger value="test4d">Step 4D Tests</TabsTrigger>
           <TabsTrigger value="test4g">Step 4G Pilot</TabsTrigger>
+          <TabsTrigger value="receipts">Inbox Receipts</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -345,6 +347,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="test4g" className="space-y-4 pt-4">
           <Step4GPilotHarness />
+        </TabsContent>
+
+        <TabsContent value="receipts" className="space-y-4 pt-4">
+          <InboxReceiptsTab />
         </TabsContent>
       </Tabs>
     </div>

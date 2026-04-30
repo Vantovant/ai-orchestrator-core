@@ -3705,6 +3705,8 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          inbox_allowed_events: string[]
+          inbox_only_allowed: boolean
           notes: string | null
           owner_scope: string
           public_key_ref: string | null
@@ -3717,6 +3719,8 @@ export type Database = {
           created_at?: string
           display_name: string
           id?: string
+          inbox_allowed_events?: string[]
+          inbox_only_allowed?: boolean
           notes?: string | null
           owner_scope: string
           public_key_ref?: string | null
@@ -3729,6 +3733,8 @@ export type Database = {
           created_at?: string
           display_name?: string
           id?: string
+          inbox_allowed_events?: string[]
+          inbox_only_allowed?: boolean
           notes?: string | null
           owner_scope?: string
           public_key_ref?: string | null
@@ -3797,6 +3803,54 @@ export type Database = {
           outcome?: string
           signature_valid?: boolean | null
           source_app?: string
+        }
+        Relationships: []
+      }
+      vos_inbox_receive_audit: {
+        Row: {
+          app_id: string | null
+          dedupe_key: string | null
+          event_allowed: boolean | null
+          event_name: string | null
+          fingerprint_prefix: string | null
+          flag_gate_clear: boolean | null
+          id: string
+          ip_hash: string | null
+          kill_switch_clear: boolean | null
+          outcome: string | null
+          reason: string | null
+          received_at: string
+          signature_valid: boolean | null
+        }
+        Insert: {
+          app_id?: string | null
+          dedupe_key?: string | null
+          event_allowed?: boolean | null
+          event_name?: string | null
+          fingerprint_prefix?: string | null
+          flag_gate_clear?: boolean | null
+          id?: string
+          ip_hash?: string | null
+          kill_switch_clear?: boolean | null
+          outcome?: string | null
+          reason?: string | null
+          received_at?: string
+          signature_valid?: boolean | null
+        }
+        Update: {
+          app_id?: string | null
+          dedupe_key?: string | null
+          event_allowed?: boolean | null
+          event_name?: string | null
+          fingerprint_prefix?: string | null
+          flag_gate_clear?: boolean | null
+          id?: string
+          ip_hash?: string | null
+          kill_switch_clear?: boolean | null
+          outcome?: string | null
+          reason?: string | null
+          received_at?: string
+          signature_valid?: boolean | null
         }
         Relationships: []
       }
@@ -3929,6 +3983,39 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_rate_limit_counters: {
+        Row: {
+          bucket_key: string
+          bucket_type: string
+          count: number
+          created_at: string
+          id: string
+          scope_target: string
+          updated_at: string
+          window_start: string
+        }
+        Insert: {
+          bucket_key: string
+          bucket_type: string
+          count?: number
+          created_at?: string
+          id?: string
+          scope_target: string
+          updated_at?: string
+          window_start: string
+        }
+        Update: {
+          bucket_key?: string
+          bucket_type?: string
+          count?: number
+          created_at?: string
+          id?: string
+          scope_target?: string
+          updated_at?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
       vos_rotation_log: {
         Row: {
           actor_user_id: string | null
@@ -4009,9 +4096,12 @@ export type Database = {
       }
       vos_signed_inbox: {
         Row: {
+          app_id: string | null
           attempt_count: number
           created_at: string
+          dedupe_key: string | null
           event_name: string
+          fingerprint_prefix: string | null
           id: string
           idempotency_key: string
           last_error: string | null
@@ -4022,14 +4112,19 @@ export type Database = {
           redacted_payload: Json | null
           safe_summary: string | null
           signature: string
+          signature_header: string | null
           signature_version: string
           source_app: string
+          ts: number | null
           updated_at: string
         }
         Insert: {
+          app_id?: string | null
           attempt_count?: number
           created_at?: string
+          dedupe_key?: string | null
           event_name: string
+          fingerprint_prefix?: string | null
           id?: string
           idempotency_key: string
           last_error?: string | null
@@ -4040,14 +4135,19 @@ export type Database = {
           redacted_payload?: Json | null
           safe_summary?: string | null
           signature: string
+          signature_header?: string | null
           signature_version?: string
           source_app: string
+          ts?: number | null
           updated_at?: string
         }
         Update: {
+          app_id?: string | null
           attempt_count?: number
           created_at?: string
+          dedupe_key?: string | null
           event_name?: string
+          fingerprint_prefix?: string | null
           id?: string
           idempotency_key?: string
           last_error?: string | null
@@ -4058,8 +4158,10 @@ export type Database = {
           redacted_payload?: Json | null
           safe_summary?: string | null
           signature?: string
+          signature_header?: string | null
           signature_version?: string
           source_app?: string
+          ts?: number | null
           updated_at?: string
         }
         Relationships: []
