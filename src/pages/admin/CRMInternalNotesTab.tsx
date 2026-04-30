@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { ShieldCheck, FlaskConical, Lock } from "lucide-react";
+import { ShieldCheck, FlaskConical, Lock, Archive } from "lucide-react";
+import { ArchiveNoteDialog } from "@/components/admin/vanto-os/ArchiveNoteDialog";
+import { useArchiveCrmInternalNote } from "@/hooks/useArchiveCrmInternalNote";
 
 // FORBIDDEN_UI_TOKENS: this tab is internal-only. No send/dispatch/publish/consume/
 // external CRM write/WhatsApp/email/Zazi/APLGO/Master Prospector controls allowed.
@@ -46,8 +48,12 @@ type TestReport = {
 export default function CRMInternalNotesTab() {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [report, setReport] = useState<TestReport | null>(null);
+  const [running5b, setRunning5b] = useState(false);
+  const [running5e, setRunning5e] = useState(false);
+  const [report5b, setReport5b] = useState<TestReport | null>(null);
+  const [report5e, setReport5e] = useState<TestReport | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<Note | null>(null);
+  const { archive, submitting } = useArchiveCrmInternalNote();
 
   const load = async () => {
     setLoading(true);
@@ -67,29 +73,94 @@ export default function CRMInternalNotesTab() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const runSuite = async () => {
-    setRunning(true);
-    setReport(null);
+  const runSuite5b = async () => {
+    setRunning5b(true); setReport5b(null);
     try {
-      const { data, error } = await supabase.functions.invoke("vos-step5b-test-runner", {
-        body: {},
-      });
+      const { data, error } = await supabase.functions.invoke("vos-step5b-test-runner", { body: {} });
       if (error) throw error;
-      setReport(data as TestReport);
+      setReport5b(data as TestReport);
       const ok = (data as TestReport)?.verdict?.includes("COMPLETE");
       if (ok) toast.success("Step 5B suite passed", { description: (data as TestReport).score });
       else toast.error("Step 5B suite incomplete", { description: (data as TestReport).verdict });
       await load();
     } catch (e: any) {
       toast.error("Test runner error", { description: e?.message ?? String(e) });
-    } finally {
-      setRunning(false);
+    } finally { setRunning5b(false); }
+  };
+
+  const runSuite5e = async () => {
+    setRunning5e(true); setReport5e(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("vos-step5e-archive-test-runner", { body: {} });
+      if (error) throw error;
+      setReport5e(data as TestReport);
+      const ok = (data as TestReport)?.verdict?.includes("COMPLETE");
+      if (ok) toast.success("Step 5E archive suite passed", { description: (data as TestReport).score });
+      else toast.error("Step 5E archive suite incomplete", { description: (data as TestReport).verdict });
+      await load();
+    } catch (e: any) {
+      toast.error("Step 5E runner error", { description: e?.message ?? String(e) });
+    } finally { setRunning5e(false); }
+  };
+
+  const handleArchiveConfirm = async (reason: string) => {
+    if (!archiveTarget) return;
+    const status = archiveTarget.note_status as "recorded" | "corrected";
+    const result = await archive({ noteId: archiveTarget.id, currentStatus: status, archiveReason: reason });
+    if (result.ok) {
+      toast.success("Note archived", { description: "Receipt recorded." });
+      setArchiveTarget(null);
+      await load();
+    } else {
+      toast.error("Archive failed", { description: result.error });
     }
   };
+
+  const renderReport = (label: string, report: TestReport) => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {label} Result
+          <Badge variant={report.verdict.includes("COMPLETE") ? "default" : "destructive"}>{report.score}</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="text-sm font-medium">{report.verdict}</div>
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-xs">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-2 py-1.5 text-left">ID</th>
+                <th className="px-2 py-1.5 text-left">Name</th>
+                <th className="px-2 py-1.5 text-left">Expected</th>
+                <th className="px-2 py-1.5 text-left">Actual</th>
+                <th className="px-2 py-1.5 text-left">Pass</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.tests.map((t) => (
+                <tr key={t.id + t.name} className="border-t">
+                  <td className="px-2 py-1.5 font-mono">{t.id}</td>
+                  <td className="px-2 py-1.5">{t.name}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{t.expected}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{t.actual}</td>
+                  <td className="px-2 py-1.5">
+                    <Badge variant={t.pass ? "default" : "destructive"}>{t.pass ? "PASS" : "FAIL"}</Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <div className="mb-1 text-xs font-medium text-muted-foreground">Invariants</div>
+          <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">{JSON.stringify(report.invariants, null, 2)}</pre>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="space-y-4">
@@ -112,80 +183,31 @@ export default function CRMInternalNotesTab() {
             <Badge variant="outline">Axis C: INTERNAL ONLY</Badge>
             <Badge variant="outline">Axis D: ASLEEP</Badge>
           </div>
-          <div>
-            <Button onClick={runSuite} disabled={running} className="gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={runSuite5b} disabled={running5b} className="gap-2">
               <FlaskConical className="h-4 w-4" />
-              {running ? "Running…" : "Run Step 5B Test Suite"}
+              {running5b ? "Running…" : "Run Step 5B Test Suite"}
+            </Button>
+            <Button onClick={runSuite5e} disabled={running5e} variant="secondary" className="gap-2">
+              <FlaskConical className="h-4 w-4" />
+              {running5e ? "Running…" : "Run Step 5E Archive Test Suite"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {report && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              Test Result
-              <Badge variant={report.verdict.includes("COMPLETE") ? "default" : "destructive"}>
-                {report.score}
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="text-sm font-medium">{report.verdict}</div>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full text-xs">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="px-2 py-1.5 text-left">ID</th>
-                    <th className="px-2 py-1.5 text-left">Name</th>
-                    <th className="px-2 py-1.5 text-left">Expected</th>
-                    <th className="px-2 py-1.5 text-left">Actual</th>
-                    <th className="px-2 py-1.5 text-left">Pass</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.tests.map((t) => (
-                    <tr key={t.id + t.name} className="border-t">
-                      <td className="px-2 py-1.5 font-mono">{t.id}</td>
-                      <td className="px-2 py-1.5">{t.name}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground">{t.expected}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground">{t.actual}</td>
-                      <td className="px-2 py-1.5">
-                        <Badge variant={t.pass ? "default" : "destructive"}>
-                          {t.pass ? "PASS" : "FAIL"}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <div className="mb-1 text-xs font-medium text-muted-foreground">Invariants</div>
-              <pre className="overflow-x-auto rounded-md bg-muted p-2 text-xs">
-                {JSON.stringify(report.invariants, null, 2)}
-              </pre>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {report5b && renderReport("Step 5B", report5b)}
+      {report5e && renderReport("Step 5E", report5e)}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Latest Internal Notes</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Latest Internal Notes</CardTitle></CardHeader>
         <CardContent>
           {loading ? (
             <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" />
             </div>
           ) : !notes || notes.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              No internal notes recorded yet.
-            </div>
+            <div className="py-6 text-center text-sm text-muted-foreground">No internal notes recorded yet.</div>
           ) : (
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-xs">
@@ -207,35 +229,59 @@ export default function CRMInternalNotesTab() {
                     <th className="px-2 py-1.5 text-left">redaction</th>
                     <th className="px-2 py-1.5 text-left">archived_at</th>
                     <th className="px-2 py-1.5 text-left">archive_reason</th>
+                    <th className="px-2 py-1.5 text-left">action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {notes.map((n) => (
-                    <tr key={n.id} className="border-t align-top">
-                      <td className="px-2 py-1.5 whitespace-nowrap">{new Date(n.created_at).toLocaleString()}</td>
-                      <td className="px-2 py-1.5"><Badge variant="outline">{n.note_status}</Badge></td>
-                      <td className="px-2 py-1.5">{n.note_kind}</td>
-                      <td className="px-2 py-1.5 font-mono text-[10px]">{n.source_manual_action_id?.slice(0, 8)}</td>
-                      <td className="px-2 py-1.5 font-mono text-[10px]">{n.source_approval_request_id?.slice(0, 8)}</td>
-                      <td className="px-2 py-1.5 font-mono text-[10px]">{n.source_integration_draft_id?.slice(0, 8)}</td>
-                      <td className="px-2 py-1.5">{String(n.customer_visible)}</td>
-                      <td className="px-2 py-1.5">{String(n.automation_safe)}</td>
-                      <td className="px-2 py-1.5">{String(n.bulk_action)}</td>
-                      <td className="px-2 py-1.5">{String(n.external_write_performed)}</td>
-                      <td className="px-2 py-1.5">{n.axis_a_snapshot}</td>
-                      <td className="px-2 py-1.5">{n.axis_b_snapshot}</td>
-                      <td className="px-2 py-1.5 font-mono text-[10px]">{n.dedupe_key?.slice(0, 12)}…</td>
-                      <td className="px-2 py-1.5 font-mono text-[10px]">{JSON.stringify(n.redaction_summary)}</td>
-                      <td className="px-2 py-1.5 whitespace-nowrap">{n.archived_at ? new Date(n.archived_at).toLocaleString() : "—"}</td>
-                      <td className="px-2 py-1.5">{n.archive_reason ?? "—"}</td>
-                    </tr>
-                  ))}
+                  {notes.map((n) => {
+                    const archivable = n.note_status === "recorded" || n.note_status === "corrected";
+                    return (
+                      <tr key={n.id} className="border-t align-top">
+                        <td className="px-2 py-1.5 whitespace-nowrap">{new Date(n.created_at).toLocaleString()}</td>
+                        <td className="px-2 py-1.5">
+                          <Badge variant={n.note_status === "archived" ? "secondary" : "outline"}>{n.note_status}</Badge>
+                        </td>
+                        <td className="px-2 py-1.5">{n.note_kind}</td>
+                        <td className="px-2 py-1.5 font-mono text-[10px]">{n.source_manual_action_id?.slice(0, 8)}</td>
+                        <td className="px-2 py-1.5 font-mono text-[10px]">{n.source_approval_request_id?.slice(0, 8)}</td>
+                        <td className="px-2 py-1.5 font-mono text-[10px]">{n.source_integration_draft_id?.slice(0, 8)}</td>
+                        <td className="px-2 py-1.5">{String(n.customer_visible)}</td>
+                        <td className="px-2 py-1.5">{String(n.automation_safe)}</td>
+                        <td className="px-2 py-1.5">{String(n.bulk_action)}</td>
+                        <td className="px-2 py-1.5">{String(n.external_write_performed)}</td>
+                        <td className="px-2 py-1.5">{n.axis_a_snapshot}</td>
+                        <td className="px-2 py-1.5">{n.axis_b_snapshot}</td>
+                        <td className="px-2 py-1.5 font-mono text-[10px]">{n.dedupe_key?.slice(0, 12)}…</td>
+                        <td className="px-2 py-1.5 font-mono text-[10px]">{JSON.stringify(n.redaction_summary)}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap">{n.archived_at ? new Date(n.archived_at).toLocaleString() : "—"}</td>
+                        <td className="px-2 py-1.5 max-w-[240px] truncate" title={n.archive_reason ?? undefined}>{n.archive_reason ?? "—"}</td>
+                        <td className="px-2 py-1.5">
+                          {archivable ? (
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2"
+                              onClick={() => setArchiveTarget(n)}
+                              title="Archive this internal observation">
+                              <Archive className="h-3.5 w-3.5" /> Archive
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </CardContent>
       </Card>
+
+      <ArchiveNoteDialog
+        open={!!archiveTarget}
+        onOpenChange={(o) => { if (!o) setArchiveTarget(null); }}
+        submitting={submitting}
+        onConfirm={handleArchiveConfirm}
+      />
     </div>
   );
 }

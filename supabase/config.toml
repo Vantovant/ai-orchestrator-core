@@ -195,3 +195,6 @@ verify_jwt = false
 [functions.vos-step5b-test-runner]
 verify_jwt = false
 
+
+[functions.vos-step5e-archive-test-runner]
+verify_jwt = false
