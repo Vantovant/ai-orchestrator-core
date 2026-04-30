@@ -177,3 +177,6 @@ verify_jwt = false
 [functions.vos-step4g-pilot-runner]
 verify_jwt = false
 
+[functions.vos-inbox-receive]
+verify_jwt = false
+
