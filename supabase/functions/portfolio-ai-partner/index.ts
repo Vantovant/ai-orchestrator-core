@@ -879,7 +879,7 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
   return { text: sections.join("\n"), counts };
 }
 
-
+async function buildRetrievalContext(
   supabase: any, userId: string, tags: string[], prompt: string, tzOffsetMinutes?: number,
 ): Promise<{ context: string; retrievalMeta: RetrievalMeta; dataSources: string[]; isDailyReview: boolean; dailyReviewCounts: Record<string, number>; isDiaryOnly: boolean; diaryEvidence: DiaryEvidence | null }> {
   const isDailyReview = detectDailyReviewIntent(prompt);
