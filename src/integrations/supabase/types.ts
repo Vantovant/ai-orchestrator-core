@@ -3839,6 +3839,116 @@ export type Database = {
           },
         ]
       }
+      vos_crm_internal_notes: {
+        Row: {
+          archive_reason: string | null
+          archived_at: string | null
+          archived_by: string | null
+          author_user_id: string
+          automation_safe: boolean
+          axis_a_snapshot: string
+          axis_b_snapshot: string
+          bulk_action: boolean
+          contact_ref_id: string | null
+          contact_ref_type: string
+          corrects_note_id: string | null
+          created_at: string
+          customer_visible: boolean
+          dedupe_key: string
+          external_write_performed: boolean
+          id: string
+          note_body: string
+          note_kind: string
+          note_status: string
+          redaction_summary: Json
+          source_approval_request_id: string
+          source_integration_draft_id: string
+          source_manual_action_id: string
+          tags: string[]
+        }
+        Insert: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          author_user_id: string
+          automation_safe?: boolean
+          axis_a_snapshot?: string
+          axis_b_snapshot?: string
+          bulk_action?: boolean
+          contact_ref_id?: string | null
+          contact_ref_type?: string
+          corrects_note_id?: string | null
+          created_at?: string
+          customer_visible?: boolean
+          dedupe_key: string
+          external_write_performed?: boolean
+          id?: string
+          note_body: string
+          note_kind?: string
+          note_status?: string
+          redaction_summary?: Json
+          source_approval_request_id: string
+          source_integration_draft_id: string
+          source_manual_action_id: string
+          tags?: string[]
+        }
+        Update: {
+          archive_reason?: string | null
+          archived_at?: string | null
+          archived_by?: string | null
+          author_user_id?: string
+          automation_safe?: boolean
+          axis_a_snapshot?: string
+          axis_b_snapshot?: string
+          bulk_action?: boolean
+          contact_ref_id?: string | null
+          contact_ref_type?: string
+          corrects_note_id?: string | null
+          created_at?: string
+          customer_visible?: boolean
+          dedupe_key?: string
+          external_write_performed?: boolean
+          id?: string
+          note_body?: string
+          note_kind?: string
+          note_status?: string
+          redaction_summary?: Json
+          source_approval_request_id?: string
+          source_integration_draft_id?: string
+          source_manual_action_id?: string
+          tags?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vos_crm_internal_notes_corrects_note_id_fkey"
+            columns: ["corrects_note_id"]
+            isOneToOne: false
+            referencedRelation: "vos_crm_internal_notes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vos_crm_internal_notes_source_approval_request_id_fkey"
+            columns: ["source_approval_request_id"]
+            isOneToOne: false
+            referencedRelation: "vos_approval_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vos_crm_internal_notes_source_integration_draft_id_fkey"
+            columns: ["source_integration_draft_id"]
+            isOneToOne: false
+            referencedRelation: "vos_integration_action_drafts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vos_crm_internal_notes_source_manual_action_id_fkey"
+            columns: ["source_manual_action_id"]
+            isOneToOne: false
+            referencedRelation: "vos_manual_action_log"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vos_decision_log: {
         Row: {
           created_at: string
