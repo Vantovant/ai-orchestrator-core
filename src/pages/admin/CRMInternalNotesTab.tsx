@@ -109,12 +109,12 @@ export default function CRMInternalNotesTab() {
     if (!archiveTarget) return;
     const status = archiveTarget.note_status as "recorded" | "corrected";
     const result = await archive({ noteId: archiveTarget.id, currentStatus: status, archiveReason: reason });
-    if (result.ok === true) {
+    if (result.ok === false) {
+      toast.error("Archive failed", { description: result.error });
+    } else {
       toast.success("Note archived", { description: "Receipt recorded." });
       setArchiveTarget(null);
       await load();
-    } else {
-      toast.error("Archive failed", { description: result.error });
     }
   };
 
