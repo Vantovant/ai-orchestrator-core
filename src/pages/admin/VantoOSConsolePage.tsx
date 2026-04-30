@@ -396,6 +396,10 @@ export default function VantoOSConsolePage() {
         <TabsContent value="drafts4y" className="space-y-4 pt-4">
           <IntegrationDraftsTab />
         </TabsContent>
+
+        <TabsContent value="crmnotes5b" className="space-y-4 pt-4">
+          <CRMInternalNotesTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
