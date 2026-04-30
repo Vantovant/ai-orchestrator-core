@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import InboxReceiptsTab from "./InboxReceiptsTab";
 import ReceiptIntelligenceTab from "./ReceiptIntelligenceTab";
 import Step4OTestsTab from "./Step4OTestsTab";
+import ProposalQueueTab from "./ProposalQueueTab";
 
 type Row = Record<string, any>;
 
@@ -222,6 +223,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="receipts">Inbox Receipts</TabsTrigger>
           <TabsTrigger value="intel">Receipt Intelligence</TabsTrigger>
           <TabsTrigger value="test4o">Step 4O Tests</TabsTrigger>
+          <TabsTrigger value="proposals">Proposal Queue</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -363,6 +365,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="test4o" className="space-y-4 pt-4">
           <Step4OTestsTab />
+        </TabsContent>
+
+        <TabsContent value="proposals" className="space-y-4 pt-4">
+          <ProposalQueueTab />
         </TabsContent>
       </Tabs>
     </div>
