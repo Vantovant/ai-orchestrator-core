@@ -308,10 +308,11 @@ Deno.serve(async (req) => {
       setResult("T10","axis_b_drift_blocked","CHECK axis_b", error?.message?.slice(0,120) ?? "no_error", !!error);
     }
 
-    // T11 — banned wording
+    // T11 — banned wording (must use admin-authenticated client so we pass the
+    // admin gate in the guard trigger and reach the banned-wording branch).
     {
       const row = await buildRow({ note_body: "please send the WhatsApp now" }, "T11");
-      const { error } = await sb.from("vos_crm_internal_notes").insert(row);
+      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
       setResult("T11","banned_wording_blocked","forbidden_note_wording", error?.message?.slice(0,120) ?? "no_error", !!error && /forbidden_note_wording/.test(error.message));
     }
 
