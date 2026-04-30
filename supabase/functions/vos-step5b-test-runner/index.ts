@@ -368,21 +368,33 @@ Deno.serve(async (req) => {
         !!error && /hard_delete_forbidden/.test(error.message));
     } else setResult("T14","hard_delete_blocked","hard_delete_forbidden","no_good_note", false);
 
-    // T15 — Archive: admin allowed; non-admin denied
-    let archivePass = false;
+    // T15 — Archive: admin allowed (admin JWT path); non-admin (anon) must NOT
+    // mutate the row. Anon may receive no error because RLS hides the row, so
+    // we additionally assert that no rows were affected and the row is unchanged.
     if (goodNoteId) {
-      const { error: e1 } = await sb.from("vos_crm_internal_notes").update({
+      const { error: e1, data: adminUpdated } = await sbCaller.from("vos_crm_internal_notes").update({
         note_status: "archived",
         archived_at: new Date().toISOString(),
         archived_by: userA,
         archive_reason: "step5b test archive",
-      }).eq("id", goodNoteId);
-      const { error: e2 } = await sbAnon.from("vos_crm_internal_notes").update({
+      }).eq("id", goodNoteId).select("id, note_status");
+
+      const { error: e2, data: anonUpdated } = await sbAnon.from("vos_crm_internal_notes").update({
         note_status: "archived", archived_at: new Date().toISOString(), archived_by: userA, archive_reason: "anon try"
-      }).eq("id", goodNoteId);
-      archivePass = !e1 && !!e2;
-      setResult("T15","archive_admin_only", "admin ok / anon denied",
-        `admin_err=${e1?.message ?? "ok"} anon_err=${e2?.message ?? "no_error"}`, archivePass);
+      }).eq("id", goodNoteId).select("id");
+
+      // Verify post-state: row remains 'archived' (from admin update), not mutated by anon
+      const { data: postRow } = await sb.from("vos_crm_internal_notes")
+        .select("note_status, archive_reason").eq("id", goodNoteId).maybeSingle();
+
+      const adminOk = !e1 && Array.isArray(adminUpdated) && adminUpdated.length === 1;
+      const anonBlocked = !!e2 || !anonUpdated || anonUpdated.length === 0;
+      const stateOk = postRow?.note_status === "archived" && postRow?.archive_reason === "step5b test archive";
+
+      const archivePass = adminOk && anonBlocked && stateOk;
+      setResult("T15","archive_admin_only", "admin ok / anon denied or zero-rows",
+        `admin_err=${e1?.message ?? "ok"} admin_rows=${adminUpdated?.length ?? 0} anon_err=${e2?.message ?? "no_error"} anon_rows=${anonUpdated?.length ?? 0} post_status=${postRow?.note_status}`,
+        archivePass);
     } else setResult("T15","archive_admin_only","admin ok / anon denied","no_good_note",false);
 
     // T16 — Correction requires corrects_note_id (recorder rejects without it)
