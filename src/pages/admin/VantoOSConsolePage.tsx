@@ -354,6 +354,10 @@ export default function VantoOSConsolePage() {
         <TabsContent value="receipts" className="space-y-4 pt-4">
           <InboxReceiptsTab />
         </TabsContent>
+
+        <TabsContent value="intel" className="space-y-4 pt-4">
+          <ReceiptIntelligenceTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
