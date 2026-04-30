@@ -206,7 +206,7 @@ export default function ReceiptIntelligenceTab() {
         kill_switch_clear: a.kill_switch_clear,
         event_allowed: a.event_allowed,
         reason: a.reason,
-        classification: classify(outcome, a.event_name),
+        classification: classify(outcome, a.event_name, a.app_id),
       };
     });
   }, [receipts, audits]);
