@@ -45,7 +45,7 @@ type Audit = {
   reason: string | null;
 };
 
-type RiskLevel = "low" | "medium" | "medium-high" | "high" | "unknown";
+type RiskLevel = "info" | "low" | "medium" | "medium-high" | "high" | "unknown";
 type Confidence = "high" | "low";
 
 type Classification = {
@@ -72,9 +72,12 @@ type Joined = {
   classification: Classification;
 };
 
-// Allowed insight strings (verbatim).
+// Allowed insight strings (verbatim). All insights are observation-only.
+// No banned action verbs (send, reply, enrol, enroll, follow up, push, dispatch,
+// forward, contact, message, notify, automate, trigger, schedule).
 const INSIGHT = {
   APLGO_INTEREST: "New APLGO interest signal — lead magnet downloaded.",
+  HOST_HEARTBEAT: "Host node reported a healthy heartbeat. Observation only — no customer activity implied.",
   NO_ACTION: "No action taken.",
   DUPLICATE: "Duplicate ignored — already on record.",
   SIG_FAIL: "Signature failed — packet discarded.",
@@ -86,7 +89,7 @@ const INSIGHT = {
   UNKNOWN: "Receipt logged but not classified. Manual review recommended.",
 } as const;
 
-export function classify(outcome: string | null | undefined, eventName: string | null | undefined): Classification {
+export function classify(outcome: string | null | undefined, eventName: string | null | undefined, appId?: string | null): Classification {
   switch (outcome) {
     case "persisted":
       if (eventName === "aplgo.lead_magnet.downloaded") {
@@ -95,6 +98,14 @@ export function classify(outcome: string | null | undefined, eventName: string |
           risk: "low",
           confidence: "high",
           insight: `${INSIGHT.APLGO_INTEREST} ${INSIGHT.NO_ACTION}`,
+        };
+      }
+      if (eventName === "vantoos.health.ping" && (!appId || appId === "app_vantoos_host")) {
+        return {
+          category: "system_telemetry",
+          risk: "info",
+          confidence: "high",
+          insight: INSIGHT.HOST_HEARTBEAT,
         };
       }
       return { category: "needs_manual_review", risk: "unknown", confidence: "low", insight: INSIGHT.UNKNOWN };
@@ -118,6 +129,7 @@ export function classify(outcome: string | null | undefined, eventName: string |
 }
 
 const RISK_VARIANT: Record<RiskLevel, "default" | "destructive" | "secondary" | "outline"> = {
+  info: "secondary",
   low: "secondary",
   medium: "outline",
   "medium-high": "outline",
@@ -194,7 +206,7 @@ export default function ReceiptIntelligenceTab() {
         kill_switch_clear: a.kill_switch_clear,
         event_allowed: a.event_allowed,
         reason: a.reason,
-        classification: classify(outcome, a.event_name),
+        classification: classify(outcome, a.event_name, a.app_id),
       };
     });
   }, [receipts, audits]);
