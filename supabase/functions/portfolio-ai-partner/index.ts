@@ -72,6 +72,35 @@ function detectDiaryTimeFilter(prompt: string): "today" | "week" | "all" {
   return "all";
 }
 
+// ─── Central Brain (governance/console) intent detection ───
+const CENTRAL_BRAIN_PATTERNS = [
+  /\bcentral\s+brain\b/i,
+  /\b(vos|vanto\s*os)\s+(console|admin|governance|activity)\b/i,
+  /\b(admin|vos)\s+console\b/i,
+  /\b(receipts?|approvals?|dry[\s-]*runs?|manual\s+actions?|integration\s+drafts?|crm\s+internal\s+notes?|kill[\s-]*switch(?:es)?|killswitches?|inbound\s+log|outbound\s+log|decision\s+log|audit\s+log|signed\s+inbox|inbox\s+receipts?|proposal\s+queue|platform\s+flags?)\b/i,
+  /\b(axis\s*[abc]|master\s+prospector|phase\s*4a|step\s*5[a-g])\b/i,
+  /\bgovernance\s+(activity|state|status|review)\b/i,
+  /\bwhat\s+(is\s+)?happening\s+in\s+(the\s+)?(central\s+brain|console|admin|vos)\b/i,
+  /\bwhat\s+did\s+(i|we)\s+(approve|archive|record|review)\b/i,
+];
+function detectCentralBrainIntent(prompt: string, tags: string[]): boolean {
+  if (tags.some(t => /^@(central[_-]?brain|console|admin|governance)$/i.test(t))) return true;
+  return CENTRAL_BRAIN_PATTERNS.some(p => p.test(prompt));
+}
+
+const CENTRAL_BRAIN_SYSTEM_SUPPLEMENT = `CENTRAL BRAIN (GOVERNANCE) MODE:
+You have read-only visibility into the VantoOS Admin Console / Central Brain governance tables.
+This includes Receipts, Inbound/Outbound/Decision/Killswitch logs, Inbox Receipts, Proposal Queue,
+Dry-Run Actions, Approval Requests (two-key state machine), Manual Action log, Integration Drafts,
+CRM Internal Notes, and Platform Flags (Axis A/B/C state).
+
+Rules in this mode:
+- Report what is recorded in these tables. Cite the table or surface (e.g. "Approval Gate", "Receipts").
+- Surface counts, recent activity, status transitions, and anomalies (e.g. axis drift, expired approvals).
+- Never propose, suggest, or describe an external write. Axis A is RED, Axis B is OFF; honor that.
+- Never invent records. If a table is empty in the retrieved context, say so plainly.
+- Translate to executive language: "Receipts" not "logs", "Approvals" not "rows in vos_approval_requests".`;
+
 function getTodayRange(tzOffsetMinutes?: number): { todayStart: string; todayEnd: string; todayDate: string } {
   const now = new Date();
   if (tzOffsetMinutes != null && !isNaN(tzOffsetMinutes)) {
