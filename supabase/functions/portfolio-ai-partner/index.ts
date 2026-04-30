@@ -1131,7 +1131,7 @@ serve(async (req) => {
     if (mode === "chat") {
       const tags: string[] = context_tags || [];
       const userPrompt = prompt || "Hello";
-      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts, isDiaryOnly, diaryEvidence } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
+      const { context, retrievalMeta, dataSources, isDailyReview, dailyReviewCounts, isDiaryOnly, diaryEvidence, isCentralBrain, centralBrainCounts } = await buildRetrievalContext(supabase, user.id, tags, userPrompt, tzOffsetMinutes);
 
       // Enrich retrieval meta with mode info
       if (isDailyReview) {
@@ -1141,6 +1141,10 @@ serve(async (req) => {
       if (isDiaryOnly) {
         (retrievalMeta as any).is_diary_only = true;
         (retrievalMeta as any).diary_evidence = diaryEvidence;
+      }
+      if (isCentralBrain) {
+        (retrievalMeta as any).is_central_brain = true;
+        (retrievalMeta as any).central_brain_counts = centralBrainCounts;
       }
 
       const retrievalNotes = [
