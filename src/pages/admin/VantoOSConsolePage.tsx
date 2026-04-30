@@ -233,6 +233,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="approvals4u">Approval Gate</TabsTrigger>
           <TabsTrigger value="manual4w">Manual Action Pilot</TabsTrigger>
           <TabsTrigger value="drafts4y">Integration Drafts</TabsTrigger>
+          <TabsTrigger value="crmnotes5b">CRM Internal Notes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
