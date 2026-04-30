@@ -3743,6 +3743,102 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_approval_requests: {
+        Row: {
+          app_id: string
+          approval_does_not_execute: boolean
+          approval_status: string
+          approval_summary: string
+          approval_title: string
+          approval_type: string
+          created_at: string
+          dedupe_key: string
+          dispatch_blocked: boolean
+          event_name: string | null
+          execution_blocked: boolean
+          expires_at: string
+          id: string
+          rejection_reason: string | null
+          requested_by_system: string
+          requested_by_user: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          safety_blocked: boolean
+          second_reviewed_at: string | null
+          second_reviewed_by: string | null
+          source_dry_run_id: string
+          source_proposal_id: string
+          would_execute: boolean
+        }
+        Insert: {
+          app_id: string
+          approval_does_not_execute?: boolean
+          approval_status?: string
+          approval_summary: string
+          approval_title: string
+          approval_type: string
+          created_at?: string
+          dedupe_key: string
+          dispatch_blocked?: boolean
+          event_name?: string | null
+          execution_blocked?: boolean
+          expires_at?: string
+          id?: string
+          rejection_reason?: string | null
+          requested_by_system: string
+          requested_by_user?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          safety_blocked?: boolean
+          second_reviewed_at?: string | null
+          second_reviewed_by?: string | null
+          source_dry_run_id: string
+          source_proposal_id: string
+          would_execute?: boolean
+        }
+        Update: {
+          app_id?: string
+          approval_does_not_execute?: boolean
+          approval_status?: string
+          approval_summary?: string
+          approval_title?: string
+          approval_type?: string
+          created_at?: string
+          dedupe_key?: string
+          dispatch_blocked?: boolean
+          event_name?: string | null
+          execution_blocked?: boolean
+          expires_at?: string
+          id?: string
+          rejection_reason?: string | null
+          requested_by_system?: string
+          requested_by_user?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          safety_blocked?: boolean
+          second_reviewed_at?: string | null
+          second_reviewed_by?: string | null
+          source_dry_run_id?: string
+          source_proposal_id?: string
+          would_execute?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vos_approval_requests_source_dry_run_id_fkey"
+            columns: ["source_dry_run_id"]
+            isOneToOne: false
+            referencedRelation: "vos_dry_run_actions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vos_approval_requests_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "vos_proposal_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vos_decision_log: {
         Row: {
           created_at: string

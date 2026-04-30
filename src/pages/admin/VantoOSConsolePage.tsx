@@ -14,6 +14,7 @@ import ReceiptIntelligenceTab from "./ReceiptIntelligenceTab";
 import Step4OTestsTab from "./Step4OTestsTab";
 import ProposalQueueTab from "./ProposalQueueTab";
 import DryRunActionsTab from "./DryRunActionsTab";
+import ApprovalGateTab from "./ApprovalGateTab";
 
 type Row = Record<string, any>;
 
@@ -226,6 +227,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="test4o">Step 4O Tests</TabsTrigger>
           <TabsTrigger value="proposals">Proposal Queue</TabsTrigger>
           <TabsTrigger value="dryrun4s">Dry-Run Actions</TabsTrigger>
+          <TabsTrigger value="approvals4u">Approval Gate</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -375,6 +377,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="dryrun4s" className="space-y-4 pt-4">
           <DryRunActionsTab />
+        </TabsContent>
+
+        <TabsContent value="approvals4u" className="space-y-4 pt-4">
+          <ApprovalGateTab />
         </TabsContent>
       </Tabs>
     </div>
