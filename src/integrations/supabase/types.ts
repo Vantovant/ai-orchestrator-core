@@ -4024,6 +4024,84 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_integration_action_drafts: {
+        Row: {
+          approved_scope: Json
+          bulk_action: boolean
+          created_at: string
+          created_by_system: string
+          customer_visible: boolean
+          dedupe_key: string
+          draft_payload_redacted: Json
+          draft_status: string
+          draft_summary: string
+          draft_title: string
+          external_write_blocked: boolean
+          id: string
+          integration_action_type: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          rollback_required: boolean
+          source_approval_request_id: string
+          source_dry_run_id: string
+          source_manual_action_id: string
+          source_proposal_id: string
+          target_app: string
+          target_surface: string
+          would_write_external: boolean
+        }
+        Insert: {
+          approved_scope?: Json
+          bulk_action?: boolean
+          created_at?: string
+          created_by_system?: string
+          customer_visible?: boolean
+          dedupe_key: string
+          draft_payload_redacted?: Json
+          draft_status?: string
+          draft_summary: string
+          draft_title: string
+          external_write_blocked?: boolean
+          id?: string
+          integration_action_type: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          rollback_required?: boolean
+          source_approval_request_id: string
+          source_dry_run_id: string
+          source_manual_action_id: string
+          source_proposal_id: string
+          target_app: string
+          target_surface: string
+          would_write_external?: boolean
+        }
+        Update: {
+          approved_scope?: Json
+          bulk_action?: boolean
+          created_at?: string
+          created_by_system?: string
+          customer_visible?: boolean
+          dedupe_key?: string
+          draft_payload_redacted?: Json
+          draft_status?: string
+          draft_summary?: string
+          draft_title?: string
+          external_write_blocked?: boolean
+          id?: string
+          integration_action_type?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          rollback_required?: boolean
+          source_approval_request_id?: string
+          source_dry_run_id?: string
+          source_manual_action_id?: string
+          source_proposal_id?: string
+          target_app?: string
+          target_surface?: string
+          would_write_external?: boolean
+        }
+        Relationships: []
+      }
       vos_kill_switches: {
         Row: {
           created_at: string
