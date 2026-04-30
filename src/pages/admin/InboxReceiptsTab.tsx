@@ -46,6 +46,21 @@ export default function InboxReceiptsTab() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [audits, setAudits] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+
+  const runTests = async () => {
+    setTestBusy(true);
+    setTestResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("vos-step4l-test-runner", { body: {} });
+      if (error) setTestResult({ ok: false, error: error.message });
+      else setTestResult(data);
+      await load();
+    } finally {
+      setTestBusy(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
