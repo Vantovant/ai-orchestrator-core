@@ -951,20 +951,25 @@ async function buildRetrievalContext(
   }
   if (diaryResult.text) dataSources.push("voice_diary");
   if (isDailyReview && todayResult.text) dataSources.push("daily_review");
+  if (isCentralBrain) dataSources.push("central_brain");
 
   const scopedProjects = projectSummary || "No explicitly matched active projects in scope.";
   const contextParts = [knowledgeResult.text, ...parts, diaryResult.text].filter(Boolean);
 
   let context = "";
+  if (isCentralBrain && centralBrainText) {
+    context = centralBrainText + "\n\n";
+  }
   if (isDailyReview && todayResult.text) {
-    context = "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
+    context += "═══ TODAY'S ACTIVITY DATA ═══\n\n" + todayResult.text + "\n═══ END TODAY'S DATA ═══\n\n";
   }
   context += "ACTIVE PROJECTS:\n" + scopedProjects + "\n\n" + contextParts.join("\n\n");
-  if (context.length > RETRIEVAL_CAP) context = context.slice(0, RETRIEVAL_CAP) + "\n[CONTEXT_TRIMMED]";
+  const cap = isCentralBrain ? RETRIEVAL_CAP + 8000 : RETRIEVAL_CAP;
+  if (context.length > cap) context = context.slice(0, cap) + "\n[CONTEXT_TRIMMED]";
 
   knowledgeResult.meta.data_sources = [...new Set([...dataSources, ...knowledgeResult.meta.data_sources])];
 
-  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts, isDiaryOnly: false, diaryEvidence: diaryResult.evidence };
+  return { context: redact(context), retrievalMeta: knowledgeResult.meta, dataSources, isDailyReview, dailyReviewCounts: todayResult.counts, isDiaryOnly: false, diaryEvidence: diaryResult.evidence, isCentralBrain, centralBrainCounts };
 }
 
 // ─── Legacy snapshot (for structured modes) ──────────────────
