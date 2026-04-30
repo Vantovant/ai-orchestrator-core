@@ -167,9 +167,15 @@ export default function ManualActionPilotTab() {
         {testResult && (
           <CardContent>
             <div className="text-sm font-semibold mb-1">{testResult.verdict} — {testResult.score}</div>
-            <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-80">{JSON.stringify(testResult.assertions, null, 2)}</pre>
-          </CardContent>
-        )}
+          <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-80">{JSON.stringify(testResult.assertions, null, 2)}</pre>
+          {testResult.details && Object.keys(testResult.details).length > 0 && (
+            <>
+              <div className="text-xs font-semibold mt-3 mb-1 text-destructive">Setup / fixture details</div>
+              <pre className="text-xs bg-destructive/5 border border-destructive/30 p-3 rounded overflow-auto max-h-80">{JSON.stringify(testResult.details, null, 2)}</pre>
+            </>
+          )}
+        </CardContent>
+      )}
       </Card>
 
       <Card>
