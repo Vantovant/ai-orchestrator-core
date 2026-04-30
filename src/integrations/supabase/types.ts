@@ -3773,6 +3773,80 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_dry_run_actions: {
+        Row: {
+          app_id: string
+          created_at: string
+          created_by_system: string
+          dedupe_key: string
+          dispatch_blocked: boolean
+          dry_run_status: string
+          dry_run_summary: string
+          dry_run_title: string
+          dry_run_type: string
+          event_name: string | null
+          execution_blocked: boolean
+          id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          safety_blocked: boolean
+          simulated_payload_redacted: Json
+          simulated_target: string
+          source_proposal_id: string
+          would_execute: boolean
+        }
+        Insert: {
+          app_id: string
+          created_at?: string
+          created_by_system?: string
+          dedupe_key: string
+          dispatch_blocked?: boolean
+          dry_run_status?: string
+          dry_run_summary: string
+          dry_run_title: string
+          dry_run_type: string
+          event_name?: string | null
+          execution_blocked?: boolean
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          safety_blocked?: boolean
+          simulated_payload_redacted?: Json
+          simulated_target?: string
+          source_proposal_id: string
+          would_execute?: boolean
+        }
+        Update: {
+          app_id?: string
+          created_at?: string
+          created_by_system?: string
+          dedupe_key?: string
+          dispatch_blocked?: boolean
+          dry_run_status?: string
+          dry_run_summary?: string
+          dry_run_title?: string
+          dry_run_type?: string
+          event_name?: string | null
+          execution_blocked?: boolean
+          id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          safety_blocked?: boolean
+          simulated_payload_redacted?: Json
+          simulated_target?: string
+          source_proposal_id?: string
+          would_execute?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vos_dry_run_actions_source_proposal_id_fkey"
+            columns: ["source_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "vos_proposal_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vos_inbound_log: {
         Row: {
           created_at: string
