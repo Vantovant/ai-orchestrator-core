@@ -45,7 +45,7 @@ type Audit = {
   reason: string | null;
 };
 
-type RiskLevel = "low" | "medium" | "medium-high" | "high" | "unknown";
+type RiskLevel = "info" | "low" | "medium" | "medium-high" | "high" | "unknown";
 type Confidence = "high" | "low";
 
 type Classification = {
