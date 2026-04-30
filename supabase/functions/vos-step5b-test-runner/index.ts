@@ -472,9 +472,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // T23 — Expired approval blocked: build a fresh expired chain
+    // T23 — Expired approval blocked.
+    // Build a fully valid chain with a NEAR-future expires_at so two-key
+    // transitions and downstream guards accept it. Then wait for natural
+    // expiry and call the recorder. Recorder must reach approval_expired.
     let expiredApprovalId: string|null = null;
     let expiredDraftId: string|null = null;
+    const NEAR_EXPIRY_MS = 3000;
     if (proposalId && dryRunId) {
       const { data: ea } = await sb.from("vos_approval_requests").insert({
         source_dry_run_id: dryRunId, source_proposal_id: proposalId, app_id: TAG, event_name: "test_event",
@@ -483,7 +487,7 @@ Deno.serve(async (req) => {
         approval_status: "requested", requested_by_system: "step5b-test-runner",
         would_execute: false, execution_blocked: true, dispatch_blocked: true, safety_blocked: true,
         approval_does_not_execute: true,
-        expires_at: new Date(Date.now() - 60_000).toISOString(),
+        expires_at: new Date(Date.now() + NEAR_EXPIRY_MS).toISOString(),
         dedupe_key: `${TAG}-eappr-${crypto.randomUUID()}`,
       }).select("id").maybeSingle();
       expiredApprovalId = ea?.id ?? null;
@@ -493,6 +497,7 @@ Deno.serve(async (req) => {
         await sb.from("vos_approval_requests").update({ approval_status: "second_reviewed", second_reviewed_by: userB }).eq("id", expiredApprovalId);
       }
     }
+
     let expiredManualId: string|null = null;
     if (expiredApprovalId) {
       const dedupe = await sha256(`${expiredApprovalId}:internal_admin_note_record:${crypto.randomUUID()}`);
@@ -534,14 +539,38 @@ Deno.serve(async (req) => {
       expiredDraftId = ed?.id ?? null;
       if (expiredDraftId) cleanup.push({ table: "vos_integration_action_drafts", ids: [expiredDraftId] });
     }
-    {
-      // Use admin-authenticated client so we pass the admin gate first and
-      // reach the approval_expired branch in the trigger.
-      const row = await buildRow({ source_manual_action_id: expiredManualId, source_approval_request_id: expiredApprovalId, source_integration_draft_id: expiredDraftId }, "T23");
-      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
-      setResult("T23","expired_approval_blocked","approval_expired", error?.message?.slice(0,120) ?? "no_error",
-        !!error && /approval_expired/.test(error.message));
+    if (!expiredDraftId || !expiredApprovalId) {
+      setResult("T23","expired_approval_blocked","approval_expired",
+        "t23_fixture_failed_no_expired_draft", false);
+    } else {
+      // Try to backdate expires_at via service-role (approval guard treats
+      // expires_at as immutable, so this likely errors — that's fine).
+      await sb.from("vos_approval_requests")
+        .update({ expires_at: new Date(Date.now() - 60_000).toISOString() })
+        .eq("id", expiredApprovalId);
+
+      // Wait for the original NEAR_EXPIRY_MS window to elapse regardless.
+      await new Promise((r) => setTimeout(r, NEAR_EXPIRY_MS + 1500));
+
+      try {
+        const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/vos-crm-internal-note-recorder`, {
+          method: "POST",
+          headers: { "Authorization": callerAuth, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_integration_draft_id: expiredDraftId,
+            note_body: "Internal observation against expired approval.",
+            note_kind: "internal_observation",
+          }),
+        });
+        const j = await r.json();
+        setResult("T23","expired_approval_blocked","approval_expired",
+          `ok=${j?.ok} reason=${j?.reason}`,
+          j?.ok === false && j?.reason === "approval_expired");
+      } catch (e:any) {
+        setResult("T23","expired_approval_blocked","approval_expired","fetch_error:"+e.message, false);
+      }
     }
+
 
     // T24 — Two-key violation (same reviewer twice) — must fail upstream at vos_approval_requests guard
     {
