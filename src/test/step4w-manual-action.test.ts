@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { FORBIDDEN_UI_TOKENS } from "../pages/admin/ManualActionPilotTab";
 
-const tabSrc = readFileSync(resolve(__dirname, "../pages/admin/ManualActionPilotTab.tsx"), "utf8");
+const tabSrcRaw = readFileSync(resolve(__dirname, "../pages/admin/ManualActionPilotTab.tsx"), "utf8");
+// Remove the FORBIDDEN_UI_TOKENS export block so the array literal itself doesn't false-trigger matches.
+const tabSrc = tabSrcRaw.replace(/export const FORBIDDEN_UI_TOKENS[\s\S]*?\];/, "");
 
 // Strip JS string and comment regions so we only inspect rendered JSX text/labels.
 function stripStringsAndComments(s: string): string {
