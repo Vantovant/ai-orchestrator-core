@@ -150,12 +150,56 @@ Deno.serve(async (req) => {
     .in("flag_key", ["VOS_INBOX_RECEIVE_ENABLED", "VOS_INBOX_RECEIVE_APP_APLGO_ENABLED", "VOS_ALLOWED_INBOX_EVENT", "VANTO_OS_ENABLED", "EMAIL_SEND_ENABLED", "WHATSAPP_SEND_ENABLED", "MASTER_PROSPECTOR_STATE", "PHASE_4A_STEP_3"]);
   const { data: finalKs } = await admin.from("vos_kill_switches").select("scope, scope_target, state");
 
+  // ─── Strict pass/fail assertions ──────────────────────────────────────────
+  const findRes = (name: string) => results.find((r) => r.test === name);
+  const a = findRes("A_axis_b_disabled");
+  const b = findRes("B_valid_persists");
+  const c = findRes("C_duplicate_deduped");
+  const d = findRes("D_bad_signature");
+  const e = findRes("E_wrong_event");
+
+  const assertions = {
+    A_rejected_flag: a?.status === 403 && a?.body?.reason === "axis_b_disabled",
+    B_persisted: b?.status === 200 && b?.body?.persisted === true && b?.body?.deduped === false,
+    C_deduped: c?.status === 200 && c?.body?.deduped === true && c?.body?.persisted === false,
+    D_rejected_signature: d?.status === 401 && d?.body?.signature_valid === false,
+    E_rejected_event: e?.status === 400 && (e?.body?.reason === "event_name_not_allowed" || e?.body?.event_allowed === false),
+    delta_inbox_is_one: (finalInbox - baseInbox) === 1,
+    delta_audit_at_least_5: (finalAudit - baseAudit) >= 5,
+    F_axis_b_restored:
+      finalFlags?.find((f: any) => f.flag_key === "VOS_INBOX_RECEIVE_ENABLED")?.flag_value === "false"
+      && finalFlags?.find((f: any) => f.flag_key === "VOS_INBOX_RECEIVE_APP_APLGO_ENABLED")?.flag_value === "false"
+      && (finalKs ?? []).some((k: any) => k.scope === "inbox_receive" && k.scope_target === APP_ID && k.state === "engaged"),
+    axis_a_still_red:
+      finalFlags?.find((f: any) => f.flag_key === "VANTO_OS_ENABLED")?.flag_value === "false"
+      && finalFlags?.find((f: any) => f.flag_key === "EMAIL_SEND_ENABLED")?.flag_value === "false"
+      && finalFlags?.find((f: any) => f.flag_key === "WHATSAPP_SEND_ENABLED")?.flag_value === "false"
+      && finalFlags?.find((f: any) => f.flag_key === "PHASE_4A_STEP_3")?.flag_value === "false",
+  };
+  const allPassed = Object.values(assertions).every(Boolean);
+  const passedCount = Object.values(assertions).filter(Boolean).length;
+  const totalCount = Object.keys(assertions).length;
+
   return new Response(JSON.stringify({
-    ok: true,
+    ok: allPassed,
+    verdict: allPassed
+      ? "STEP 4L BUILD COMPLETE — LEVEL 2 INBOX RECEIVE VERIFIED, AXIS A STILL RED"
+      : "STEP 4L PARTIAL — VALID PACKET STILL NOT PERSISTING",
     notice: "Step 4L test runner complete. Axis B returned to default (OFF + engaged).",
+    summary: { passed: passedCount, total: totalCount, all_passed: allPassed },
+    assertions,
     baseline: { inbox_rows_before: baseInbox, audit_rows_before: baseAudit },
     final: { inbox_rows_after: finalInbox, audit_rows_after: finalAudit, delta_inbox: finalInbox - baseInbox, delta_audit: finalAudit - baseAudit },
     results,
-    final_axis_b_state: { flags: finalFlags, kill_switches: finalKs?.filter((k: any) => k.scope === "inbox_receive" || k.scope_target === "*") },
+    final_axis_b_state: { flags: finalFlags, kill_switches: (finalKs ?? []).filter((k: any) => k.scope === "inbox_receive" || k.scope_target === "*") },
+    final_axis_a_state: {
+      vanto_os_enabled: finalFlags?.find((f: any) => f.flag_key === "VANTO_OS_ENABLED")?.flag_value,
+      email_send_enabled: finalFlags?.find((f: any) => f.flag_key === "EMAIL_SEND_ENABLED")?.flag_value,
+      whatsapp_send_enabled: finalFlags?.find((f: any) => f.flag_key === "WHATSAPP_SEND_ENABLED")?.flag_value,
+      master_prospector_state: finalFlags?.find((f: any) => f.flag_key === "MASTER_PROSPECTOR_STATE")?.flag_value,
+      phase_4a_step_3: finalFlags?.find((f: any) => f.flag_key === "PHASE_4A_STEP_3")?.flag_value,
+      global_kill_switch: (finalKs ?? []).find((k: any) => k.scope === "global" && k.scope_target === "*")?.state,
+      app_kill_switch: (finalKs ?? []).find((k: any) => k.scope === "app" && k.scope_target === APP_ID)?.state,
+    },
   }, null, 2), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 });
