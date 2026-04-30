@@ -176,13 +176,13 @@ Deno.serve(async (req: Request) => {
     return jsonResp(403, { ok: false, reason: "axis_b_disabled", flag_gate_clear: false });
   }
 
-  // ─── Kill-switch ───────────────────────────────────────────────────────────
+  // ─── Kill-switch (Axis B scope only) ───────────────────────────────────────
+  // Step 4L design: ONLY inbox_receive:app_aplgo_mlm blocks Level 2 receive.
+  // global:* and app:app_aplgo_mlm remain engaged as Axis A protections (dispatch/send/consume),
+  // but they MUST NOT block inbox-only receive. Axis A vs Axis B separation.
   const { data: ksRows } = await admin.from("vos_kill_switches").select("scope, scope_target, state").eq("state", "engaged");
   const engaged = new Set<string>((ksRows ?? []).map((k: any) => `${k.scope}:${k.scope_target}`));
-  const ksClear = !(engaged.has("global:*") || engaged.has(`inbox_receive:${ALLOWED_APP_ID}`) || engaged.has(`app:${ALLOWED_APP_ID}`));
-  // NOTE: Axis A app-scope kill-switches still being engaged is fine for Axis B receive — Axis B has its own scope.
-  // For Step 4L, only inbox_receive:app_aplgo_mlm and global:* block receive.
-  const ksClearReceive = !(engaged.has("global:*") || engaged.has(`inbox_receive:${ALLOWED_APP_ID}`));
+  const ksClearReceive = !engaged.has(`inbox_receive:${ALLOWED_APP_ID}`);
   if (!ksClearReceive) {
     await writeAudit(admin, {
       app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey,
