@@ -27,7 +27,7 @@ export function ArchiveNoteDialog({ open, onOpenChange, submitting, onConfirm }:
   const [reason, setReason] = useState("");
   const validation = useMemo(() => validateArchiveReason(reason), [reason]);
   let inlineWarning: string | null = null;
-  if (!validation.ok && reason.trim().length > 0) {
+  if (reason.trim().length > 0 && validation.ok === false) {
     if (validation.code === "banned_word") {
       inlineWarning = `The word "${validation.detail}" is not allowed in archive reasons. Please rephrase.`;
     } else if (validation.code === "pii") {
