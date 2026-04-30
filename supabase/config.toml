@@ -180,3 +180,6 @@ verify_jwt = false
 [functions.vos-inbox-receive]
 verify_jwt = false
 
+[functions.vos-step4l-test-runner]
+verify_jwt = false
+
