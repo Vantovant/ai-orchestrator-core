@@ -129,6 +129,7 @@ export function classify(outcome: string | null | undefined, eventName: string |
 }
 
 const RISK_VARIANT: Record<RiskLevel, "default" | "destructive" | "secondary" | "outline"> = {
+  info: "secondary",
   low: "secondary",
   medium: "outline",
   "medium-high": "outline",
