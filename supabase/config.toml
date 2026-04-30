@@ -189,3 +189,9 @@ verify_jwt = false
 [functions.vos-step4y-test-runner]
 verify_jwt = false
 
+[functions.vos-crm-internal-note-recorder]
+verify_jwt = false
+
+[functions.vos-step5b-test-runner]
+verify_jwt = false
+

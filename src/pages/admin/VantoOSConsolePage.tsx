@@ -17,6 +17,7 @@ import DryRunActionsTab from "./DryRunActionsTab";
 import ApprovalGateTab from "./ApprovalGateTab";
 import ManualActionPilotTab from "./ManualActionPilotTab";
 import IntegrationDraftsTab from "./IntegrationDraftsTab";
+import CRMInternalNotesTab from "./CRMInternalNotesTab";
 
 type Row = Record<string, any>;
 
@@ -232,6 +233,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="approvals4u">Approval Gate</TabsTrigger>
           <TabsTrigger value="manual4w">Manual Action Pilot</TabsTrigger>
           <TabsTrigger value="drafts4y">Integration Drafts</TabsTrigger>
+          <TabsTrigger value="crmnotes5b">CRM Internal Notes</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -393,6 +395,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="drafts4y" className="space-y-4 pt-4">
           <IntegrationDraftsTab />
+        </TabsContent>
+
+        <TabsContent value="crmnotes5b" className="space-y-4 pt-4">
+          <CRMInternalNotesTab />
         </TabsContent>
       </Tabs>
     </div>
