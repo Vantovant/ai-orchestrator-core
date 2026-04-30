@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Shield, ShieldAlert, Lock, RefreshCw, AlertTriangle, CheckCircle2, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import InboxReceiptsTab from "./InboxReceiptsTab";
+import ReceiptIntelligenceTab from "./ReceiptIntelligenceTab";
 
 type Row = Record<string, any>;
 
@@ -218,6 +219,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="test4d">Step 4D Tests</TabsTrigger>
           <TabsTrigger value="test4g">Step 4G Pilot</TabsTrigger>
           <TabsTrigger value="receipts">Inbox Receipts</TabsTrigger>
+          <TabsTrigger value="intel">Receipt Intelligence</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
@@ -351,6 +353,10 @@ export default function VantoOSConsolePage() {
 
         <TabsContent value="receipts" className="space-y-4 pt-4">
           <InboxReceiptsTab />
+        </TabsContent>
+
+        <TabsContent value="intel" className="space-y-4 pt-4">
+          <ReceiptIntelligenceTab />
         </TabsContent>
       </Tabs>
     </div>
