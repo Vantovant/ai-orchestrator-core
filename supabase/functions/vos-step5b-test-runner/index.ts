@@ -417,11 +417,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // T17 — Invalid lead_inbox reference
+    // T17 — Invalid lead_inbox reference (must use admin-authenticated client
+    // so we pass the admin gate and reach the lead_inbox FK branch in the trigger).
     {
       const fakeLead = crypto.randomUUID();
       const row = await buildRow({ contact_ref_type: "lead_inbox", contact_ref_id: fakeLead }, "T17");
-      const { error } = await sb.from("vos_crm_internal_notes").insert(row);
+      const { error } = await sbCaller.from("vos_crm_internal_notes").insert(row);
       setResult("T17","invalid_lead_ref_blocked","lead_inbox_not_found", error?.message?.slice(0,120) ?? "no_error",
         !!error && /lead_inbox_not_found/.test(error.message));
     }
