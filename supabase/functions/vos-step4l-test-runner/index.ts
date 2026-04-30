@@ -174,7 +174,8 @@ Deno.serve(async (req) => {
       finalFlags?.find((f: any) => f.flag_key === "VANTO_OS_ENABLED")?.flag_value === "false"
       && finalFlags?.find((f: any) => f.flag_key === "EMAIL_SEND_ENABLED")?.flag_value === "false"
       && finalFlags?.find((f: any) => f.flag_key === "WHATSAPP_SEND_ENABLED")?.flag_value === "false"
-      && finalFlags?.find((f: any) => f.flag_key === "PHASE_4A_STEP_3")?.flag_value === "false",
+      && finalFlags?.find((f: any) => f.flag_key === "MASTER_PROSPECTOR_STATE")?.flag_value === "ASLEEP"
+      && finalFlags?.find((f: any) => f.flag_key === "PHASE_4A_STEP_3")?.flag_value === "OFF",
   };
   const allPassed = Object.values(assertions).every(Boolean);
   const passedCount = Object.values(assertions).filter(Boolean).length;
