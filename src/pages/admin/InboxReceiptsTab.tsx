@@ -102,9 +102,14 @@ export default function InboxReceiptsTab() {
               Signed inbox-only packets accepted and stored (redacted only). No dispatch. No send. No replay.
             </p>
           </div>
-          <Button size="sm" variant="outline" onClick={load} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" onClick={runTests} disabled={testBusy}>
+              {testBusy ? "Running…" : "Run Step 4L Test Suite"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={load} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {receipts.length === 0 ? (
