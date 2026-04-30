@@ -26,14 +26,16 @@ type Props = {
 export function ArchiveNoteDialog({ open, onOpenChange, submitting, onConfirm }: Props) {
   const [reason, setReason] = useState("");
   const validation = useMemo(() => validateArchiveReason(reason), [reason]);
-  const inlineWarning =
-    !validation.ok && reason.trim().length > 0
-      ? validation.code === "banned_word"
-        ? `The word "${validation.detail}" is not allowed in archive reasons. Please rephrase.`
-        : validation.code === "pii"
-        ? `Possible personal data detected (${validation.detail}). Remove before archiving.`
-        : "Minimum 5 characters."
-      : null;
+  let inlineWarning: string | null = null;
+  if (!validation.ok && reason.trim().length > 0) {
+    if (validation.code === "banned_word") {
+      inlineWarning = `The word "${validation.detail}" is not allowed in archive reasons. Please rephrase.`;
+    } else if (validation.code === "pii") {
+      inlineWarning = `Possible personal data detected (${validation.detail}). Remove before archiving.`;
+    } else {
+      inlineWarning = "Minimum 5 characters.";
+    }
+  }
 
   const handleOpenChange = (next: boolean) => {
     if (!next) setReason("");
