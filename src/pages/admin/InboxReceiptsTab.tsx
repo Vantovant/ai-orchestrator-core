@@ -212,15 +212,67 @@ export default function InboxReceiptsTab() {
       {testResult && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Step 4L Test Suite — Last Run</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Toggles Axis B for the test only, then restores OFF + engaged. Axis A never touched.
-            </p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm">Step 4L Test Suite — Last Run</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Toggles Axis B for the test only, then restores OFF + engaged. Axis A never touched.
+                </p>
+              </div>
+              <Badge variant={testResult?.ok ? "default" : "destructive"} className="text-xs">
+                {testResult?.ok ? "PASS" : "FAIL"}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent>
-            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto max-h-96">
-              {JSON.stringify(testResult, null, 2)}
-            </pre>
+          <CardContent className="space-y-4">
+            {testResult?.verdict && (
+              <div className="text-sm font-medium">{testResult.verdict}</div>
+            )}
+            {testResult?.summary && (
+              <div className="text-xs text-muted-foreground">
+                Assertions: <span className="font-mono">{testResult.summary.passed}/{testResult.summary.total} passed</span>
+                {typeof testResult?.final?.delta_inbox === "number" && (
+                  <> · delta_inbox: <span className="font-mono">{testResult.final.delta_inbox}</span></>
+                )}
+                {typeof testResult?.final?.delta_audit === "number" && (
+                  <> · delta_audit: <span className="font-mono">{testResult.final.delta_audit}</span></>
+                )}
+              </div>
+            )}
+            {testResult?.assertions && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-1 text-xs">
+                {Object.entries(testResult.assertions).map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between border rounded px-2 py-1">
+                    <span className="font-mono">{k}</span>
+                    <Badge variant={v ? "default" : "destructive"} className="text-xs">
+                      {v ? "PASS" : "FAIL"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+            {(testResult?.final_axis_a_state || testResult?.final_axis_b_state) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                {testResult?.final_axis_b_state && (
+                  <div className="border rounded p-2">
+                    <div className="font-semibold mb-1">Axis B final (must be OFF)</div>
+                    <pre className="text-[11px] overflow-x-auto">{JSON.stringify(testResult.final_axis_b_state, null, 2)}</pre>
+                  </div>
+                )}
+                {testResult?.final_axis_a_state && (
+                  <div className="border rounded p-2">
+                    <div className="font-semibold mb-1">Axis A final (must be RED)</div>
+                    <pre className="text-[11px] overflow-x-auto">{JSON.stringify(testResult.final_axis_a_state, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            )}
+            <details>
+              <summary className="text-xs text-muted-foreground cursor-pointer">Raw JSON</summary>
+              <pre className="text-xs bg-muted p-3 rounded overflow-x-auto max-h-96 mt-2">
+                {JSON.stringify(testResult, null, 2)}
+              </pre>
+            </details>
           </CardContent>
         </Card>
       )}
