@@ -8,6 +8,7 @@ import { Brain, Send, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
+import ChatDictation from "@/components/voice/ChatDictation";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -129,7 +130,10 @@ export default function CentralBrainChat() {
           )}
         </ScrollArea>
 
-        <div className="flex gap-2 border-t pt-3">
+        <div className="flex gap-2 border-t pt-3 items-end">
+          <ChatDictation
+            onAppend={(text) => setInput(prev => prev ? `${prev} ${text}` : text)}
+          />
           <Textarea
             value={input}
             onChange={e => setInput(e.target.value)}
@@ -139,7 +143,7 @@ export default function CentralBrainChat() {
                 send();
               }
             }}
-            placeholder="Ask about console activity, approvals, receipts, axis state…"
+            placeholder="Ask or dictate about console activity, approvals, receipts, axis state…"
             className="resize-none text-sm min-h-[44px]"
             rows={1}
             disabled={busy}
