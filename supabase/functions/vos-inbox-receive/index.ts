@@ -1,6 +1,11 @@
-// Vanto OS — Step 4L Level 2 Inbox-Only Receive (app_aplgo_mlm only)
+// Vanto OS — Step 4O Level 2 Inbox-Only Receive (multi-app, registry-driven)
 // NO DISPATCH. NO SEND. NO CONSUME. NO DOWNSTREAM ACTION.
-// Allowed event: aplgo.lead_magnet.downloaded
+// Apps + events are gated entirely by vos_app_registry + per-app Axis B flag + per-app receive kill-switch.
+// Step 4O additions:
+//   - app_id read from x-vos-app-id (no hardcoded ALLOWED_APP_ID)
+//   - per-app Axis B flag map (app_aplgo_mlm, app_vantoos_host)
+//   - global:* and app:* dispatch kill-switches DO NOT block inbox-only receive
+//   - only inbox_receive:{app_id} blocks receive
 // All responses include hard-coded would_dispatch=false, dispatch_blocked=true, downstream_action="none".
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -11,9 +16,13 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const ALLOWED_APP_ID = "app_aplgo_mlm";
-const ALLOWED_EVENT = "aplgo.lead_magnet.downloaded";
 const REPLAY_WINDOW_SECONDS = 300;
+
+// Per-app Axis B flag mapping. Add new apps here as they are approved for Level 2 receive.
+const PER_APP_AXIS_B_FLAG: Record<string, string> = {
+  app_aplgo_mlm: "VOS_INBOX_RECEIVE_APP_APLGO_ENABLED",
+  app_vantoos_host: "VOS_INBOX_RECEIVE_APP_VANTOOS_HOST_ENABLED",
+};
 
 // Durable rate-limit thresholds
 const PER_APP_LIMIT = 30;   // per 60s
@@ -109,11 +118,9 @@ async function bumpAndCheck(
   const windowStart = new Date(bucketMs).toISOString();
   const bucketKey = `${bucketType}:${scopeTarget}:${windowStart}`;
 
-  // Try insert; on conflict, increment via update.
   const { error: insErr } = await admin.from("vos_rate_limit_counters")
     .insert({ bucket_key: bucketKey, bucket_type: bucketType, scope_target: scopeTarget, window_start: windowStart, count: 1 });
   if (insErr) {
-    // Conflict — fetch and update
     const { data: row } = await admin.from("vos_rate_limit_counters")
       .select("id, count").eq("bucket_type", bucketType).eq("scope_target", scopeTarget).eq("window_start", windowStart).maybeSingle();
     if (row) {
@@ -139,7 +146,6 @@ Deno.serve(async (req: Request) => {
     || req.headers.get("cf-connecting-ip") || "unknown";
   const ipHash = await sha256Hex(ip);
 
-  // Read raw body once — must be exact bytes for HMAC
   const payloadString = await req.text();
 
   const sigHeader = req.headers.get("x-vos-signature");
@@ -150,65 +156,72 @@ Deno.serve(async (req: Request) => {
   const ts = Number(tsHeader);
   const dedupeKey = await sha256Hex(`${ts}.${payloadString}`);
 
-  // ─── Per-IP rate limit (always evaluated first) ────────────────────────────
+  // ─── Per-IP rate limit ─────────────────────────────────────────────────────
   const ipRl = await bumpAndCheck(admin, "per_ip", ipHash, 60, PER_IP_LIMIT);
   if (!ipRl.allowed) {
     await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, outcome: "rate_limited", reason: "per_ip", ip_hash: ipHash });
     return jsonResp(429, { ok: false, reason: "rate_limited", bucket: "per_ip" });
   }
 
-  // ─── Flag gate (Axis B) ────────────────────────────────────────────────────
+  // ─── App identity must be known before flag/registry resolution ────────────
+  if (!appHeader || !PER_APP_AXIS_B_FLAG[appHeader]) {
+    await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, outcome: "rejected_event", reason: "app_id_unknown_or_unsupported", ip_hash: ipHash });
+    return jsonResp(400, { ok: false, reason: "app_id_not_allowed" });
+  }
+  const perAppFlagKey = PER_APP_AXIS_B_FLAG[appHeader];
+
+  // ─── Flag gate (Axis B) — global + per-app ─────────────────────────────────
   const { data: flagRows } = await admin.from("vos_platform_flags")
     .select("flag_key, flag_value")
-    .in("flag_key", ["VOS_INBOX_RECEIVE_ENABLED", "VOS_INBOX_RECEIVE_APP_APLGO_ENABLED", "VOS_ALLOWED_INBOX_EVENT"]);
+    .in("flag_key", ["VOS_INBOX_RECEIVE_ENABLED", perAppFlagKey]);
   const flags: Record<string, string> = {};
   for (const f of flagRows ?? []) flags[f.flag_key] = f.flag_value;
   const globalOn = flags["VOS_INBOX_RECEIVE_ENABLED"] === "true";
-  const perAppOn = flags["VOS_INBOX_RECEIVE_APP_APLGO_ENABLED"] === "true";
-  const allowedEvent = flags["VOS_ALLOWED_INBOX_EVENT"] ?? ALLOWED_EVENT;
+  const perAppOn = flags[perAppFlagKey] === "true";
   const flagGateClear = globalOn && perAppOn;
 
   if (!flagGateClear) {
     await writeAudit(admin, {
       app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey,
-      flag_gate_clear: false, outcome: "rejected_flag", reason: `axis_b_disabled global=${globalOn} per_app=${perAppOn}`, ip_hash: ipHash,
+      flag_gate_clear: false, outcome: "rejected_flag",
+      reason: `axis_b_disabled global=${globalOn} per_app=${perAppOn}`, ip_hash: ipHash,
     });
     return jsonResp(403, { ok: false, reason: "axis_b_disabled", flag_gate_clear: false });
   }
 
   // ─── Kill-switch (Axis B scope only) ───────────────────────────────────────
-  // Step 4L design: ONLY inbox_receive:app_aplgo_mlm blocks Level 2 receive.
-  // global:* and app:app_aplgo_mlm remain engaged as Axis A protections (dispatch/send/consume),
-  // but they MUST NOT block inbox-only receive. Axis A vs Axis B separation.
+  // Axis A vs Axis B separation: ONLY inbox_receive:{app_id} blocks Level 2 receive.
+  // global:* and app:{id} dispatch kill-switches MUST NOT block inbox-only receive.
   const { data: ksRows } = await admin.from("vos_kill_switches").select("scope, scope_target, state").eq("state", "engaged");
   const engaged = new Set<string>((ksRows ?? []).map((k: any) => `${k.scope}:${k.scope_target}`));
-  const ksClearReceive = !engaged.has(`inbox_receive:${ALLOWED_APP_ID}`);
+  const ksClearReceive = !engaged.has(`inbox_receive:${appHeader}`);
   if (!ksClearReceive) {
     await writeAudit(admin, {
       app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey,
-      flag_gate_clear: true, kill_switch_clear: false, outcome: "rejected_kill_switch", reason: "inbox_receive_or_global_engaged", ip_hash: ipHash,
+      flag_gate_clear: true, kill_switch_clear: false,
+      outcome: "rejected_kill_switch", reason: "inbox_receive_engaged", ip_hash: ipHash,
     });
     return jsonResp(403, { ok: false, reason: "kill_switch_engaged", kill_switch_clear: false });
   }
 
-  // ─── App + event identity ──────────────────────────────────────────────────
-  if (appHeader !== ALLOWED_APP_ID) {
-    await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, outcome: "rejected_event", reason: "app_id_mismatch", ip_hash: ipHash });
-    return jsonResp(400, { ok: false, reason: "app_id_not_allowed" });
-  }
-  if (eventHeader !== allowedEvent) {
-    await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, event_allowed: false, outcome: "rejected_event", reason: "event_name_mismatch", ip_hash: ipHash });
-    return jsonResp(400, { ok: false, reason: "event_name_not_allowed", event_allowed: false });
-  }
-
-  // ─── Registry lookup ───────────────────────────────────────────────────────
+  // ─── Registry lookup (per-app) ─────────────────────────────────────────────
   const { data: appRow } = await admin.from("vos_app_registry")
     .select("app_key, owner_scope, app_status, public_key_ref, inbox_only_allowed, inbox_allowed_events")
-    .eq("app_key", ALLOWED_APP_ID).maybeSingle();
-  if (!appRow || appRow.owner_scope !== "vanto_admin_ecosystem" || !appRow.inbox_only_allowed
-      || !(appRow.inbox_allowed_events ?? []).includes(allowedEvent) || appRow.app_status === "revoked") {
+    .eq("app_key", appHeader).maybeSingle();
+  if (!appRow
+      || appRow.owner_scope !== "vanto_admin_ecosystem"
+      || appRow.app_status !== "design_only"
+      || !appRow.inbox_only_allowed
+      || appRow.app_status === "revoked") {
     await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, event_allowed: false, outcome: "rejected_event", reason: "registry_disallowed", ip_hash: ipHash });
     return jsonResp(403, { ok: false, reason: "registry_disallowed" });
+  }
+
+  // ─── Event identity (driven entirely by registry per-app whitelist) ────────
+  const allowedEvents: string[] = (appRow.inbox_allowed_events ?? []) as string[];
+  if (!eventHeader || !allowedEvents.includes(eventHeader)) {
+    await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, event_allowed: false, outcome: "rejected_event", reason: "event_name_mismatch", ip_hash: ipHash });
+    return jsonResp(400, { ok: false, reason: "event_name_not_allowed", event_allowed: false });
   }
 
   // ─── Timestamp window ──────────────────────────────────────────────────────
@@ -224,7 +237,7 @@ Deno.serve(async (req: Request) => {
 
   // ─── Idempotency: short-circuit on dedupe_key hit ─────────────────────────
   const { data: existing } = await admin.from("vos_signed_inbox")
-    .select("id").eq("app_id", ALLOWED_APP_ID).eq("dedupe_key", dedupeKey).maybeSingle();
+    .select("id").eq("app_id", appHeader).eq("dedupe_key", dedupeKey).maybeSingle();
   if (existing) {
     await writeAudit(admin, {
       app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey,
@@ -235,7 +248,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // ─── Per-app durable rate limit ────────────────────────────────────────────
-  const appRl = await bumpAndCheck(admin, "per_app", ALLOWED_APP_ID, 60, PER_APP_LIMIT);
+  const appRl = await bumpAndCheck(admin, "per_app", appHeader, 60, PER_APP_LIMIT);
   if (!appRl.allowed) {
     await writeAudit(admin, { app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey, outcome: "rate_limited", reason: "per_app", ip_hash: ipHash });
     return jsonResp(429, { ok: false, reason: "rate_limited", bucket: "per_app" });
@@ -261,8 +274,7 @@ Deno.serve(async (req: Request) => {
   const fingerprintPrefix = Array.from(new Uint8Array(fpBuf)).slice(0, 4).map((b) => b.toString(16).padStart(2, "0")).join("");
 
   if (!sigValid) {
-    // Failed-auth lockout bump
-    await bumpAndCheck(admin, "failed_auth", `${ALLOWED_APP_ID}:${ipHash}`, 300, FAILED_AUTH_LIMIT);
+    await bumpAndCheck(admin, "failed_auth", `${appHeader}:${ipHash}`, 300, FAILED_AUTH_LIMIT);
     await writeAudit(admin, {
       app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey,
       signature_valid: false, fingerprint_prefix: fingerprintPrefix,
@@ -275,13 +287,13 @@ Deno.serve(async (req: Request) => {
   let parsedPayload: any = {};
   try { parsedPayload = payloadString ? JSON.parse(payloadString) : {}; } catch { parsedPayload = { _raw: "[unparseable]" }; }
   const redacted = redactValue(parsedPayload);
-  const safeSummary = buildSafeSummary(redacted, ALLOWED_APP_ID, allowedEvent);
+  const safeSummary = buildSafeSummary(redacted, appHeader, eventHeader);
 
   // ─── Persist (only redacted) ───────────────────────────────────────────────
   const { error: insertErr } = await admin.from("vos_signed_inbox").insert({
-    app_id: ALLOWED_APP_ID,
-    source_app: ALLOWED_APP_ID,
-    event_name: allowedEvent,
+    app_id: appHeader,
+    source_app: appHeader,
+    event_name: eventHeader,
     ts,
     dedupe_key: dedupeKey,
     fingerprint_prefix: fingerprintPrefix,
@@ -296,7 +308,6 @@ Deno.serve(async (req: Request) => {
   });
 
   if (insertErr) {
-    // Race: another worker just inserted same dedupe_key
     if (String(insertErr.message ?? "").toLowerCase().includes("duplicate") || String(insertErr.code ?? "") === "23505") {
       await writeAudit(admin, {
         app_id: appHeader, event_name: eventHeader, dedupe_key: dedupeKey,
@@ -323,9 +334,9 @@ Deno.serve(async (req: Request) => {
 
   return jsonResp(200, {
     ok: true, accepted: true, persisted: true, deduped: false,
-    app_id: ALLOWED_APP_ID, event_name: allowedEvent,
+    app_id: appHeader, event_name: eventHeader,
     fingerprint_prefix: fingerprintPrefix,
     signature_valid: true,
-    notice: "Step 4L Level 2 inbox-only receive. Stored redacted only. NO dispatch. NO send. NO consume.",
+    notice: "Step 4O Level 2 inbox-only receive (multi-app). Stored redacted only. NO dispatch. NO send. NO consume.",
   });
 });
