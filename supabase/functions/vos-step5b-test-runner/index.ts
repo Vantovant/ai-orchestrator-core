@@ -472,9 +472,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // T23 — Expired approval blocked: build a fresh expired chain
+    // T23 — Expired approval blocked.
+    // Build a fully valid chain with a NEAR-future expires_at so two-key
+    // transitions and downstream guards accept it. Then wait for natural
+    // expiry and call the recorder. Recorder must reach approval_expired.
     let expiredApprovalId: string|null = null;
     let expiredDraftId: string|null = null;
+    const NEAR_EXPIRY_MS = 3000;
     if (proposalId && dryRunId) {
       const { data: ea } = await sb.from("vos_approval_requests").insert({
         source_dry_run_id: dryRunId, source_proposal_id: proposalId, app_id: TAG, event_name: "test_event",
@@ -483,7 +487,7 @@ Deno.serve(async (req) => {
         approval_status: "requested", requested_by_system: "step5b-test-runner",
         would_execute: false, execution_blocked: true, dispatch_blocked: true, safety_blocked: true,
         approval_does_not_execute: true,
-        expires_at: new Date(Date.now() - 60_000).toISOString(),
+        expires_at: new Date(Date.now() + NEAR_EXPIRY_MS).toISOString(),
         dedupe_key: `${TAG}-eappr-${crypto.randomUUID()}`,
       }).select("id").maybeSingle();
       expiredApprovalId = ea?.id ?? null;
@@ -493,6 +497,7 @@ Deno.serve(async (req) => {
         await sb.from("vos_approval_requests").update({ approval_status: "second_reviewed", second_reviewed_by: userB }).eq("id", expiredApprovalId);
       }
     }
+
     let expiredManualId: string|null = null;
     if (expiredApprovalId) {
       const dedupe = await sha256(`${expiredApprovalId}:internal_admin_note_record:${crypto.randomUUID()}`);
