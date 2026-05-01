@@ -129,7 +129,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon"><Menu className="h-5 w-5" /></Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 bg-sidebar p-0 text-sidebar-foreground">
+            <SheetContent side="left" className="w-64 bg-sidebar p-0 text-sidebar-foreground flex flex-col h-full">
               <SidebarNav onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
