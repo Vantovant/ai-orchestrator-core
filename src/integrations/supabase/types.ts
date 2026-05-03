@@ -4881,6 +4881,10 @@ export type Database = {
         Args: { approval_id: string }
         Returns: string
       }
+      vos_run_revocation_rehearsal_once: {
+        Args: { _reason: string }
+        Returns: Json
+      }
       vos_simulate_revocation: {
         Args: { _reason: string; _target_user_id: string }
         Returns: Json
