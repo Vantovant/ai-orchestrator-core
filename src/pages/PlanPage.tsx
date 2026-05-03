@@ -601,6 +601,12 @@ export default function PlanPage() {
               if (projectIdParam) {
                 filtered = filtered.filter(t => t.project_id === projectIdParam);
               }
+              // Always surface unfinished tasks above completed ones
+              filtered = [...filtered].sort((a, b) => {
+                const aDone = a.status === "done" ? 1 : 0;
+                const bDone = b.status === "done" ? 1 : 0;
+                return aDone - bDone;
+              });
               return filtered.length === 0 ? <Card><CardContent className="p-6 text-center text-muted-foreground">No tasks match</CardContent></Card> :
               <div className="space-y-2">
                 {filtered.map((t) => (
