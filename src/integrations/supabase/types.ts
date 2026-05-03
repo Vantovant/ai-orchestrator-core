@@ -3028,6 +3028,42 @@ export type Database = {
           },
         ]
       }
+      role_revocation_log: {
+        Row: {
+          created_at: string
+          id: string
+          jwt_subject: string | null
+          prev_active_since: string | null
+          reason_text: string
+          revoked_at: string
+          revoker_user_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+          target_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jwt_subject?: string | null
+          prev_active_since?: string | null
+          reason_text: string
+          revoked_at?: string
+          revoker_user_id: string
+          target_role: Database["public"]["Enums"]["app_role"]
+          target_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jwt_subject?: string | null
+          prev_active_since?: string | null
+          reason_text?: string
+          revoked_at?: string
+          revoker_user_id?: string
+          target_role?: Database["public"]["Enums"]["app_role"]
+          target_user_id?: string
+        }
+        Relationships: []
+      }
       source_context: {
         Row: {
           captured_at: string
@@ -3586,18 +3622,27 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          revocation_reason: string | null
+          revoked_at: string | null
+          revoked_by: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
+          revocation_reason?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
@@ -3751,6 +3796,8 @@ export type Database = {
           approval_summary: string
           approval_title: string
           approval_type: string
+          approver_jwt_subject: string | null
+          approver_role_at_time: string | null
           created_at: string
           dedupe_key: string
           dispatch_blocked: boolean
@@ -3758,14 +3805,20 @@ export type Database = {
           execution_blocked: boolean
           expires_at: string
           id: string
+          invalidated_by_revocation: boolean
+          last_modified_at: string | null
+          last_modified_by: string | null
           rejection_reason: string | null
           requested_by_system: string
           requested_by_user: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           safety_blocked: boolean
+          second_approver_jwt_subject: string | null
+          second_approver_role_at_time: string | null
           second_reviewed_at: string | null
           second_reviewed_by: string | null
+          source_chain_hash_at_approval: string | null
           source_dry_run_id: string
           source_proposal_id: string
           would_execute: boolean
@@ -3777,6 +3830,8 @@ export type Database = {
           approval_summary: string
           approval_title: string
           approval_type: string
+          approver_jwt_subject?: string | null
+          approver_role_at_time?: string | null
           created_at?: string
           dedupe_key: string
           dispatch_blocked?: boolean
@@ -3784,14 +3839,20 @@ export type Database = {
           execution_blocked?: boolean
           expires_at?: string
           id?: string
+          invalidated_by_revocation?: boolean
+          last_modified_at?: string | null
+          last_modified_by?: string | null
           rejection_reason?: string | null
           requested_by_system: string
           requested_by_user?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           safety_blocked?: boolean
+          second_approver_jwt_subject?: string | null
+          second_approver_role_at_time?: string | null
           second_reviewed_at?: string | null
           second_reviewed_by?: string | null
+          source_chain_hash_at_approval?: string | null
           source_dry_run_id: string
           source_proposal_id: string
           would_execute?: boolean
@@ -3803,6 +3864,8 @@ export type Database = {
           approval_summary?: string
           approval_title?: string
           approval_type?: string
+          approver_jwt_subject?: string | null
+          approver_role_at_time?: string | null
           created_at?: string
           dedupe_key?: string
           dispatch_blocked?: boolean
@@ -3810,14 +3873,20 @@ export type Database = {
           execution_blocked?: boolean
           expires_at?: string
           id?: string
+          invalidated_by_revocation?: boolean
+          last_modified_at?: string | null
+          last_modified_by?: string | null
           rejection_reason?: string | null
           requested_by_system?: string
           requested_by_user?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           safety_blocked?: boolean
+          second_approver_jwt_subject?: string | null
+          second_approver_role_at_time?: string | null
           second_reviewed_at?: string | null
           second_reviewed_by?: string | null
+          source_chain_hash_at_approval?: string | null
           source_dry_run_id?: string
           source_proposal_id?: string
           would_execute?: boolean
@@ -4295,6 +4364,8 @@ export type Database = {
           downstream_target: string
           downstream_write_performed: boolean
           event_name: string | null
+          executor_jwt_subject: string | null
+          executor_role_at_time: string | null
           external_call_performed: boolean
           id: string
           performed_at: string
@@ -4325,6 +4396,8 @@ export type Database = {
           downstream_target?: string
           downstream_write_performed?: boolean
           event_name?: string | null
+          executor_jwt_subject?: string | null
+          executor_role_at_time?: string | null
           external_call_performed?: boolean
           id?: string
           performed_at?: string
@@ -4355,6 +4428,8 @@ export type Database = {
           downstream_target?: string
           downstream_write_performed?: boolean
           event_name?: string | null
+          executor_jwt_subject?: string | null
+          executor_role_at_time?: string | null
           external_call_performed?: boolean
           id?: string
           performed_at?: string
@@ -4743,6 +4818,13 @@ export type Database = {
           title: string
         }[]
       }
+      has_active_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -4751,6 +4833,18 @@ export type Database = {
         Returns: boolean
       }
       priority_rank: { Args: { p: string }; Returns: number }
+      revoke_user_role: {
+        Args: {
+          _reason: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _target_user_id: string
+        }
+        Returns: string
+      }
+      vos_compute_source_chain_hash: {
+        Args: { approval_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user" | "governance_reviewer"
