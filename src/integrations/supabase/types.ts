@@ -4753,7 +4753,7 @@ export type Database = {
       priority_rank: { Args: { p: string }; Returns: number }
     }
     Enums: {
-      app_role: "admin" | "moderator" | "user"
+      app_role: "admin" | "moderator" | "user" | "governance_reviewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -4881,7 +4881,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "moderator", "user"],
+      app_role: ["admin", "moderator", "user", "governance_reviewer"],
     },
   },
 } as const
