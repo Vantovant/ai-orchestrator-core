@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.vos_simulate_revocation(uuid, text) FROM authenticated;
