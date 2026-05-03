@@ -4614,6 +4614,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_role_rehearsal_log: {
+        Row: {
+          assertions: Json
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          overall_pass: boolean
+          rehearsal_kind: string
+          status: string
+          target_user_redacted: string | null
+        }
+        Insert: {
+          assertions?: Json
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          overall_pass?: boolean
+          rehearsal_kind: string
+          status?: string
+          target_user_redacted?: string | null
+        }
+        Update: {
+          assertions?: Json
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          overall_pass?: boolean
+          rehearsal_kind?: string
+          status?: string
+          target_user_redacted?: string | null
+        }
+        Relationships: []
+      }
       vos_rotation_log: {
         Row: {
           actor_user_id: string | null
@@ -4844,6 +4880,10 @@ export type Database = {
       vos_compute_source_chain_hash: {
         Args: { approval_id: string }
         Returns: string
+      }
+      vos_simulate_revocation: {
+        Args: { _reason: string; _target_user_id: string }
+        Returns: Json
       }
     }
     Enums: {
