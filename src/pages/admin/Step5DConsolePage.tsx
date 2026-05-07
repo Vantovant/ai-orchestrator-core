@@ -52,7 +52,7 @@ export default function Step5DConsolePage() {
         "id, approval_status, approval_title, reviewed_by, second_reviewed_by, reviewed_at, second_reviewed_at, approver_jwt_subject, second_approver_jwt_subject, expires_at, created_at"
       )
       .eq("app_id", "vanto_os_console")
-      .eq("approval_type", "internal_admin_note_record")
+      .eq("approval_type", "internal_note_approval")
       .order("created_at", { ascending: false })
       .limit(20);
     if (error) {
