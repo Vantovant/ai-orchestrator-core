@@ -180,6 +180,21 @@ export default function VantoOSConsolePage() {
         </Button>
       </div>
 
+      {/* Governance status banner (label only — no flag changes) */}
+      <Card className="border-emerald-600/40 bg-emerald-600/5">
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-center gap-2 font-semibold text-emerald-700 dark:text-emerald-400">
+            <Shield className="h-4 w-4" /> GOVERNANCE LAYER: 🟢 ACTIVE
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">🟢 Step 5D: COMPLETE</Badge>
+            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">🟢 Two-Key Governance: PROVEN</Badge>
+            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">🟢 Limited Governance Authority: ACTIVE</Badge>
+            <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">🟢 Quorum: Admin 1 + Sylvia</Badge>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Lock banner */}
       <Card className="border-destructive/50 bg-destructive/5">
         <CardContent className="p-4 space-y-2">
