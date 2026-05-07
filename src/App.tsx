@@ -26,6 +26,7 @@ import UserManualPage from "@/pages/UserManualPage";
 import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
 import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
 import VantoOSConsolePage from "@/pages/admin/VantoOSConsolePage";
+import Step5DConsolePage from "@/pages/admin/Step5DConsolePage";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ function AppRoutes() {
         <Route path="/weekly-report" element={<WeeklyReportPage />} />
         <Route path="/admin/health" element={<AdminHealthPage />} />
         <Route path="/admin/vanto-os" element={<VantoOSConsolePage />} />
+        <Route path="/admin/step5d" element={<Step5DConsolePage />} />
         <Route path="/dashboard/partner" element={<PortfolioPartnerPage />} />
         <Route path="/knowledge" element={<KnowledgeBasePage />} />
         <Route path="/investor-report" element={<InvestorReportPage />} />
