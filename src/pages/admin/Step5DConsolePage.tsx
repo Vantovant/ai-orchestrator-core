@@ -135,13 +135,26 @@ export default function Step5DConsolePage() {
           Internal-only governance rehearsal. Two distinct authenticated humans must perform first and
           second review. No external surface, no CRM note, no flag changes.
         </p>
-        <div className="flex gap-2 mt-3">
+        <div className="flex flex-wrap gap-2 mt-3">
+          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Step 5D: COMPLETE</Badge>
+          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Two-Key Governance: PROVEN</Badge>
+          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Limited Governance Authority: ACTIVE</Badge>
+          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Quorum: Admin 1 + Sylvia</Badge>
+          <Badge variant="destructive">Axis A Traffic: RED</Badge>
+          <Badge variant="destructive">Axis B Inbox: OFF</Badge>
+          <Badge variant="destructive">External Automation: LOCKED</Badge>
+        </div>
+        <div className="flex flex-wrap gap-2 mt-2">
           <Badge variant={isAdmin ? "default" : "outline"}>Admin: {isAdmin ? "yes" : "no"}</Badge>
           <Badge variant={isReviewer ? "default" : "outline"}>
             Governance Reviewer: {isReviewer ? "yes" : "no"}
           </Badge>
           <Badge variant="outline">You: {user?.email}</Badge>
         </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          Governance proof closed on approval <span className="font-mono">554975d8</span>. Traffic, sends, dispatcher,
+          WhatsApp, Email, Zazi, APLGO, Master Prospector, and Phase 4A remain RED/OFF/LOCKED. Step 5E not started.
+        </p>
       </div>
 
       {isAdmin && (
