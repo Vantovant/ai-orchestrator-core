@@ -26,6 +26,7 @@ import UserManualPage from "@/pages/UserManualPage";
 import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
 import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
 import VantoOSConsolePage from "@/pages/admin/VantoOSConsolePage";
+import Step5DConsolePage from "@/pages/admin/Step5DConsolePage";
 
 const queryClient = new QueryClient();
 
