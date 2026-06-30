@@ -456,7 +456,7 @@ export default function PlanPage() {
     const cmd = parseVoiceCommand(text);
     addVoiceHistoryEntry({ transcript: text, intent: cmd.intent });
     if (cmd.intent === "open_page" && cmd.page) { navigate(cmd.page); toast.success(`Opening ${cmd.page}`); return; }
-    if (cmd.intent === "run_briefing") { navigate("/"); toast.success("Opening daily briefing"); return; }
+    if (cmd.intent === "run_briefing") { navigate("/app"); toast.success("Opening daily briefing"); return; }
     if (cmd.intent === "unknown") { toast.error("Didn't understand that. Try: 'I need to review the report tomorrow'"); return; }
     setVoiceCommand(cmd);
   }, [navigate]);
