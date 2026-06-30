@@ -118,10 +118,12 @@ export default function AuthPage() {
             <img src={vantoosLogo} alt="VantoOS" className="h-9 w-auto" />
             <span className="font-bold tracking-tight text-base hidden sm:inline">VantoOS</span>
           </Link>
-          <Link to="/" className="inline-flex items-center gap-2 text-sm text-sidebar-foreground/80 hover:text-sidebar-foreground transition-colors">
-            <Home className="h-4 w-4" />
-            Back to homepage
-          </Link>
+          <Button variant="outline" size="sm" asChild className="border-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent/30">
+            <Link to="/" className="inline-flex items-center gap-2">
+              <Home className="h-4 w-4" />
+              Back to homepage
+            </Link>
+          </Button>
         </div>
       </header>
 
@@ -261,6 +263,13 @@ export default function AuthPage() {
               >
                 {isLogin ? "Need an account? Sign up with invite" : "Already have an account? Sign in"}
               </button>
+
+              <Button variant="outline" size="sm" asChild className="mt-4 w-full border-sidebar-accent/50 text-sidebar-foreground hover:bg-sidebar-accent/30">
+                <Link to="/" className="inline-flex items-center justify-center gap-2">
+                  <Home className="h-4 w-4" />
+                  Back to homepage
+                </Link>
+              </Button>
             </div>
           </section>
 
