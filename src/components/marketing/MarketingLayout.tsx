@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ArrowRight } from "lucide-react";
 import vantoosLogo from "@/assets/vantoos-logo.png";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { to: "/command-center", label: "Command Center" },
