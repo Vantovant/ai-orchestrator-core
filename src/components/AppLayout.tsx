@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os"];
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/app", label: "Dashboard", icon: LayoutDashboard },
   { to: "/plan", label: "Plan", icon: ClipboardList },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
@@ -33,7 +33,7 @@ const navItems = [
 ];
 
 const mobileNavItems = [
-  { to: "/", label: "Home", icon: LayoutDashboard },
+  { to: "/app", label: "Home", icon: LayoutDashboard },
   { to: "/plan", label: "Plan", icon: ClipboardList },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
