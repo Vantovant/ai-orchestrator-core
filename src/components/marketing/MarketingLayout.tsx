@@ -17,6 +17,9 @@ const navItems = [
 
 export default function MarketingLayout({ children }: { children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const appHref = user ? "/app" : "/signin";
+  const ctaLabel = user ? "Open the App" : "Open the App";
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
