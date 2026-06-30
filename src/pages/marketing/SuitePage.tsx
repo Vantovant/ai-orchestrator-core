@@ -21,6 +21,11 @@ const live = [
     d: "Downline-first CRM for network-marketing teams. Talk to every downline on time, every time.",
     href: "https://getwellgrow.app", internal: false,
   },
+  {
+    t: "Get Well Africa",
+    d: "Official APLGO distributor hub for Africa — plant-based Acumullit SA drop lozenges, wellness blog, podcasts and a full income pathway.",
+    href: "https://getwellafrica.com", internal: false,
+  },
 ];
 
 const coming = [
