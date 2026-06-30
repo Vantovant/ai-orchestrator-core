@@ -122,6 +122,8 @@ function AppRoutes() {
 
       {/* Authenticated app — keeps original absolute paths so AppLayout & navigate() calls remain unchanged */}
       <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+        <Route path="/app" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<Navigate to="/app" replace />} />
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/tasks" element={<Navigate to="/plan?tab=tasks" replace />} />
         <Route path="/reminders" element={<Navigate to="/plan?tab=reminders" replace />} />
