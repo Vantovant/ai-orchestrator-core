@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ArrowRight } from "lucide-react";
 import vantoosLogo from "@/assets/vantoos-logo.png";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { to: "/command-center", label: "Command Center" },
@@ -16,6 +17,9 @@ const navItems = [
 
 export default function MarketingLayout({ children }: { children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const appHref = user ? "/app" : "/signin";
+  const ctaLabel = user ? "Open the App" : "Open the App";
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
@@ -50,12 +54,14 @@ export default function MarketingLayout({ children }: { children?: React.ReactNo
           </nav>
 
           <div className="hidden md:flex items-center gap-2">
-            <Link to="/signin">
-              <Button variant="ghost" size="sm">Sign in</Button>
-            </Link>
-            <Link to="/signin">
+            {!user && (
+              <Link to="/signin">
+                <Button variant="ghost" size="sm">Sign in</Button>
+              </Link>
+            )}
+            <Link to={appHref}>
               <Button size="sm" className="gap-1.5">
-                Open the App <ArrowRight className="h-3.5 w-3.5" />
+                {ctaLabel} <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           </div>
@@ -87,10 +93,12 @@ export default function MarketingLayout({ children }: { children?: React.ReactNo
                 </NavLink>
               ))}
               <div className="pt-2 mt-2 border-t border-border flex gap-2">
-                <Link to="/signin" className="flex-1" onClick={() => setOpen(false)}>
-                  <Button variant="outline" size="sm" className="w-full">Sign in</Button>
-                </Link>
-                <Link to="/signin" className="flex-1" onClick={() => setOpen(false)}>
+                {!user && (
+                  <Link to="/signin" className="flex-1" onClick={() => setOpen(false)}>
+                    <Button variant="outline" size="sm" className="w-full">Sign in</Button>
+                  </Link>
+                )}
+                <Link to={appHref} className="flex-1" onClick={() => setOpen(false)}>
                   <Button size="sm" className="w-full">Open App</Button>
                 </Link>
               </div>

@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus, BookHeart, ShieldAlert
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus, BookHeart, ShieldAlert, Home
 } from "lucide-react";
 import vantoosLogo from "@/assets/vantoos-logo.png";
 import { useState, useEffect } from "react";
@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os"];
 
 const navItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/app", label: "Dashboard", icon: LayoutDashboard },
   { to: "/plan", label: "Plan", icon: ClipboardList },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
@@ -33,7 +33,7 @@ const navItems = [
 ];
 
 const mobileNavItems = [
-  { to: "/", label: "Home", icon: LayoutDashboard },
+  { to: "/app", label: "Home", icon: LayoutDashboard },
   { to: "/plan", label: "Plan", icon: ClipboardList },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
@@ -57,12 +57,22 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
       <div className="border-b border-sidebar-border px-4 py-2 overflow-hidden">
         <img src={vantoosLogo} alt="VantoOS" className="w-full h-auto" />
       </div>
+      <div className="px-4 pt-3">
+        <NavLink
+          to="/"
+          onClick={onNavigate}
+          className="flex items-center gap-2 rounded-md border border-sidebar-border/60 px-3 py-2 text-xs font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground transition-colors"
+        >
+          <Home className="h-3.5 w-3.5" />
+          Back to homepage
+        </NavLink>
+      </div>
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {visibleNav.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
-            end={to === "/"}
+            end={to === "/app"}
             onClick={onNavigate}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
@@ -95,7 +105,7 @@ function MobileBottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card md:hidden">
       <div className="flex items-center justify-around">
         {mobileNavItems.map(({ to, label, icon: Icon }) => {
-          const isActive = to === "/" ? location.pathname === "/" : location.pathname.startsWith(to);
+          const isActive = to === "/app" ? location.pathname === "/app" : location.pathname.startsWith(to);
           return (
             <NavLink
               key={to}

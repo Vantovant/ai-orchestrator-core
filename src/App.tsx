@@ -75,21 +75,12 @@ function LoadingScreen() {
 function SignInRoute() {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/app" replace />;
   return <AuthPage />;
 }
 
-// Renders marketing home for guests; app dashboard for authenticated users
+// Renders marketing home for everyone at /
 function RootRoute() {
-  const { user, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (user) {
-    return (
-      <AppLayout>
-        <DashboardPage />
-      </AppLayout>
-    );
-  }
   return (
     <MarketingLayout>
       <HomePage />
@@ -97,14 +88,7 @@ function RootRoute() {
   );
 }
 
-// MarketingLayout uses <Outlet/>; wrap children prop usage by adapting it for RootRoute above
-// (RootRoute renders MarketingLayout as a parent route via children injection; we route via Outlet elsewhere)
 function MarketingShell() {
-  return (
-    <MarketingLayoutWithOutlet />
-  );
-}
-function MarketingLayoutWithOutlet() {
   return <MarketingLayout />;
 }
 
@@ -138,6 +122,8 @@ function AppRoutes() {
 
       {/* Authenticated app — keeps original absolute paths so AppLayout & navigate() calls remain unchanged */}
       <Route element={<RequireAuth><AppShell /></RequireAuth>}>
+        <Route path="/app" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<Navigate to="/app" replace />} />
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/tasks" element={<Navigate to="/plan?tab=tasks" replace />} />
         <Route path="/reminders" element={<Navigate to="/plan?tab=reminders" replace />} />
