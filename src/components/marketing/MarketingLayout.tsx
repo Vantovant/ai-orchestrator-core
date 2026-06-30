@@ -14,7 +14,7 @@ const navItems = [
   { to: "/pricing", label: "Pricing" },
 ];
 
-export default function MarketingLayout() {
+export default function MarketingLayout({ children }: { children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -100,7 +100,7 @@ export default function MarketingLayout() {
       </header>
 
       <main className="flex-1">
-        <Outlet />
+        {children ?? <Outlet />}
       </main>
 
       <footer className="border-t border-border bg-sidebar text-sidebar-foreground">
