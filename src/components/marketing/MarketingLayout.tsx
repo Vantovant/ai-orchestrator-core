@@ -54,12 +54,14 @@ export default function MarketingLayout({ children }: { children?: React.ReactNo
           </nav>
 
           <div className="hidden md:flex items-center gap-2">
-            <Link to="/signin">
-              <Button variant="ghost" size="sm">Sign in</Button>
-            </Link>
-            <Link to="/signin">
+            {!user && (
+              <Link to="/signin">
+                <Button variant="ghost" size="sm">Sign in</Button>
+              </Link>
+            )}
+            <Link to={appHref}>
               <Button size="sm" className="gap-1.5">
-                Open the App <ArrowRight className="h-3.5 w-3.5" />
+                {ctaLabel} <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </Link>
           </div>
