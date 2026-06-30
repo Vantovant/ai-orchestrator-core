@@ -93,10 +93,12 @@ export default function MarketingLayout({ children }: { children?: React.ReactNo
                 </NavLink>
               ))}
               <div className="pt-2 mt-2 border-t border-border flex gap-2">
-                <Link to="/signin" className="flex-1" onClick={() => setOpen(false)}>
-                  <Button variant="outline" size="sm" className="w-full">Sign in</Button>
-                </Link>
-                <Link to="/signin" className="flex-1" onClick={() => setOpen(false)}>
+                {!user && (
+                  <Link to="/signin" className="flex-1" onClick={() => setOpen(false)}>
+                    <Button variant="outline" size="sm" className="w-full">Sign in</Button>
+                  </Link>
+                )}
+                <Link to={appHref} className="flex-1" onClick={() => setOpen(false)}>
                   <Button size="sm" className="w-full">Open App</Button>
                 </Link>
               </div>
