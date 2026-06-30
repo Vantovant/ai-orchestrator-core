@@ -2,11 +2,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
 import AuthPage from "@/pages/AuthPage";
 import AppLayout from "@/components/AppLayout";
+import MarketingLayout from "@/components/marketing/MarketingLayout";
+
+// App pages
 import DashboardPage from "@/pages/DashboardPage";
 import PlanPage from "@/pages/PlanPage";
 import EmailPage from "@/pages/EmailPage";
@@ -28,28 +31,114 @@ import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
 import VantoOSConsolePage from "@/pages/admin/VantoOSConsolePage";
 import Step5DConsolePage from "@/pages/admin/Step5DConsolePage";
 
+// Marketing pages
+import HomePage from "@/pages/marketing/HomePage";
+import CommandCenterPage from "@/pages/marketing/CommandCenterPage";
+import FeaturesPage from "@/pages/marketing/FeaturesPage";
+import HowItWorksPage from "@/pages/marketing/HowItWorksPage";
+import SuitePage from "@/pages/marketing/SuitePage";
+import CompanyPage from "@/pages/marketing/CompanyPage";
+import ClientelePage from "@/pages/marketing/ClientelePage";
+import InvestorsPage from "@/pages/marketing/InvestorsPage";
+import PricingPage from "@/pages/marketing/PricingPage";
+import ContactPage from "@/pages/marketing/ContactPage";
+import PrivacyPage from "@/pages/marketing/PrivacyPage";
+import TermsPage from "@/pages/marketing/TermsPage";
+
 const queryClient = new QueryClient();
 
-function AppRoutes() {
-  const { user, loading } = useAuth();
-  useActivityTracker();
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (!user) return <AuthPage />;
-
+// Authenticated app shell — wraps Outlet so child routes render inside AppLayout
+function AppShell() {
   return (
     <AppLayout>
-      <Routes>
-        <Route path="/" element={<DashboardPage />} />
+      <Outlet />
+    </AppLayout>
+  );
+}
+
+// Guards
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/signin" replace />;
+  return <>{children}</>;
+}
+
+function LoadingScreen() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    </div>
+  );
+}
+
+function SignInRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (user) return <Navigate to="/" replace />;
+  return <AuthPage />;
+}
+
+// Renders marketing home for guests; app dashboard for authenticated users
+function RootRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (user) {
+    return (
+      <AppLayout>
+        <DashboardPage />
+      </AppLayout>
+    );
+  }
+  return (
+    <MarketingLayout>
+      <HomePage />
+    </MarketingLayout>
+  );
+}
+
+// MarketingLayout uses <Outlet/>; wrap children prop usage by adapting it for RootRoute above
+// (RootRoute renders MarketingLayout as a parent route via children injection; we route via Outlet elsewhere)
+function MarketingShell() {
+  return (
+    <MarketingLayoutWithOutlet />
+  );
+}
+function MarketingLayoutWithOutlet() {
+  return <MarketingLayout />;
+}
+
+function AppRoutes() {
+  useActivityTracker();
+
+  return (
+    <Routes>
+      {/* Root — guest gets marketing home, user gets dashboard */}
+      <Route path="/" element={<RootRoute />} />
+
+      {/* Public marketing site */}
+      <Route element={<MarketingShell />}>
+        <Route path="/command-center" element={<CommandCenterPage />} />
+        <Route path="/features" element={<FeaturesPage />} />
+        <Route path="/how-it-works" element={<HowItWorksPage />} />
+        <Route path="/suite" element={<SuitePage />} />
+        <Route path="/company" element={<CompanyPage />} />
+        <Route path="/clientele" element={<ClientelePage />} />
+        <Route path="/investors" element={<InvestorsPage />} />
+        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+      </Route>
+
+      {/* Auth entry */}
+      <Route path="/signin" element={<SignInRoute />} />
+      <Route path="/auth" element={<Navigate to="/signin" replace />} />
+      <Route path="/login" element={<Navigate to="/signin" replace />} />
+
+      {/* Authenticated app — keeps original absolute paths so AppLayout & navigate() calls remain unchanged */}
+      <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route path="/plan" element={<PlanPage />} />
-        {/* Legacy redirects */}
         <Route path="/tasks" element={<Navigate to="/plan?tab=tasks" replace />} />
         <Route path="/reminders" element={<Navigate to="/plan?tab=reminders" replace />} />
         <Route path="/meetings" element={<Navigate to="/plan?tab=meetings" replace />} />
@@ -71,9 +160,10 @@ function AppRoutes() {
         <Route path="/manual" element={<UserManualPage />} />
         <Route path="/onboarding-emails" element={<OnboardingEmailsPage />} />
         <Route path="/voice-diary" element={<VoiceDiaryPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </AppLayout>
+      </Route>
+
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 }
 
