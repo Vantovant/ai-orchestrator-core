@@ -126,7 +126,7 @@ export default function TeamPage() {
   };
 
   const copyToken = (token: string, label?: string) => {
-    const signupUrl = "https://executive.onlinecourseformlm.com/";
+    const signupUrl = "https://vantoos.com/signin";
     const message = `🚀 YOU'RE INVITED TO JOIN VANTOOS — BETA ACCESS
 
 Hi there,

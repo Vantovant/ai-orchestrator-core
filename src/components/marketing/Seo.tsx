@@ -11,7 +11,7 @@ const BASE = "https://vantoos.com";
 
 export default function Seo({ title, description, path, jsonLd }: SeoProps) {
   const url = `${BASE}${path}`;
-  const ogImage = `${BASE}/og-image.jpg?v=2`;
+  const ogImage = `${BASE}/og-image.jpg?v=3`;
   return (
     <Helmet>
       <title>{title}</title>
@@ -23,9 +23,10 @@ export default function Seo({ title, description, path, jsonLd }: SeoProps) {
       <meta property="og:type" content="website" />
       <meta property="og:image" content={ogImage} />
       <meta property="og:image:secure_url" content={ogImage} />
-      <meta property="og:image:width" content="1216" />
-      <meta property="og:image:height" content="640" />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
       <meta property="og:image:alt" content="VantoOS — The Executive AI Command Center" />
+      <link rel="image_src" href={ogImage} />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content={title} />
       <meta name="twitter:description" content={description} />

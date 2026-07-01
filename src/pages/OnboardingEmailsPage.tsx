@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const BASE = "https://executive.onlinecourseformlm.com";
+const BASE = "https://vantoos.com/app";
 
 const EMAILS = [
   {
