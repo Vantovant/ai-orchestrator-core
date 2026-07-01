@@ -7,7 +7,7 @@ import {
   ClipboardList, Mail, DollarSign, FolderKanban, BookHeart, LayoutDashboard,
 } from "lucide-react";
 import Seo from "@/components/marketing/Seo";
-import heroImg from "@/assets/vantoos-hero.jpg";
+import heroImg from "@/assets/hero-option-3-branded.jpg.asset.json";
 
 export default function HomePage() {
   return (
@@ -72,10 +72,10 @@ export default function HomePage() {
           <div className="relative">
             <div className="absolute -inset-6 bg-accent/20 blur-3xl rounded-full" />
             <img
-              src={heroImg}
-              alt="VantoOS — Africa-built AI command center"
-              width={1024}
-              height={1024}
+              src={heroImg.url}
+              alt="VantoOS — One operating system. Every executive. Every team."
+              width={1200}
+              height={630}
               className="relative rounded-3xl shadow-2xl border border-sidebar-foreground/10"
             />
           </div>
