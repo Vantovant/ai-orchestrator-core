@@ -7,7 +7,7 @@ import {
   ClipboardList, Mail, DollarSign, FolderKanban, BookHeart, LayoutDashboard,
 } from "lucide-react";
 import Seo from "@/components/marketing/Seo";
-import heroImg from "/hero-option-3-branded.jpg.asset.json";
+import heroImg from "@/assets/hero-option-3-branded.jpg.asset.json";
 
 export default function HomePage() {
   return (
