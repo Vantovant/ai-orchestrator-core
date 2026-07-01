@@ -11,7 +11,7 @@ const BASE = "https://vantoos.com";
 
 export default function Seo({ title, description, path, jsonLd }: SeoProps) {
   const url = `${BASE}${path}`;
-  const ogImage = `${BASE}/og-image.jpg?v=4`;
+  const ogImage = `${BASE}/og-image.jpg?v=5`;
   return (
     <Helmet>
       <title>{title}</title>
