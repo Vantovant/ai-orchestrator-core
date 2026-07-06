@@ -77,14 +77,17 @@ export default function ActionExtractor({ noteContent, structureJson, structured
         selected: true,
         applyStatus: "idle" as const,
       }));
+      const providerLabel = data?.provider_used === "openai" ? "OpenAI (your key)"
+        : data?.provider_used === "gemini" ? "Gemini (your key)"
+        : "Lovable AI";
       if (items.length === 0) {
-        toast.info("No actionable items found in these notes.");
+        toast.info(`No actionable items found. (via ${providerLabel})`);
       } else {
-        toast.success(`Found ${items.length} actionable item${items.length !== 1 ? "s" : ""} — review and apply.`);
+        toast.success(`Found ${items.length} item${items.length !== 1 ? "s" : ""} via ${providerLabel} — review and apply.`);
       }
       setSuggestions(items);
     } catch (e: any) {
-      toast.error(e.message || "Failed to extract actions — check AI keys in Settings.");
+      toast.error(e.message || "Extraction failed — add a personal OpenAI/Gemini key in Settings → AI Keys as a fallback.", { duration: 8000 });
     } finally {
       setLoading(false);
     }
