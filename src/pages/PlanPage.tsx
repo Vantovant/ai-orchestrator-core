@@ -336,6 +336,15 @@ export default function PlanPage() {
   // Command bar
   const [commandBarOpen, setCommandBarOpen] = useState(false);
 
+  // Show project tasks in main plan (default: OFF — project tasks stay in Projects)
+  const [showProjectTasks, setShowProjectTasksRaw] = useState<boolean>(() => {
+    try { return localStorage.getItem("plan_show_project_tasks") === "1"; } catch { return false; }
+  });
+  const setShowProjectTasks = (v: boolean) => {
+    setShowProjectTasksRaw(v);
+    try { localStorage.setItem("plan_show_project_tasks", v ? "1" : "0"); } catch { /* noop */ }
+  };
+
   // Highlight support from query params
   const highlightParam = searchParams.get("highlight");
   const sourceParam = searchParams.get("source");
