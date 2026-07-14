@@ -619,6 +619,9 @@ export default function PlanPage() {
               // Filter by project_id from query params
               if (projectIdParam) {
                 filtered = filtered.filter(t => t.project_id === projectIdParam);
+              } else if (!showProjectTasks) {
+                // Hide project-linked tasks from main plan unless toggle is on
+                filtered = filtered.filter(t => !t.project_id);
               }
               // Always surface unfinished tasks above completed ones
               filtered = [...filtered].sort((a, b) => {
