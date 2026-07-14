@@ -336,7 +336,11 @@ export default function DashboardPage() {
             <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-6" />)}</div>
           ) : !aiResult?.dailyPlan?.greeting ? (
             <div className="text-center py-6">
-              <p className="text-sm text-muted-foreground mb-3">Run AI Briefing to generate your personalized daily agenda.</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                {rawAiResult?.dailyPlan?.greeting && !isRunFromToday
+                  ? `Your last briefing is from ${runCreatedAt?.toLocaleDateString()}. Generate a fresh one for today.`
+                  : "Run AI Briefing to generate your personalized daily agenda."}
+              </p>
               <Button variant="outline" size="sm" onClick={runAssistant} disabled={aiLoading} className="gap-2">
                 <Zap className="h-4 w-4" /> Generate Agenda
               </Button>
