@@ -185,7 +185,12 @@ export default function DashboardPage() {
 
   const [aiLoading, setAiLoading] = useState(false);
 
-  const aiResult = latestRun.data?.result_json ?? null;
+
+  const runCreatedAt = latestRun.data?.created_at ? new Date(latestRun.data.created_at) : null;
+  const isRunFromToday = !!runCreatedAt && runCreatedAt.toDateString() === new Date().toDateString();
+  const rawAiResult = latestRun.data?.result_json ?? null;
+  // Stale-guard: only surface the AI briefing if it was generated today
+  const aiResult = isRunFromToday ? rawAiResult : null;
   const aiStatus = aiResult?.ai_status ?? (aiResult?.dailyPlan?.greeting ? "ok" : null);
 
   const runAssistant = async () => {
@@ -331,7 +336,11 @@ export default function DashboardPage() {
             <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-6" />)}</div>
           ) : !aiResult?.dailyPlan?.greeting ? (
             <div className="text-center py-6">
-              <p className="text-sm text-muted-foreground mb-3">Run AI Briefing to generate your personalized daily agenda.</p>
+              <p className="text-sm text-muted-foreground mb-3">
+                {rawAiResult?.dailyPlan?.greeting && !isRunFromToday
+                  ? `Your last briefing is from ${runCreatedAt?.toLocaleDateString()}. Generate a fresh one for today.`
+                  : "Run AI Briefing to generate your personalized daily agenda."}
+              </p>
               <Button variant="outline" size="sm" onClick={runAssistant} disabled={aiLoading} className="gap-2">
                 <Zap className="h-4 w-4" /> Generate Agenda
               </Button>

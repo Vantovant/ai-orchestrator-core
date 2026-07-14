@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { EmailMessage } from "@/services/emailService";
 import { Star, Clock, Eye, ArrowRight, CheckCircle2 } from "lucide-react";
@@ -32,9 +33,11 @@ interface Props {
   showAccountBadge: boolean;
   compact?: boolean;
   handledEmailIds?: Set<string>;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
-export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onStar, accountLabels, accountEmails, showAccountBadge, compact, handledEmailIds }: Props) {
+export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onStar, accountLabels, accountEmails, showAccountBadge, compact, handledEmailIds, selectedIds, onToggleSelect }: Props) {
   if (emails.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
@@ -61,8 +64,23 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onS
               !email.is_read && "font-medium"
             )}
           >
-            {/* Row 1: Star + Sender + time + arrow */}
+            {/* Row 1: Checkbox + Star + Sender + time + arrow */}
             <div className="flex items-center gap-2.5 mb-1">
+              {onToggleSelect && (
+                <div
+                  className="shrink-0 p-1 -m-1"
+                  onClick={(e) => { e.stopPropagation(); onToggleSelect(email.id); }}
+                  role="button"
+                  tabIndex={-1}
+                >
+                  <Checkbox
+                    checked={selectedIds?.has(email.id) ?? false}
+                    onCheckedChange={() => onToggleSelect(email.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4"
+                  />
+                </div>
+              )}
               {/* Star - large touch target */}
               <div
                 className="shrink-0 p-1 -m-1"

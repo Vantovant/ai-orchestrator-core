@@ -80,6 +80,17 @@ export default function EmailPage() {
   const [handledEmailIds, setHandledEmailIds] = useState<Set<string>>(new Set());
   const [handledRefreshKey, setHandledRefreshKey] = useState(0);
 
+  // Bulk selection (checkbox column)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const toggleSelectId = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   // Helper to log action + refresh handled state
   const logAction = async (emailId: string, actionType: EmailActionType, relatedId?: string) => {
     await emailActionLogService.log(emailId, actionType, relatedId);
@@ -332,7 +343,7 @@ export default function EmailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  useEffect(() => { setSelectedIndex(0); setOpenEmailId(null); }, [view, selectedAccount, unified]);
+  useEffect(() => { setSelectedIndex(0); setOpenEmailId(null); setSelectedIds(new Set()); }, [view, selectedAccount, unified]);
 
   useEffect(() => {
     if (triageMode && emails.length > 0 && !openEmailId) {
@@ -383,6 +394,44 @@ export default function EmailPage() {
     autoAdvance(targetIdx);
     loadEmails();
   };
+
+  // ─── Bulk actions ──────────────────────────────────────────────
+  const selectAll = () => setSelectedIds(new Set(displayEmails.map(e => e.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+  const allSelected = displayEmails.length > 0 && displayEmails.every(e => selectedIds.has(e.id));
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map(id => emailService.archive(id).then(() => logAction(id, "archived"))));
+      sonnerToast.success(`Archived ${ids.length} email${ids.length === 1 ? "" : "s"} ✅`);
+      clearSelection();
+      await loadEmails();
+    } catch (e: any) {
+      sonnerToast.error(e.message || "Bulk archive failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkMarkRead = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map(id => emailService.markRead(id)));
+      sonnerToast.success(`Marked ${ids.length} read`);
+      clearSelection();
+      await loadEmails();
+    } catch (e: any) {
+      sonnerToast.error(e.message || "Bulk mark-read failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
 
   const handleCreateTask = async () => {
     if (!currentEmailForAction) return;
@@ -687,6 +736,35 @@ export default function EmailPage() {
         </Tabs>
       </div>
 
+      {/* Bulk selection bar (Gmail-style) */}
+      {!openEmail && displayEmails.length > 0 && (
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 border-b border-border/50 bg-muted/20">
+          <div className="p-1 -m-1" onClick={() => allSelected ? clearSelection() : selectAll()} role="button" tabIndex={-1}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => allSelected ? clearSelection() : selectAll()}
+              className="h-4 w-4 rounded border-border cursor-pointer"
+              aria-label="Select all"
+            />
+          </div>
+          {selectedIds.size > 0 ? (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1 ml-2" disabled={bulkBusy} onClick={handleBulkArchive}>
+                Archive
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1" disabled={bulkBusy} onClick={handleBulkMarkRead}>
+                Mark read
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs px-2 ml-auto" onClick={clearSelection}>Clear</Button>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Select emails to archive in bulk</span>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       <Card className="flex-1 mx-0 sm:mx-4 mb-0 overflow-hidden rounded-none sm:rounded-t-lg border-x-0 sm:border-x border-b-0">
         <CardContent className="p-0 h-full overflow-y-auto">
@@ -728,6 +806,8 @@ export default function EmailPage() {
               showAccountBadge={unified}
               compact={triageMode}
               handledEmailIds={handledEmailIds}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelectId}
             />
           )}
         </CardContent>

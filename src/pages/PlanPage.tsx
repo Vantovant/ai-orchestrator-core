@@ -71,10 +71,11 @@ function QuickAddFab({ onAdd, onVoiceTranscript }: { onAdd: (type: "task" | "rem
 }
 
 // ── Today Tab ──
-function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, onClickReminder, onClickMeeting }: {
+function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, onClickReminder, onClickMeeting, showProjectTasks }: {
   tasks: Task[]; reminders: Reminder[]; meetings: Meeting[]; isLoading: boolean;
   onAdd: (t: "task" | "reminder" | "meeting") => void;
   onClickTask: (t: Task) => void; onClickReminder: (r: Reminder) => void; onClickMeeting: (m: Meeting) => void;
+  showProjectTasks: boolean;
 }) {
   const now = new Date();
   const todayMeetings = (meetings ?? []).filter((m) => isSameDay(new Date(m.start_time), now));
@@ -82,6 +83,7 @@ function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, o
   const priorityOrder = ["critical", "high", "medium", "low"];
   const topTasks = (tasks ?? [])
     .filter((t) => t.status !== "done")
+    .filter((t) => showProjectTasks || !t.project_id)
     .sort((a, b) => priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority))
     .slice(0, 5);
 
@@ -334,6 +336,15 @@ export default function PlanPage() {
   // Command bar
   const [commandBarOpen, setCommandBarOpen] = useState(false);
 
+  // Show project tasks in main plan (default: OFF — project tasks stay in Projects)
+  const [showProjectTasks, setShowProjectTasksRaw] = useState<boolean>(() => {
+    try { return localStorage.getItem("plan_show_project_tasks") === "1"; } catch { return false; }
+  });
+  const setShowProjectTasks = (v: boolean) => {
+    setShowProjectTasksRaw(v);
+    try { localStorage.setItem("plan_show_project_tasks", v ? "1" : "0"); } catch { /* noop */ }
+  };
+
   // Highlight support from query params
   const highlightParam = searchParams.get("highlight");
   const sourceParam = searchParams.get("source");
@@ -540,7 +551,7 @@ export default function PlanPage() {
         <TabsContent value="today">
           <TodayTab
             tasks={tasks.data ?? []} reminders={reminders.data ?? []} meetings={meetings.data ?? []}
-            isLoading={isLoading} onAdd={openAdd}
+            isLoading={isLoading} onAdd={openAdd} showProjectTasks={showProjectTasks}
             onClickTask={setSelectedTask} onClickReminder={setSelectedReminder} onClickMeeting={setSelectedMeeting}
           />
         </TabsContent>
@@ -566,7 +577,7 @@ export default function PlanPage() {
               <h2 className="text-lg font-semibold">All Tasks</h2>
               <Button size="sm" className="gap-1" onClick={() => openAdd("task")}><Plus className="h-4 w-4" /> Add Task</Button>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
               <Input placeholder="Search tasks..." value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="max-w-[200px] h-8 text-xs" />
               <Select value={taskFilter} onValueChange={setTaskFilter}>
                 <SelectTrigger className="w-[110px] h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -586,6 +597,14 @@ export default function PlanPage() {
                   <SelectItem value="priority">Priority</SelectItem>
                 </SelectContent>
               </Select>
+              {!projectIdParam && (
+                <label className="flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 bg-card cursor-pointer text-xs">
+                  <FolderKanban className="h-3 w-3 text-muted-foreground" />
+                  <span className="hidden sm:inline">Show project tasks</span>
+                  <span className="sm:hidden">Projects</span>
+                  <Switch checked={showProjectTasks} onCheckedChange={setShowProjectTasks} className="scale-75" />
+                </label>
+              )}
             </div>
             {tasks.isLoading ? <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16" />)}</div> :
             (() => {
@@ -600,6 +619,9 @@ export default function PlanPage() {
               // Filter by project_id from query params
               if (projectIdParam) {
                 filtered = filtered.filter(t => t.project_id === projectIdParam);
+              } else if (!showProjectTasks) {
+                // Hide project-linked tasks from main plan unless toggle is on
+                filtered = filtered.filter(t => !t.project_id);
               }
               // Always surface unfinished tasks above completed ones
               filtered = [...filtered].sort((a, b) => {
