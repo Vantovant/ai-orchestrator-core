@@ -343,7 +343,7 @@ export default function EmailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  useEffect(() => { setSelectedIndex(0); setOpenEmailId(null); }, [view, selectedAccount, unified]);
+  useEffect(() => { setSelectedIndex(0); setOpenEmailId(null); setSelectedIds(new Set()); }, [view, selectedAccount, unified]);
 
   useEffect(() => {
     if (triageMode && emails.length > 0 && !openEmailId) {
