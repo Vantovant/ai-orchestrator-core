@@ -736,6 +736,35 @@ export default function EmailPage() {
         </Tabs>
       </div>
 
+      {/* Bulk selection bar (Gmail-style) */}
+      {!openEmail && displayEmails.length > 0 && (
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-1.5 border-b border-border/50 bg-muted/20">
+          <div className="p-1 -m-1" onClick={() => allSelected ? clearSelection() : selectAll()} role="button" tabIndex={-1}>
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => allSelected ? clearSelection() : selectAll()}
+              className="h-4 w-4 rounded border-border cursor-pointer"
+              aria-label="Select all"
+            />
+          </div>
+          {selectedIds.size > 0 ? (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1 ml-2" disabled={bulkBusy} onClick={handleBulkArchive}>
+                Archive
+              </Button>
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2 gap-1" disabled={bulkBusy} onClick={handleBulkMarkRead}>
+                Mark read
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs px-2 ml-auto" onClick={clearSelection}>Clear</Button>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">Select emails to archive in bulk</span>
+          )}
+        </div>
+      )}
+
       {/* Content */}
       <Card className="flex-1 mx-0 sm:mx-4 mb-0 overflow-hidden rounded-none sm:rounded-t-lg border-x-0 sm:border-x border-b-0">
         <CardContent className="p-0 h-full overflow-y-auto">
@@ -777,6 +806,8 @@ export default function EmailPage() {
               showAccountBadge={unified}
               compact={triageMode}
               handledEmailIds={handledEmailIds}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelectId}
             />
           )}
         </CardContent>
