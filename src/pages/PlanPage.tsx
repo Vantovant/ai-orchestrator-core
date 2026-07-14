@@ -551,7 +551,7 @@ export default function PlanPage() {
         <TabsContent value="today">
           <TodayTab
             tasks={tasks.data ?? []} reminders={reminders.data ?? []} meetings={meetings.data ?? []}
-            isLoading={isLoading} onAdd={openAdd}
+            isLoading={isLoading} onAdd={openAdd} showProjectTasks={showProjectTasks}
             onClickTask={setSelectedTask} onClickReminder={setSelectedReminder} onClickMeeting={setSelectedMeeting}
           />
         </TabsContent>
