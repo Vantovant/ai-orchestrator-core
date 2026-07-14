@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { EmailMessage } from "@/services/emailService";
 import { Star, Clock, Eye, ArrowRight, CheckCircle2 } from "lucide-react";
@@ -32,9 +33,11 @@ interface Props {
   showAccountBadge: boolean;
   compact?: boolean;
   handledEmailIds?: Set<string>;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
-export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onStar, accountLabels, accountEmails, showAccountBadge, compact, handledEmailIds }: Props) {
+export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onStar, accountLabels, accountEmails, showAccountBadge, compact, handledEmailIds, selectedIds, onToggleSelect }: Props) {
   if (emails.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
