@@ -71,10 +71,11 @@ function QuickAddFab({ onAdd, onVoiceTranscript }: { onAdd: (type: "task" | "rem
 }
 
 // ── Today Tab ──
-function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, onClickReminder, onClickMeeting }: {
+function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, onClickReminder, onClickMeeting, showProjectTasks }: {
   tasks: Task[]; reminders: Reminder[]; meetings: Meeting[]; isLoading: boolean;
   onAdd: (t: "task" | "reminder" | "meeting") => void;
   onClickTask: (t: Task) => void; onClickReminder: (r: Reminder) => void; onClickMeeting: (m: Meeting) => void;
+  showProjectTasks: boolean;
 }) {
   const now = new Date();
   const todayMeetings = (meetings ?? []).filter((m) => isSameDay(new Date(m.start_time), now));
@@ -82,6 +83,7 @@ function TodayTab({ tasks, reminders, meetings, isLoading, onAdd, onClickTask, o
   const priorityOrder = ["critical", "high", "medium", "low"];
   const topTasks = (tasks ?? [])
     .filter((t) => t.status !== "done")
+    .filter((t) => showProjectTasks || !t.project_id)
     .sort((a, b) => priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority))
     .slice(0, 5);
 
