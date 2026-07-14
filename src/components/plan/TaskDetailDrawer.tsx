@@ -136,13 +136,26 @@ export default function TaskDetailDrawer({ task, open, onClose, onUpdate, onDele
               </h3>
               {task.description && <p className="text-sm text-muted-foreground mt-1">{task.description}</p>}
               {projectQuery.data && (
-                <button
-                  className="flex items-center gap-1.5 mt-2 text-xs text-primary hover:underline"
-                  onClick={() => { onClose(); navigate(`/projects?open=${task.project_id}`); }}
-                >
-                  <FolderKanban className="h-3 w-3" />
-                  Project: {projectQuery.data.name}
-                </button>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <button
+                    className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                    onClick={() => { onClose(); navigate(`/projects?open=${task.project_id}`); }}
+                  >
+                    <FolderKanban className="h-3 w-3" />
+                    Project: {projectQuery.data.name}
+                  </button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 gap-1"
+                    onClick={() => {
+                      onUpdate(task.id, { project_id: null });
+                      toast.success("Moved to main plan");
+                    }}
+                  >
+                    <ArrowRight className="h-3 w-3" /> Move to main plan
+                  </Button>
+                </div>
               )}
             </div>
 
