@@ -64,8 +64,23 @@ export default function EmailList({ emails, selectedIndex, onSelect, onOpen, onS
               !email.is_read && "font-medium"
             )}
           >
-            {/* Row 1: Star + Sender + time + arrow */}
+            {/* Row 1: Checkbox + Star + Sender + time + arrow */}
             <div className="flex items-center gap-2.5 mb-1">
+              {onToggleSelect && (
+                <div
+                  className="shrink-0 p-1 -m-1"
+                  onClick={(e) => { e.stopPropagation(); onToggleSelect(email.id); }}
+                  role="button"
+                  tabIndex={-1}
+                >
+                  <Checkbox
+                    checked={selectedIds?.has(email.id) ?? false}
+                    onCheckedChange={() => onToggleSelect(email.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4"
+                  />
+                </div>
+              )}
               {/* Star - large touch target */}
               <div
                 className="shrink-0 p-1 -m-1"
