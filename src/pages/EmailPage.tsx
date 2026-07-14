@@ -395,6 +395,44 @@ export default function EmailPage() {
     loadEmails();
   };
 
+  // ─── Bulk actions ──────────────────────────────────────────────
+  const selectAll = () => setSelectedIds(new Set(displayEmails.map(e => e.id)));
+  const clearSelection = () => setSelectedIds(new Set());
+  const allSelected = displayEmails.length > 0 && displayEmails.every(e => selectedIds.has(e.id));
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map(id => emailService.archive(id).then(() => logAction(id, "archived"))));
+      sonnerToast.success(`Archived ${ids.length} email${ids.length === 1 ? "" : "s"} ✅`);
+      clearSelection();
+      await loadEmails();
+    } catch (e: any) {
+      sonnerToast.error(e.message || "Bulk archive failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const handleBulkMarkRead = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(ids.map(id => emailService.markRead(id)));
+      sonnerToast.success(`Marked ${ids.length} read`);
+      clearSelection();
+      await loadEmails();
+    } catch (e: any) {
+      sonnerToast.error(e.message || "Bulk mark-read failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+
   const handleCreateTask = async () => {
     if (!currentEmailForAction) return;
     try {
