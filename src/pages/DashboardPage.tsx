@@ -185,7 +185,12 @@ export default function DashboardPage() {
 
   const [aiLoading, setAiLoading] = useState(false);
 
-  const aiResult = latestRun.data?.result_json ?? null;
+
+  const runCreatedAt = latestRun.data?.created_at ? new Date(latestRun.data.created_at) : null;
+  const isRunFromToday = !!runCreatedAt && runCreatedAt.toDateString() === new Date().toDateString();
+  const rawAiResult = latestRun.data?.result_json ?? null;
+  // Stale-guard: only surface the AI briefing if it was generated today
+  const aiResult = isRunFromToday ? rawAiResult : null;
   const aiStatus = aiResult?.ai_status ?? (aiResult?.dailyPlan?.greeting ? "ok" : null);
 
   const runAssistant = async () => {
