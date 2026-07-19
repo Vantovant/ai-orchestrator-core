@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Loader2, Plus, MessageSquare, Pin, Trash2,
-  Hash, BookOpen, FolderKanban, Globe, X,
+  Hash, BookOpen, FolderKanban, Globe, X, ShieldAlert,
 } from "lucide-react";
 import ChatDictation from "@/components/voice/ChatDictation";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ const TAG_OPTIONS = [
   { value: "@all-projects", label: "All Projects", icon: FolderKanban },
   { value: "@knowledge", label: "Knowledge Base", icon: BookOpen },
   { value: "@global-only", label: "Global Only", icon: Globe },
+  { value: "@central_brain", label: "VantoOS Suite", icon: ShieldAlert },
 ];
 
 interface PortfolioPartnerChatProps {
