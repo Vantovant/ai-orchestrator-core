@@ -86,3 +86,65 @@ Repeat for `getwell_grow`, `getwell_africa`, `mlm_course`. All four green = Phas
 - Campaign Engine, three-layer knowledge sync, Strategy Room UI
 - Spoke-side AI proposals
 - Any writes to Step 5D governance state (stays PROVEN / RED / LOCKED)
+
+---
+
+## Phase B — Strategy Engine addendum
+
+Phase A = signed ping/pong. Phase B adds a small **payload vocabulary** on top of the same signed transport. No new endpoint, no new secret — the existing `suite-bridge-spoke` function receives everything.
+
+### Inbound to the spoke (from VantoOS Hub)
+
+`body.kind = "directive"` — the CEO issued a suite-wide goal.
+
+```json
+{
+  "kind": "directive",
+  "directive_id": "uuid",
+  "title": "Q3 growth push",
+  "goal_text": "Add 500 new paying users across the suite in 90 days.",
+  "kpi_target": { "metric": "new_paying_users", "target": 500 },
+  "horizon_days": 90,
+  "issued_at": 1784500000000
+}
+```
+
+Spoke should: acknowledge with 200, store locally, and (optionally) trigger its own internal work. Replies are optional but if sent must be signed back to the hub as `snapshot`, `proposal`, or `status`.
+
+### Outbound from the spoke (to VantoOS Hub `receive`)
+
+Sign with the same `SUITE_BRIDGE_SECRET`. Target URL: `https://<vantoos>.supabase.co/functions/v1/suite-bridge-hub` with request body `{ "action": "receive", "body": <your body> }`.
+
+`snapshot` — periodic KPI heartbeat:
+
+```json
+{ "kind": "snapshot", "directive_id": null, "metrics": { "active_users": 1240, "mrr_zar": 87400 } }
+```
+
+`proposal` — spoke suggests how it will help hit a directive (promoted into CEO review queue):
+
+```json
+{
+  "kind": "proposal",
+  "directive_id": "uuid-of-directive",
+  "summary": "Launch African-market landing campaign",
+  "detail": { "channels": ["email","whatsapp"], "budget_zar": 12000, "eta_days": 14 }
+}
+```
+
+`status` — progress update on a directive:
+
+```json
+{ "kind": "status", "directive_id": "uuid-of-directive", "progress": 0.42, "note": "Ahead of plan" }
+```
+
+### Signing (unchanged)
+
+HMAC-SHA256 over `` `${ts}.${nonce}.${app_key}.${bodyStr}` `` where `app_key` is *this spoke's* key (not `vantoos`). Send:
+
+- `x-bridge-app: <your app_key>`
+- `x-bridge-timestamp: <unix seconds>`
+- `x-bridge-nonce: <uuid>`
+- `x-bridge-signature: <hex>`
+
+Timestamp window: ±300s. Nonces are recorded — replays are rejected.
