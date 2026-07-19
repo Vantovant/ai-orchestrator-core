@@ -202,6 +202,20 @@ Deno.serve(async (req) => {
       processing_state: "verified",
     }).then(() => {}, () => {});
 
+    // Strategy Engine routing: snapshot | proposal | status
+    const bodyKind = payload?.body?.kind;
+    if (bodyKind === "snapshot" || bodyKind === "proposal" || bodyKind === "status") {
+      await supabase.from("vos_strategy_snapshots").insert({
+        directive_id: payload?.body?.directive_id ?? null,
+        app_key,
+        kind: bodyKind,
+        payload: payload?.body ?? {},
+        signature: sig,
+        nonce,
+        verified: true,
+      }).then(() => {}, () => {});
+    }
+
     return json({ ok: true, verified: true });
   }
 
