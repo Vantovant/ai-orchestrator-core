@@ -51,32 +51,25 @@ Deno.serve(async (req) => {
   const action = payload?.action as string | undefined;
   if (!action) return json({ error: "missing_action" }, 400);
 
-  // ---------- OUTBOUND: sign & deliver to spoke ----------
-  if (action === "ping" || action === "send") {
-    const app_key = payload?.app_key as string;
-    const body = payload?.body ?? { kind: action === "ping" ? "ping" : "directive", ts: Date.now() };
-    if (!app_key) return json({ error: "missing_app_key" }, 400);
-
-    const { data: app, error: appErr } = await supabase
+  // Helper: sign+deliver a single body to one spoke, return {status, body, nonce}
+  async function deliverToSpoke(app_key: string, body: unknown) {
+    const { data: app } = await supabase
       .from("vos_suite_apps")
       .select("app_key, name, url, bridge_secret_slot, is_active, role")
       .eq("app_key", app_key)
       .maybeSingle();
-    if (appErr || !app) return json({ error: "unknown_app" }, 404);
-    if (!app.is_active) return json({ error: "app_inactive" }, 400);
-    if (app.role !== "spoke") return json({ error: "not_a_spoke" }, 400);
-
+    if (!app) return { ok: false, error: "unknown_app", status: 404, nonce: null };
+    if (!app.is_active) return { ok: false, error: "app_inactive", status: 400, nonce: null };
+    if (app.role !== "spoke") return { ok: false, error: "not_a_spoke", status: 400, nonce: null };
     const secret = Deno.env.get(app.bridge_secret_slot);
-    if (!secret) return json({ error: "missing_secret", slot: app.bridge_secret_slot }, 500);
+    if (!secret) return { ok: false, error: "missing_secret", status: 500, nonce: null };
 
     const bodyStr = JSON.stringify(body);
     const ts = Math.floor(Date.now() / 1000).toString();
     const nonce = crypto.randomUUID();
     const sig = await hmacSha256Hex(secret, `${ts}.${nonce}.${app.app_key}.${bodyStr}`);
-
     const target = new URL("/functions/v1/suite-bridge-spoke", app.url).toString();
-    let spokeStatus = 0;
-    let spokeBody: any = null;
+
     try {
       const resp = await fetch(target, {
         method: "POST",
@@ -89,11 +82,28 @@ Deno.serve(async (req) => {
         },
         body: bodyStr,
       });
-      spokeStatus = resp.status;
       const raw = await resp.text();
+      let spokeBody: any = null;
       try { spokeBody = JSON.parse(raw); } catch { spokeBody = raw; }
+      return { ok: resp.status >= 200 && resp.status < 300, status: resp.status, body: spokeBody, nonce, target };
     } catch (e) {
-      return json({ error: "spoke_unreachable", target, detail: String(e) }, 502);
+      return { ok: false, error: "spoke_unreachable", status: 502, nonce, target, detail: String(e) };
+    }
+  }
+
+  // ---------- OUTBOUND: sign & deliver to spoke ----------
+  if (action === "ping" || action === "send") {
+    const app_key = payload?.app_key as string;
+    const body = payload?.body ?? { kind: action === "ping" ? "ping" : "directive", ts: Date.now() };
+    if (!app_key) return json({ error: "missing_app_key" }, 400);
+
+    const res = await deliverToSpoke(app_key, body);
+    const spokeStatus = res.status ?? 0;
+    const spokeBody = (res as any).body ?? null;
+    const target = (res as any).target ?? "";
+    const nonce = res.nonce ?? crypto.randomUUID();
+    if ((res as any).error === "spoke_unreachable") {
+      return json({ error: "spoke_unreachable", target, detail: (res as any).detail }, 502);
     }
 
     await supabase.from("vos_outbound_log").insert({
