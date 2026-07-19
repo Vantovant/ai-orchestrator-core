@@ -361,11 +361,14 @@ export default function ApprovalGateTab() {
                           <Button
                             size="sm"
                             disabled={!!sameUser}
-                            title={sameUser ? "Two-key: a different admin must confirm" : ""}
+                            title={sameUser ? "Two-key: a different admin must confirm — or use Solo approve below" : ""}
                             onClick={() => secondReviewConfirm(r)}
                           >
                             <KeyRound className="h-3 w-3 mr-1" />
                             Second-review confirm
+                          </Button>
+                          <Button size="sm" variant="default" onClick={() => soloApprove(r)} title="Super-admin single-key bypass">
+                            <KeyRound className="h-3 w-3 mr-1" /> Solo approve (super-admin)
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => archive(r)}>Archive</Button>
                         </div>
