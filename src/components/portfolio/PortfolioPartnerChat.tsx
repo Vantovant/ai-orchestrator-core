@@ -218,40 +218,112 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
           </Button>
         </div>
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-          {!activeThread && messages.length === 0 && !streaming && (
-            <div className="flex flex-col items-center justify-center h-full text-center space-y-3">
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <MessageSquare className="h-8 w-8 text-primary" />
+          {!activeThread && messages.length === 0 && !streaming && (() => {
+            const setPrompt = (text: string, tags: string[] = []) => {
+              setInput(text);
+              if (tags.length) {
+                setContextTags(prev => {
+                  const next = new Set(prev);
+                  tags.forEach(t => next.add(t));
+                  return Array.from(next);
+                });
+              }
+              inputRef.current?.focus();
+            };
+            const groups: { title: string; hint: string; items: { label: string; prompt: string; tags?: string[] }[] }[] = [
+              {
+                title: "🗓️ Daily & weekly rhythm",
+                hint: "Ask for briefings, reviews and focus",
+                items: [
+                  { label: "📊 Daily review", prompt: "How was the day today across my portfolio? What was done well, and what could be done better?" },
+                  { label: "🌅 Morning briefing", prompt: "Good morning. Give me today's executive briefing: meetings, top priorities, blockers, and one thing I might be forgetting." },
+                  { label: "🎯 Weekly focus", prompt: "What are the 3 most important things I should focus on this week across all projects?" },
+                  { label: "🌙 End-of-day review", prompt: "Run my end-of-day operational review — what shipped, what slipped, what needs a decision tomorrow?" },
+                ],
+              },
+              {
+                title: "📁 Projects & tasks",
+                hint: "Tag @project or pick one from the tag bar below",
+                items: [
+                  { label: "🩺 Portfolio health", prompt: "Give me a full portfolio health check — RAG status per project with reasons." },
+                  { label: "⚠️ Top risks", prompt: "What are my top 5 risks right now across the portfolio, ranked, with mitigations?" },
+                  { label: "📌 Stalled tasks", prompt: "Which tasks are stalled or overdue across all projects? Who owns each and what's the next step?" },
+                  { label: "🚀 Project update", prompt: "Update me on the ZAZI CRM project — progress, blockers, next milestone.", tags: ["@project"] },
+                ],
+              },
+              {
+                title: "📚 Knowledge & documents",
+                hint: "Reasons over your uploaded docs and notes",
+                items: [
+                  { label: "🔎 Search knowledge", prompt: "Search my knowledge base for anything about pricing strategy and summarise the key points." },
+                  { label: "📄 Summarise doc", prompt: "Summarise the latest document I uploaded and pull out any action items.", tags: ["@doc"] },
+                  { label: "🗣️ Voice diary recap", prompt: "Give me a summary of my recent voice diary entries — themes, recurring worries, and priorities I mentioned." },
+                ],
+              },
+              {
+                title: "🛡️ VantoOS Suite (Central Brain)",
+                hint: "Cross-app governance across Hub, Grow, Africa, MLM Course",
+                items: [
+                  { label: "⚡ Everything briefing", prompt: "What needs my attention today across projects AND the VantoOS suite? Give me one unified executive briefing.", tags: ["@central_brain", "@all-projects"] },
+                  { label: "📡 Directive status", prompt: "For the most recent Strategy Engine directive, list every spoke's delivery status and explain any failures.", tags: ["@central_brain"] },
+                  { label: "🩻 Suite health check", prompt: "Give me a health check across all VantoOS suite apps — approvals, kill switches, and recent spoke activity.", tags: ["@central_brain"] },
+                  { label: "🧭 Suite alignment", prompt: "Are all suite apps aligned with the latest strategic directive? Where is drift happening?", tags: ["@central_brain"] },
+                ],
+              },
+              {
+                title: "💡 Strategy & decisions",
+                hint: "Use me as your co-founder",
+                items: [
+                  { label: "⚖️ Decision help", prompt: "I'm deciding between two options for [describe]. Weigh the trade-offs given what you know about my portfolio and goals." },
+                  { label: "📈 Growth ideas", prompt: "Based on my current projects, suggest 3 high-leverage growth moves for the next 90 days." },
+                  { label: "💰 Revenue check", prompt: "Which of my projects has the clearest path to revenue in the next 60 days and why?" },
+                  { label: "🧩 Connect the dots", prompt: "Look across all my projects and knowledge — what patterns, opportunities or conflicts do you see that I might be missing?" },
+                ],
+              },
+            ];
+            return (
+              <div className="flex flex-col items-center h-full space-y-4 py-6">
+                <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <MessageSquare className="h-7 w-7 text-primary" />
+                </div>
+                <div className="text-center space-y-1 max-w-md">
+                  <h3 className="text-lg font-semibold">Portfolio Partner</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Your AI co-founder for the full VantoOS portfolio. Pick a prompt below, or ask anything about projects, risks, tasks, documents, voice diary, or the suite.
+                  </p>
+                </div>
+                <div className="w-full max-w-3xl space-y-4">
+                  {groups.map(group => (
+                    <div key={group.title} className="text-left">
+                      <div className="flex items-baseline justify-between mb-1.5 px-1">
+                        <h4 className="text-sm font-semibold">{group.title}</h4>
+                        <span className="text-[11px] text-muted-foreground">{group.hint}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.items.map(item => (
+                          <Badge
+                            key={item.label}
+                            variant="outline"
+                            className={cn(
+                              "cursor-pointer text-xs font-normal py-1 px-2.5 hover:bg-primary/5 transition-colors",
+                              item.tags?.includes("@central_brain") && "border-primary/40"
+                            )}
+                            onClick={() => setPrompt(item.prompt, item.tags)}
+                            title={item.prompt}
+                          >
+                            {item.label}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground text-center max-w-md pt-2">
+                  Tip: use tags like <span className="font-mono">@project</span>, <span className="font-mono">@doc</span>, <span className="font-mono">@central_brain</span> or <span className="font-mono">@all-projects</span> below the input to narrow scope.
+                </p>
               </div>
-              <h3 className="text-lg font-semibold">Portfolio Partner</h3>
-              <p className="text-sm text-muted-foreground max-w-md">
-                Your AI co-founder for the full VantoOS portfolio. Ask about projects, risks, tasks, knowledge docs, or strategy.
-              </p>
-              <div className="flex flex-wrap gap-1.5 justify-center mt-2">
-                <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("How was the day today? What was done well, and what could be done better?"); inputRef.current?.focus(); }}>
-                  📊 Daily review
-                </Badge>
-                <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("Give me a full portfolio health check"); inputRef.current?.focus(); }}>
-                  Portfolio health check
-                </Badge>
-                <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("What should I focus on this week?"); inputRef.current?.focus(); }}>
-                  Weekly focus
-                </Badge>
-                <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("What are my biggest risks right now?"); inputRef.current?.focus(); }}>
-                  Top risks
-                </Badge>
-                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("For the most recent Strategy Engine directive, list every spoke's delivery status and explain any failures."); setContextTags(prev => prev.includes("@central_brain") ? prev : [...prev, "@central_brain"]); inputRef.current?.focus(); }}>
-                  🛡️ Suite: directive status
-                </Badge>
-                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("Give me a health check across all VantoOS suite apps — approvals, kill switches, and recent spoke activity."); setContextTags(prev => prev.includes("@central_brain") ? prev : [...prev, "@central_brain"]); inputRef.current?.focus(); }}>
-                  🛡️ Suite: health check
-                </Badge>
-                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("What needs my attention today across projects AND the VantoOS suite? Give me one unified executive briefing."); setContextTags(prev => { const next = new Set(prev); next.add("@central_brain"); next.add("@all-projects"); return Array.from(next); }); inputRef.current?.focus(); }}>
-                  ⚡ Everything briefing
-                </Badge>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
 
           {messages.map(msg => (
