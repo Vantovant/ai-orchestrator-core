@@ -255,7 +255,12 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="crmnotes5b">CRM Internal Notes</TabsTrigger>
           <TabsTrigger value="strategy">🎯 Strategy Engine</TabsTrigger>
           <TabsTrigger value="suite">🛡️ Suite Overview</TabsTrigger>
+          <TabsTrigger value="audit5f">📜 Audit (5F)</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="audit5f" className="pt-4">
+          <AuditConsolidationTab />
+        </TabsContent>
 
         <TabsContent value="strategy" className="pt-4">
           <StrategyEngineTab />
