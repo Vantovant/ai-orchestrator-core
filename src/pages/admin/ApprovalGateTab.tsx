@@ -359,9 +359,30 @@ export default function ApprovalGateTab() {
                       </div>
                     )}
 
-                    {(r.approval_status === "second_reviewed" ||
-                      r.approval_status === "rejected" ||
-                      r.approval_status === "expired") && (
+                    {r.approval_status === "second_reviewed" && (
+                      <div className="space-y-2 pt-1">
+                        {r.approval_type === "platform_flag_flip" && (
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={!!executing[r.id]}
+                              onClick={() => executePlatformFlagFlip(r)}
+                            >
+                              <PlayCircle className={`h-3 w-3 mr-1 ${executing[r.id] ? "animate-pulse" : ""}`} />
+                              Execute platform flag flip
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Writes the new flag value and records to vos_killswitch_log. Two-key already satisfied.
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => archive(r)}>Archive</Button>
+                        </div>
+                      </div>
+                    )}
+                    {(r.approval_status === "rejected" || r.approval_status === "expired") && (
                       <div className="flex gap-2 pt-1">
                         <Button size="sm" variant="outline" onClick={() => archive(r)}>Archive</Button>
                       </div>
