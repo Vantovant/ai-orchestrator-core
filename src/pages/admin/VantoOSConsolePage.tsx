@@ -20,6 +20,7 @@ import IntegrationDraftsTab from "./IntegrationDraftsTab";
 import CRMInternalNotesTab from "./CRMInternalNotesTab";
 // CentralBrainChat retired — merged into Portfolio Partner (tag: VantoOS Suite)
 import StrategyEngineTab from "./StrategyEngineTab";
+import SuiteOverviewTab from "./SuiteOverviewTab";
 
 type Row = Record<string, any>;
 
@@ -252,11 +253,15 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="drafts4y">Integration Drafts</TabsTrigger>
           <TabsTrigger value="crmnotes5b">CRM Internal Notes</TabsTrigger>
           <TabsTrigger value="strategy">🎯 Strategy Engine</TabsTrigger>
-          
+          <TabsTrigger value="suite">🛡️ Suite Overview</TabsTrigger>
         </TabsList>
 
         <TabsContent value="strategy" className="pt-4">
           <StrategyEngineTab />
+        </TabsContent>
+
+        <TabsContent value="suite" className="pt-4">
+          <SuiteOverviewTab />
         </TabsContent>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
