@@ -18,7 +18,7 @@ import ApprovalGateTab from "./ApprovalGateTab";
 import ManualActionPilotTab from "./ManualActionPilotTab";
 import IntegrationDraftsTab from "./IntegrationDraftsTab";
 import CRMInternalNotesTab from "./CRMInternalNotesTab";
-import CentralBrainChat from "@/components/admin/vanto-os/CentralBrainChat";
+// CentralBrainChat retired — merged into Portfolio Partner (tag: VantoOS Suite)
 import StrategyEngineTab from "./StrategyEngineTab";
 
 type Row = Record<string, any>;
