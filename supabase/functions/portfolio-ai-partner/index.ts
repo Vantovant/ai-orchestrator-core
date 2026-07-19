@@ -944,6 +944,11 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
   sections.push(fmt(snapshots, ["directive_id","app_key","kind","payload","verified","received_at"]));
   sections.push(`STRATEGY ENGINE — ALL RECENT SPOKE PROPOSALS (${counts["vos_strategy_proposals"]}):`);
   sections.push(fmt(strategyProposals, ["directive_id","app_key","summary","detail","review_state","reviewed_at","created_at"]));
+  sections.push("");
+  sections.push(`SUITE TELEMETRY — PER-SPOKE HEALTH (last ${counts["vos_suite_telemetry"] ?? 0} probes):`);
+  sections.push(telemetrySummary.length ? telemetrySummary.join("\n") : "  (no health probes recorded yet — run Suite Overview → Run health poll)");
+  sections.push(`SPOKE LIFECYCLE EVENTS (${counts["vos_spoke_lifecycle_log"] ?? 0}):`);
+  sections.push(fmt(lifecycle, ["app_key","action","detail","created_at"]));
   sections.push("═══ END CENTRAL BRAIN ═══");
 
   return { text: sections.join("\n"), counts };
