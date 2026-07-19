@@ -379,5 +379,6 @@ export default function ApprovalGateTab() {
         </CardContent>
       </Card>
     </div>
+    </TabErrorBoundary>
   );
 }
