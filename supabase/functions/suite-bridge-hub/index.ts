@@ -258,8 +258,9 @@ Deno.serve(async (req) => {
 
     // Strategy Engine routing: snapshot | proposal | status
     const bodyKind = payload?.body?.kind;
+    let snapshotId: string | null = null;
     if (bodyKind === "snapshot" || bodyKind === "proposal" || bodyKind === "status") {
-      await supabase.from("vos_strategy_snapshots").insert({
+      const { data: snapRow } = await supabase.from("vos_strategy_snapshots").insert({
         directive_id: payload?.body?.directive_id ?? null,
         app_key,
         kind: bodyKind,
@@ -267,10 +268,32 @@ Deno.serve(async (req) => {
         signature: sig,
         nonce,
         verified: true,
-      }).then(() => {}, () => {});
+      }).select("id").maybeSingle();
+      snapshotId = snapRow?.id ?? null;
     }
 
-    return json({ ok: true, verified: true });
+    // Route proposals into the reviewable proposal queue
+    if (bodyKind === "proposal") {
+      await supabase.from("vos_strategy_proposals").insert({
+        snapshot_id: snapshotId,
+        directive_id: payload?.body?.directive_id ?? null,
+        app_key,
+        summary: payload?.body?.summary ?? payload?.body?.title ?? "Spoke proposal",
+        detail: payload?.body ?? {},
+        review_state: "pending",
+      }).then(() => {}, () => {});
+
+      // Mark the target row as responded, if we can locate it
+      if (payload?.body?.directive_id) {
+        await supabase.from("vos_strategy_targets")
+          .update({ delivery_status: "responded" })
+          .eq("directive_id", payload.body.directive_id)
+          .eq("app_key", app_key)
+          .then(() => {}, () => {});
+      }
+    }
+
+    return json({ ok: true, verified: true, snapshot_id: snapshotId });
   }
 
   return json({ error: "unknown_action", action }, 400);
