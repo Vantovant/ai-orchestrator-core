@@ -1,167 +1,97 @@
+# Phase B — Strategy Engine
 
-# VantoOS Public Website — Build Plan
+Governance-level orchestrator that lets the CEO issue signed strategic directives to all 5 spokes and receive signed snapshots back. **Not** marketing sends — that stays inside each spoke.
 
-A marketing site lives at the root of vantoos.com. The existing app (Executive AI Command Center) moves behind `/signin` and `/app/*`. Nothing in the app's logic, governance state, or flags changes — this is additive frontend only.
-
----
-
-## 1. Positioning
-
-- **VantoOS the company** — an African-built software house designing an operating system for executives, founders, and growing teams.
-- **Flagship product** — Executive AI Command Center (this app).
-- **Sister products** — GetWell Hub, GetWell Grow (live), plus 4 forthcoming apps (placeholders, "Coming 2026").
-- **Clientele** — both **companies** (enterprise, SME, MLM networks, professional services) and **individual executives** (founders, directors, principals).
-- **Slogan** — *"One operating system. Every executive. Every team."* (placeholder — confirm with you).
-- **Investor angle** — one portfolio, multiple revenue lines, shared AI + governance core.
+Named **Strategy Engine** throughout (UI, tables, functions) to avoid overlap with GetWell Hub's own Campaign Engine.
 
 ---
 
-## 2. Sitemap
+## Scope (what Phase B ships)
 
-```
-vantoos.com/
-├── /                          Home — flagship hero + company intro + suite teaser
-├── /command-center            The Executive AI Command Center (flagship deep dive)
-├── /features                  All modules — user-facing + admin-facing
-├── /how-it-works              From signup → daily execution → governance
-├── /suite                     The VantoOS Suite — all apps (live + coming)
-│   ├── /suite/command-center  → links to /command-center
-│   ├── /suite/getwell-hub     external link card
-│   ├── /suite/getwell-grow    external link card
-│   └── /suite/coming-soon     4 upcoming apps (teaser cards)
-├── /company                   About VantoOS — mission, founder, Africa-built story
-├── /clientele                 Who we serve — Companies + Individuals (two columns)
-├── /investors                 Investor brief — market, model, traction, roadmap, contact
-├── /pricing                   Plans (Individual / Team / Enterprise / BYOK)
-├── /contact                   Contact + demo request
-├── /signin                    Auth page (existing AuthPage moved here)
-├── /app/*                     The current app — all existing routes nest under /app
-├── /privacy                   Privacy policy (POPIA-aligned)
-└── /terms                     Terms of service
-```
+1. **Data model** — directives, snapshots, spoke proposals, approvals.
+2. **Hub outbound** — CEO creates a directive in VantoOS → signed broadcast to selected spokes via existing `suite-bridge-hub`.
+3. **Hub inbound** — spokes reply with signed snapshots/proposals → verified → stored → surfaced.
+4. **Strategy Room UI** — new page under Governance to draft directives, see spoke responses, approve/reject proposals.
+5. **Spoke contract doc** — updated `docs/suite-bridge/` guide so each of the 5 spokes knows exactly which payload shapes to accept and reply with. No spoke code changes required for Phase B — the existing `suite-bridge-spoke` template already routes on `body.kind`.
 
-Footer-only: `/privacy`, `/terms`, `/contact`.
+Out of scope (Phase C+): AI auto-drafting of proposals inside spokes, weekly auto-briefing digest, RAG over all spoke snapshots.
 
 ---
 
-## 3. Page-by-page content
+## Data model (new tables, RLS + GRANTs)
 
-### Home (`/`)
-- Hero: *"The Executive Operating System."* Sub: *"AI command center for the people who run companies — and the companies they run."* CTAs: **Open the App** / **See the Flagship**.
-- 4 stat strip: Modules · Governance proven · BYOK · Africa-built.
-- Flagship preview block (screenshot + 3 bullets → `/command-center`).
-- "Built for two audiences" — Companies | Individuals.
-- The VantoOS Suite teaser (3 live + 4 coming) → `/suite`.
-- Investor strip → `/investors`.
-- Footer.
+- `vos_strategy_directives`
+  - id, title, goal_text, kpi_target (jsonb), horizon_days, status (`draft|broadcast|closed`), created_by, created_at, closed_at
+- `vos_strategy_targets`
+  - id, directive_id, app_key, delivery_status (`pending|delivered|failed`), nonce, delivered_at, error
+- `vos_strategy_snapshots` (inbound from spokes)
+  - id, directive_id (nullable — spokes can push unsolicited), app_key, kind (`snapshot|proposal|status`), payload jsonb, signature, nonce, received_at, verified bool
+- `vos_strategy_proposals` (CEO-visible, promoted from snapshots where kind='proposal')
+  - id, directive_id, app_key, summary, detail jsonb, review_state (`pending|approved|rejected`), reviewed_by, reviewed_at
 
-### Command Center (`/command-center`) — flagship deep dive
-- Hero + product screenshot.
-- Why it exists (executive pain → AI partner solution).
-- 6 flagship modules with icons: Dashboard, Plan (Tasks/Meetings/Reminders), Email Triage, Finance, Projects + AI Partner, Voice Diary.
-- Governance & Trust block (Two-Key Governance, Write Receipts, BYOK).
-- CTA: Open the App.
-
-### Features (`/features`) — all modules
-Two clearly labeled sections:
-- **User Modules** — Dashboard, Plan, Email, Finance, Projects, Knowledge Base, Voice Diary, Portfolio AI Partner, Reminders, Meetings, Travel, Shopping, Team, Compliance, Weekly Report, Invest, Onboarding.
-- **Administrator Modules** — VantoOS Central Brain, Step 5D Console, Approval Gate, Proposal Queue, Receipt Intelligence, Dry-Run Actions, Manual Action Pilot, Integration Drafts, CRM Internal Notes, Inbox Receipts, Onboarding Emails, Tester Board, Admin Health.
-Each shown as a card with one-line description.
-
-### How it Works (`/how-it-works`)
-4 steps: Sign in → Connect (Email/BYOK) → Daily AI brief → Governance-protected execution.
-
-### Suite (`/suite`)
-Grid of all VantoOS apps:
-- **Live:** Executive AI Command Center, GetWell Hub, GetWell Grow.
-- **Coming 2026:** 4 placeholder cards (you'll confirm names later).
-Each card: logo, one-liner, status badge, link.
-
-### Company (`/company`)
-Mission, story, founder, Africa-built, design principles (Data Sovereignty, BYOK, Executive Confidence).
-
-### Clientele (`/clientele`)
-Two columns:
-- **For Companies** — SMEs, MLM teams, professional services, multinationals.
-- **For Individuals** — founders, executives, principals, consultants.
-Slogan reinforced at bottom.
-
-### Investors (`/investors`)
-Market size, business model (subscription + BYOK + enterprise), portfolio approach (one core, many apps), traction snapshot, roadmap, contact CTA.
-
-### Pricing (`/pricing`)
-4 tiers: Individual · Team · Enterprise · BYOK-only. "Talk to us" for Enterprise.
-
-### Contact (`/contact`)
-Form (name, email, type: user/investor/enterprise, message). Submits to a `contact_inquiries` table.
+All tables: RLS on, admin-only via `has_role(auth.uid(),'admin')`, GRANTs to `authenticated` + `service_role`.
 
 ---
 
-## 4. Routing changes (technical)
+## Hub edge functions
 
-- Current `/` (Dashboard) moves to `/app/` and all existing routes nest under `/app/*`.
-- New marketing routes added at the root.
-- `AuthPage` moves from current path to `/signin`.
-- `App.tsx` split into:
-  - `<MarketingLayout>` — public header/footer, no auth required.
-  - `<AppLayout>` — existing authenticated shell, mounted at `/app/*`.
-- Any in-app links to `/` updated to `/app/`.
-- 301-style internal redirects: old paths (`/dashboard`, `/plan`, etc.) → `/app/dashboard`, `/app/plan` via React Router.
+**Extend `suite-bridge-hub`** — add two new actions on top of existing `ping|send|receive`:
 
-**Nothing changes** in: edge functions, database, governance flags, Step 5D state, traffic locks, or any business logic.
+- `action: "broadcast_directive"` → for each target app_key, sign+POST `{kind:"directive", directive_id, title, goal_text, kpi_target, horizon_days}` to that spoke's `suite-bridge-spoke`. Log per-target row in `vos_strategy_targets`.
+- `action: "receive"` (existing) — extend to detect `body.kind in ("snapshot","proposal","status")` and route into `vos_strategy_snapshots` (+ promote proposals into `vos_strategy_proposals`). Signature verification is already in place.
+
+No new function file needed. Keeps signing/replay-window logic in one place.
 
 ---
 
-## 5. Design system
+## UI — Strategy Room
 
-- Inherits existing Dark Navy + Sage Green palette and tokens from `index.css`.
-- Marketing pages use a lighter surface variant (off-white sections for marketing legibility) while keeping the navy/sage accents.
-- Typography pair to be confirmed in a follow-up question after plan approval — default to existing project fonts.
-- Hero illustration style similar to GetWell (Africa silhouette / executive motif) — to be generated once direction is confirmed.
-- Reuse shadcn components (Card, Button, Badge, Accordion).
+New route `/app/governance/strategy` (linked from existing Governance sidebar section):
 
----
+- **Directives list** — draft / active / closed tabs.
+- **Draft form** — title, goal, KPI target (freeform jsonb helper), horizon, spoke checkboxes.
+- **Broadcast button** — calls `suite-bridge-hub` with `broadcast_directive`, shows per-spoke delivery receipts.
+- **Directive detail** — timeline of snapshots + proposals from each spoke; approve/reject buttons on proposals (write to `vos_strategy_proposals.review_state`).
+- **Empty-state** — plain-English explainer: "Strategy Engine issues suite-wide goals. Spokes execute in their own way."
 
-## 6. SEO & meta
-
-- `react-helmet-async` per-route titles, descriptions, canonicals.
-- Sitewide Organization JSON-LD in `index.html`.
-- Per-route Product JSON-LD on `/command-center` and each `/suite/*` card.
-- `public/robots.txt` allowing all, with `Sitemap: https://vantoos.com/sitemap.xml`.
-- `scripts/generate-sitemap.ts` listing all public routes (excludes `/app/*` and `/signin`).
-- Canonical and og:url = `https://vantoos.com`.
+Executive copy conventions: "Directives" not "Campaigns", "Receipts" not "Logs", data sovereignty language preserved.
 
 ---
 
-## 7. Build phases & estimated prompts
+## Spoke contract (docs only, no spoke code change)
 
-| Phase | Scope | Est. prompts |
-|---|---|---|
-| **A** | Routing refactor — nest app under `/app/*`, move auth to `/signin`, add `MarketingLayout` | 1–2 |
-| **B** | Home + Command Center + Features pages | 2–3 |
-| **C** | Suite + Company + Clientele + Investors | 2 |
-| **D** | Pricing + Contact (with `contact_inquiries` table + RLS) | 1–2 |
-| **E** | SEO (helmet, sitemap, JSON-LD, robots) + hero illustration | 1 |
-| **F** | Polish, mobile QA, link checks, publish | 1 |
-| **Total** | | **8–11 prompts** |
+Update `docs/suite-bridge/README_SUITE_BRIDGE.md` with a **Phase B addendum**:
 
----
+- Accepted inbound `body.kind`: `directive` (spoke should store + optionally trigger internal work; reply is optional but if sent must be signed back to hub's `receive`).
+- Outbound `body.kind` a spoke may send unsolicited: `snapshot` (KPI heartbeat), `proposal` (spoke's suggestion to improve toward directive), `status` (progress).
+- Signing rules unchanged (HMAC-SHA256 over `${ts}.${nonce}.${app_key}.${body}` with `SUITE_BRIDGE_SECRET`).
+- Include one worked example per kind.
 
-## 8. What this plan explicitly does NOT do
-
-- Does not touch governance state, Step 5D, approval flags, traffic locks, or any RED/OFF surfaces.
-- Does not modify edge functions, RLS, or existing tables (only **adds** `contact_inquiries`).
-- Does not start Step 5E or any external automation.
-- Does not change the AI agent, Portfolio Partner, or Voice Diary logic.
-- Does not rename the existing app — only adds the marketing wrapper around it.
+Each spoke team implements the branches inside their existing `suite-bridge-spoke/index.ts` at their own pace — Phase B works end-to-end from day one for any spoke that opts in, and stays silent for those that haven't yet.
 
 ---
 
-## 9. Open questions (answer after approving, or I'll default)
+## Verification steps (built into this ship)
 
-1. **Slogan** — confirm *"One operating system. Every executive. Every team."* or supply your own.
-2. **Names of the 4 forthcoming apps** — or leave as "Coming 2026" placeholders.
-3. **Pricing tiers and amounts** — or leave as "Contact us" until you decide.
-4. **Hero illustration** — Africa-silhouette style like GetWell, or a different motif (executive desk, command room, etc.)?
+1. Migration applied; tables + policies + grants in place (confirm via linter).
+2. Draft a test directive in Strategy Room, broadcast to `getwell_hub` only.
+3. Confirm receipt row in `vos_strategy_targets` = delivered.
+4. Simulate a signed inbound proposal from `getwell_hub` (using existing self-test pattern) → row appears in `vos_strategy_snapshots` + promoted to `vos_strategy_proposals`.
+5. Approve it in UI → `review_state='approved'`, `reviewed_by=admin`.
+6. Baseline check: Step 5D governance state untouched (PROVEN / RED / LOCKED).
 
-Approve this and I'll start with **Phase A (routing refactor)** so nothing in the app breaks while the marketing site goes up around it.
+---
+
+## Technical details (engineer section)
+
+- Reuse existing `hmacSha256Hex` and timing-safe compare in `suite-bridge-hub/index.ts`.
+- `broadcast_directive` loops sequentially with `Promise.allSettled` to keep one bad spoke from blocking others; each result written to `vos_strategy_targets` regardless.
+- Proposal promotion done in a Postgres trigger on `vos_strategy_snapshots` (after insert where kind='proposal') to keep hub function thin.
+- All new UI queries go through TanStack Query with 30s stale time; no direct realtime channels this phase (add in C if needed).
+- Sidebar item guarded by `has_role('admin')` — same pattern as existing Governance tabs.
+
+---
+
+## Ready to build
+
+Say **GO** and I ship all four pieces (migration, hub extension, Strategy Room UI, docs addendum) in one pass, then run the verification steps above.

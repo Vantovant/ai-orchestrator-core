@@ -4800,6 +4800,184 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_strategy_directives: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          created_by: string | null
+          goal_text: string
+          horizon_days: number
+          id: string
+          kpi_target: Json
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          goal_text: string
+          horizon_days?: number
+          id?: string
+          kpi_target?: Json
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          goal_text?: string
+          horizon_days?: number
+          id?: string
+          kpi_target?: Json
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      vos_strategy_proposals: {
+        Row: {
+          app_key: string
+          created_at: string
+          detail: Json
+          directive_id: string | null
+          id: string
+          review_state: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          snapshot_id: string | null
+          summary: string
+        }
+        Insert: {
+          app_key: string
+          created_at?: string
+          detail?: Json
+          directive_id?: string | null
+          id?: string
+          review_state?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          snapshot_id?: string | null
+          summary: string
+        }
+        Update: {
+          app_key?: string
+          created_at?: string
+          detail?: Json
+          directive_id?: string | null
+          id?: string
+          review_state?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          snapshot_id?: string | null
+          summary?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vos_strategy_proposals_directive_id_fkey"
+            columns: ["directive_id"]
+            isOneToOne: false
+            referencedRelation: "vos_strategy_directives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vos_strategy_proposals_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "vos_strategy_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vos_strategy_snapshots: {
+        Row: {
+          app_key: string
+          directive_id: string | null
+          id: string
+          kind: string
+          nonce: string | null
+          payload: Json
+          received_at: string
+          signature: string | null
+          verified: boolean
+        }
+        Insert: {
+          app_key: string
+          directive_id?: string | null
+          id?: string
+          kind: string
+          nonce?: string | null
+          payload?: Json
+          received_at?: string
+          signature?: string | null
+          verified?: boolean
+        }
+        Update: {
+          app_key?: string
+          directive_id?: string | null
+          id?: string
+          kind?: string
+          nonce?: string | null
+          payload?: Json
+          received_at?: string
+          signature?: string | null
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vos_strategy_snapshots_directive_id_fkey"
+            columns: ["directive_id"]
+            isOneToOne: false
+            referencedRelation: "vos_strategy_directives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      vos_strategy_targets: {
+        Row: {
+          app_key: string
+          created_at: string
+          delivered_at: string | null
+          delivery_status: string
+          directive_id: string
+          error: string | null
+          id: string
+          nonce: string | null
+        }
+        Insert: {
+          app_key: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_status?: string
+          directive_id: string
+          error?: string | null
+          id?: string
+          nonce?: string | null
+        }
+        Update: {
+          app_key?: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_status?: string
+          directive_id?: string
+          error?: string | null
+          id?: string
+          nonce?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vos_strategy_targets_directive_id_fkey"
+            columns: ["directive_id"]
+            isOneToOne: false
+            referencedRelation: "vos_strategy_directives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vos_suite_apps: {
         Row: {
           app_key: string
