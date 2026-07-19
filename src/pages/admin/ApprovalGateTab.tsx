@@ -250,7 +250,7 @@ export default function ApprovalGateTab() {
 
           <div className="space-y-3">
             {filtered.map(r => {
-              const expired = new Date(r.expires_at).getTime() < Date.now();
+              const expired = r.expires_at ? new Date(r.expires_at).getTime() < Date.now() : false;
               const sameUser = r.reviewed_by && currentUserId && r.reviewed_by === currentUserId;
               return (
                 <Card key={r.id} className="border-l-4 border-l-primary/30">
