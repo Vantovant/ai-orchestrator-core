@@ -842,6 +842,7 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
     inboxReceipts, proposals, dryRuns, approvals,
     manualActions, drafts, crmNotes,
     suiteApps, directives, targets, snapshots, strategyProposals,
+    telemetry, lifecycle,
   ] = await Promise.all([
     supabase.from("vos_platform_flags").select("flag_key,flag_value,updated_at").order("flag_key").limit(50).then((r: any) => { counts["vos_platform_flags"] = (r.data||[]).length; return r.data || []; }, () => []),
     safe("vos_inbound_log", "id,source_app,event_name,received_at,verification_status", "received_at"),
@@ -860,7 +861,20 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
     safe("vos_strategy_targets", "id,directive_id,app_key,delivery_status,delivered_at,error,created_at", "created_at"),
     safe("vos_strategy_snapshots", "id,directive_id,app_key,kind,payload,verified,received_at", "received_at"),
     safe("vos_strategy_proposals", "id,directive_id,app_key,summary,detail,review_state,reviewed_at,created_at", "created_at"),
+    safe("vos_suite_telemetry", "app_key,probed_at,ok,http_status,latency_ms,error", "probed_at"),
+    safe("vos_spoke_lifecycle_log", "app_key,action,detail,created_at", "created_at"),
   ]);
+
+  // Aggregate telemetry per spoke (uptime%, avg latency)
+  const telByApp: Record<string, any[]> = {};
+  for (const r of telemetry as any[]) { (telByApp[r.app_key] ??= []).push(r); }
+  const telemetrySummary = Object.entries(telByApp).map(([app_key, rows]) => {
+    const okN = rows.filter(r => r.ok).length;
+    const lats = rows.filter(r => r.latency_ms != null).map(r => r.latency_ms);
+    const avg = lats.length ? Math.round(lats.reduce((a: number, b: number) => a + b, 0) / lats.length) : null;
+    const last = rows[0];
+    return `  • ${app_key}: uptime=${Math.round((okN / rows.length) * 100)}% (${okN}/${rows.length}) avg_latency=${avg ?? "—"}ms last=${last?.probed_at ?? "—"} last_ok=${last?.ok ?? "—"}`;
+  });
 
   const fmt = (rows: any[], fields: string[]) =>
     rows.length === 0
