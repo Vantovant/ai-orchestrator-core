@@ -45,6 +45,26 @@ const STATUS_VARIANT: Record<string, "default" | "destructive" | "secondary" | "
   rejected: "destructive", expired: "outline", archived: "outline",
 };
 
+class TabErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { console.error("ApprovalGateTab crash:", error); }
+  render() {
+    if (this.state.error) {
+      return (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <div className="font-medium text-destructive">Approval Gate failed to render.</div>
+            <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-64">{String(this.state.error.message || this.state.error)}</pre>
+            <Button size="sm" variant="outline" onClick={() => this.setState({ error: null })}>Retry</Button>
+          </CardContent>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function ApprovalGateTab() {
   const [rows, setRows] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(false);
