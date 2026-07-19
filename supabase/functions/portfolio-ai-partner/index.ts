@@ -78,6 +78,7 @@ const CENTRAL_BRAIN_PATTERNS = [
   /\b(vos|vanto\s*os)\s+(console|admin|governance|activity)\b/i,
   /\b(admin|vos)\s+console\b/i,
   /\b(receipts?|approvals?|dry[\s-]*runs?|manual\s+actions?|integration\s+drafts?|crm\s+internal\s+notes?|kill[\s-]*switch(?:es)?|killswitches?|inbound\s+log|outbound\s+log|decision\s+log|audit\s+log|signed\s+inbox|inbox\s+receipts?|proposal\s+queue|platform\s+flags?)\b/i,
+  /\b(strategy\s+engine|strategic\s+directive|directives?|suite\s+bridge|spokes?|delivery\s+status|broadcast|snapshots?|strategy\s+proposals?)\b/i,
   /\b(axis\s*[abc]|master\s+prospector|phase\s*4a|step\s*5[a-g])\b/i,
   /\bgovernance\s+(activity|state|status|review)\b/i,
   /\bwhat\s+(is\s+)?happening\s+in\s+(the\s+)?(central\s+brain|console|admin|vos)\b/i,
@@ -92,11 +93,15 @@ const CENTRAL_BRAIN_SYSTEM_SUPPLEMENT = `CENTRAL BRAIN (GOVERNANCE) MODE:
 You have read-only visibility into the VantoOS Admin Console / Central Brain governance tables.
 This includes Receipts, Inbound/Outbound/Decision/Killswitch logs, Inbox Receipts, Proposal Queue,
 Dry-Run Actions, Approval Requests (two-key state machine), Manual Action log, Integration Drafts,
-CRM Internal Notes, and Platform Flags (Axis A/B/C state).
+CRM Internal Notes, Platform Flags (Axis A/B/C state), Suite Registry, Strategy Engine Directives,
+spoke delivery Receipts, spoke snapshots, and spoke proposals.
 
 Rules in this mode:
 - Report what is recorded in these tables. Cite the table or surface (e.g. "Approval Gate", "Receipts").
 - Surface counts, recent activity, status transitions, and anomalies (e.g. axis drift, expired approvals).
+- For Strategy Engine questions, explain the chain in plain English: Directive → target spokes → delivery status → spoke snapshots/proposals.
+- If a spoke failed with unknown_app, explain that the app key was targeted but no active Suite Registry entry exists for that app key.
+- Treat spoke snapshots/proposals as the voice of the other apps' AI/strategy systems; compare their responses against the directive goal.
 - Never propose, suggest, or describe an external write. Axis A is RED, Axis B is OFF; honor that.
 - Never invent records. If a table is empty in the retrieved context, say so plainly.
 - Translate to executive language: "Receipts" not "logs", "Approvals" not "rows in vos_approval_requests".`;
@@ -836,6 +841,7 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
     inbound, outbound, decision, killswitchLog,
     inboxReceipts, proposals, dryRuns, approvals,
     manualActions, drafts, crmNotes,
+    suiteApps, directives, targets, snapshots, strategyProposals,
   ] = await Promise.all([
     supabase.from("vos_platform_flags").select("flag_key,flag_value,updated_at").order("flag_key").limit(50).then((r: any) => { counts["vos_platform_flags"] = (r.data||[]).length; return r.data || []; }, () => []),
     safe("vos_inbound_log", "id,source_app,event_name,received_at,verification_status", "received_at"),
@@ -849,12 +855,38 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
     safe("vos_manual_action_log", "id,action_type,action_status,action_title,performed_at,axis_a_snapshot,axis_b_snapshot", "performed_at"),
     safe("vos_integration_action_drafts", "id,target_app,integration_action_type,draft_status,draft_title,created_at"),
     safe("vos_crm_internal_notes", "id,note_kind,note_status,contact_ref_type,created_at,archived_at,archive_reason"),
+    safe("vos_suite_apps", "app_key,name,persona,room,role,is_active,updated_at", "updated_at"),
+    safe("vos_strategy_directives", "id,title,goal_text,kpi_target,horizon_days,status,created_at,closed_at", "created_at"),
+    safe("vos_strategy_targets", "id,directive_id,app_key,delivery_status,delivered_at,error,created_at", "created_at"),
+    safe("vos_strategy_snapshots", "id,directive_id,app_key,kind,payload,verified,received_at", "received_at"),
+    safe("vos_strategy_proposals", "id,directive_id,app_key,summary,detail,review_state,reviewed_at,created_at", "created_at"),
   ]);
 
   const fmt = (rows: any[], fields: string[]) =>
     rows.length === 0
       ? "  (none)"
       : rows.slice(0, 10).map(r => "  • " + fields.map(f => `${f}=${JSON.stringify(r[f] ?? null)}`).join(" ")).join("\n");
+
+  const latestDirective = directives?.[0];
+  const latestTargets = latestDirective
+    ? (targets || []).filter((t: any) => t.directive_id === latestDirective.id)
+    : [];
+  const latestSnapshots = latestDirective
+    ? (snapshots || []).filter((s: any) => s.directive_id === latestDirective.id)
+    : [];
+  const latestStrategyProposals = latestDirective
+    ? (strategyProposals || []).filter((p: any) => p.directive_id === latestDirective.id)
+    : [];
+  const activeAppKeys = new Set((suiteApps || []).filter((a: any) => a.is_active).map((a: any) => a.app_key));
+  const strategyFailureLines = latestTargets
+    .filter((t: any) => t.delivery_status === "failed" || t.error)
+    .map((t: any) => {
+      const missing = !activeAppKeys.has(t.app_key);
+      const reason = t.error === "unknown_app" || missing
+        ? `missing Suite Registry entry for app_key=${JSON.stringify(t.app_key)} or the app is not active`
+        : `reported error=${JSON.stringify(t.error ?? "unknown")}`;
+      return `  • ${t.app_key}: failed — ${reason}`;
+    });
 
   const sections: string[] = [];
   sections.push("═══ CENTRAL BRAIN — GOVERNANCE & CONSOLE ACTIVITY ═══");
@@ -874,6 +906,30 @@ async function retrieveCentralBrain(supabase: any): Promise<{ text: string; coun
   sections.push(`MANUAL ACTION LOG (${counts["vos_manual_action_log"]}):`); sections.push(fmt(manualActions, ["action_type","action_status","action_title","performed_at","axis_a_snapshot","axis_b_snapshot"]));
   sections.push(`INTEGRATION DRAFTS (${counts["vos_integration_action_drafts"]}):`); sections.push(fmt(drafts, ["target_app","integration_action_type","draft_status","draft_title","created_at"]));
   sections.push(`CRM INTERNAL NOTES (${counts["vos_crm_internal_notes"]}):`); sections.push(fmt(crmNotes, ["note_kind","note_status","contact_ref_type","created_at","archived_at","archive_reason"]));
+  sections.push("");
+  sections.push("STRATEGY ENGINE — SUITE REGISTRY:");
+  sections.push(fmt(suiteApps, ["app_key","name","persona","room","role","is_active","updated_at"]));
+  sections.push("");
+  sections.push(`STRATEGY ENGINE — RECENT DIRECTIVES (${counts["vos_strategy_directives"]}):`);
+  sections.push(fmt(directives, ["id","title","goal_text","kpi_target","horizon_days","status","created_at","closed_at"]));
+  sections.push("");
+  if (latestDirective) {
+    sections.push(`LATEST DIRECTIVE DELIVERY RECEIPTS — ${latestDirective.title}:`);
+    sections.push(latestTargets.length ? fmt(latestTargets, ["app_key","delivery_status","delivered_at","error","created_at"]) : "  (no delivery receipts recorded)");
+    sections.push("FAILURE INTERPRETATION:");
+    sections.push(strategyFailureLines.length ? strategyFailureLines.join("\n") : "  • No delivery failures recorded for the latest directive.");
+    sections.push("LATEST DIRECTIVE SPOKE SNAPSHOTS:");
+    sections.push(latestSnapshots.length ? fmt(latestSnapshots, ["app_key","kind","payload","verified","received_at"]) : "  (no spoke snapshots received for the latest directive)");
+    sections.push("LATEST DIRECTIVE SPOKE PROPOSALS:");
+    sections.push(latestStrategyProposals.length ? fmt(latestStrategyProposals, ["app_key","summary","detail","review_state","reviewed_at","created_at"]) : "  (no spoke proposals received for the latest directive)");
+  }
+  sections.push("");
+  sections.push(`STRATEGY ENGINE — ALL RECENT DELIVERY RECEIPTS (${counts["vos_strategy_targets"]}):`);
+  sections.push(fmt(targets, ["directive_id","app_key","delivery_status","delivered_at","error","created_at"]));
+  sections.push(`STRATEGY ENGINE — ALL RECENT SPOKE SNAPSHOTS (${counts["vos_strategy_snapshots"]}):`);
+  sections.push(fmt(snapshots, ["directive_id","app_key","kind","payload","verified","received_at"]));
+  sections.push(`STRATEGY ENGINE — ALL RECENT SPOKE PROPOSALS (${counts["vos_strategy_proposals"]}):`);
+  sections.push(fmt(strategyProposals, ["directive_id","app_key","summary","detail","review_state","reviewed_at","created_at"]));
   sections.push("═══ END CENTRAL BRAIN ═══");
 
   return { text: sections.join("\n"), counts };
