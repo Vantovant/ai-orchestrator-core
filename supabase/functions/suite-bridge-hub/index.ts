@@ -164,6 +164,60 @@ Deno.serve(async (req) => {
     return json({ ok: true, delivered: targetRows });
   }
 
+  // ---------- PHASE C: TELEMETRY — poll active spokes, record latency & status ----------
+  if (action === "health_poll") {
+    const { data: apps } = await supabase
+      .from("vos_suite_apps")
+      .select("app_key, name, url, bridge_secret_slot, is_active, role")
+      .eq("is_active", true)
+      .eq("role", "spoke");
+
+    const rows = await Promise.all((apps ?? []).map(async (app) => {
+      const t0 = Date.now();
+      const body = { kind: "ping", ts: t0 };
+      const secret = Deno.env.get(app.bridge_secret_slot);
+      if (!secret) {
+        return { app_key: app.app_key, ok: false, http_status: null, latency_ms: null, error: "missing_secret", detail: {} };
+      }
+      const bodyStr = JSON.stringify(body);
+      const ts = Math.floor(t0 / 1000).toString();
+      const nonce = crypto.randomUUID();
+      const sig = await hmacSha256Hex(secret, `${ts}.${nonce}.${app.app_key}.${bodyStr}`);
+      const target = new URL("/functions/v1/suite-bridge-spoke", app.url).toString();
+      try {
+        const resp = await fetch(target, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-bridge-app": "vantoos",
+            "x-bridge-timestamp": ts,
+            "x-bridge-nonce": nonce,
+            "x-bridge-signature": sig,
+          },
+          body: bodyStr,
+        });
+        const latency = Date.now() - t0;
+        const ok = resp.status >= 200 && resp.status < 300;
+        return {
+          app_key: app.app_key, ok, http_status: resp.status,
+          latency_ms: latency, error: ok ? null : `status_${resp.status}`,
+          detail: { target },
+        };
+      } catch (e) {
+        return {
+          app_key: app.app_key, ok: false, http_status: null,
+          latency_ms: Date.now() - t0, error: "unreachable",
+          detail: { target, message: String(e) },
+        };
+      }
+    }));
+
+    if (rows.length > 0) {
+      await supabase.from("vos_suite_telemetry").insert(rows).then(() => {}, () => {});
+    }
+    return json({ ok: true, probed: rows });
+  }
+
   // ---------- INBOUND: verify signed snapshot/pong from spoke ----------
   if (action === "receive") {
     const app_key = req.headers.get("x-bridge-app") ?? "";
