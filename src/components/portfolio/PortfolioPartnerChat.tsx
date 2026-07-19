@@ -249,8 +249,10 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                 <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("What needs my attention today across projects AND the VantoOS suite? Give me one unified executive briefing."); setContextTags(prev => { const next = new Set(prev); next.add("@central_brain"); next.add("@all-projects"); return Array.from(next); }); inputRef.current?.focus(); }}>
                   ⚡ Everything briefing
                 </Badge>
+              </div>
             </div>
           )}
+
 
           {messages.map(msg => (
             <div key={msg.id} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
