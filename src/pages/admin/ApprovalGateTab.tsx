@@ -2,7 +2,7 @@
 // NO Execute. NO Send. NO Reply. NO Push to CRM. NO Enrol. NO Wake. NO Phase 4A. NO Bulk. NO Dispatcher.
 // Two-key model: second reviewer must be a different admin user.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Component, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,26 @@ const STATUS_VARIANT: Record<string, "default" | "destructive" | "secondary" | "
   requested: "default", reviewed: "secondary", second_reviewed: "secondary",
   rejected: "destructive", expired: "outline", archived: "outline",
 };
+
+class TabErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) { console.error("ApprovalGateTab crash:", error); }
+  render() {
+    if (this.state.error) {
+      return (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <div className="font-medium text-destructive">Approval Gate failed to render.</div>
+            <pre className="text-xs bg-muted p-2 rounded overflow-auto max-h-64">{String(this.state.error.message || this.state.error)}</pre>
+            <Button size="sm" variant="outline" onClick={() => this.setState({ error: null })}>Retry</Button>
+          </CardContent>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function ApprovalGateTab() {
   const [rows, setRows] = useState<Approval[]>([]);
@@ -166,6 +186,7 @@ export default function ApprovalGateTab() {
   };
 
   return (
+    <TabErrorBoundary>
     <div className="space-y-4">
       <Card>
         <CardHeader>
@@ -250,7 +271,7 @@ export default function ApprovalGateTab() {
 
           <div className="space-y-3">
             {filtered.map(r => {
-              const expired = new Date(r.expires_at).getTime() < Date.now();
+              const expired = r.expires_at ? new Date(r.expires_at).getTime() < Date.now() : false;
               const sameUser = r.reviewed_by && currentUserId && r.reviewed_by === currentUserId;
               return (
                 <Card key={r.id} className="border-l-4 border-l-primary/30">
@@ -268,9 +289,9 @@ export default function ApprovalGateTab() {
                     <div className="font-medium">{r.approval_title}</div>
                     <div className="text-sm text-muted-foreground">{r.approval_summary}</div>
                     <div className="text-xs text-muted-foreground">
-                      Source dry-run: <code className="font-mono">{r.source_dry_run_id.slice(0,8)}…</code>{" • "}
-                      Source proposal: <code className="font-mono">{r.source_proposal_id.slice(0,8)}…</code>{" • "}
-                      Expires: {new Date(r.expires_at).toLocaleString()}
+                      Source dry-run: <code className="font-mono">{(r.source_dry_run_id ?? "—").slice(0,8)}…</code>{" • "}
+                      Source proposal: <code className="font-mono">{(r.source_proposal_id ?? "—").slice(0,8)}…</code>{" • "}
+                      Expires: {r.expires_at ? new Date(r.expires_at).toLocaleString() : "—"}
                     </div>
                     {(r.reviewed_by || r.second_reviewed_by) && (
                       <div className="text-xs text-muted-foreground">
@@ -358,5 +379,6 @@ export default function ApprovalGateTab() {
         </CardContent>
       </Card>
     </div>
+    </TabErrorBoundary>
   );
 }
