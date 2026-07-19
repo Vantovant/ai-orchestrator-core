@@ -107,14 +107,61 @@ Deno.serve(async (req) => {
     }
 
     await supabase.from("vos_outbound_log").insert({
-      target_app: app.app_key,
-      event_name: body?.kind ?? "directive",
+      target_app: app_key,
+      event_name: (body as any)?.kind ?? "directive",
       idempotency_key: nonce,
       outcome: spokeStatus >= 200 && spokeStatus < 300 ? "delivered" : "failed",
       detail: { payload: body, spoke_status: spokeStatus, spoke_body: spokeBody },
     }).then(() => {}, () => {});
 
     return json({ ok: spokeStatus >= 200 && spokeStatus < 300, target, spoke_status: spokeStatus, spoke_body: spokeBody });
+  }
+
+  // ---------- STRATEGY ENGINE: broadcast directive to selected spokes ----------
+  if (action === "broadcast_directive") {
+    const directive_id = payload?.directive_id as string;
+    const app_keys = payload?.app_keys as string[];
+    if (!directive_id || !Array.isArray(app_keys) || app_keys.length === 0) {
+      return json({ error: "missing_directive_id_or_app_keys" }, 400);
+    }
+    const { data: dir, error: dirErr } = await supabase
+      .from("vos_strategy_directives")
+      .select("id, title, goal_text, kpi_target, horizon_days, status")
+      .eq("id", directive_id)
+      .maybeSingle();
+    if (dirErr || !dir) return json({ error: "unknown_directive" }, 404);
+
+    const body = {
+      kind: "directive",
+      directive_id: dir.id,
+      title: dir.title,
+      goal_text: dir.goal_text,
+      kpi_target: dir.kpi_target,
+      horizon_days: dir.horizon_days,
+      issued_at: Date.now(),
+    };
+
+    const results = await Promise.allSettled(app_keys.map((k) => deliverToSpoke(k, body)));
+    const targetRows = results.map((r, i) => {
+      const app_key = app_keys[i];
+      if (r.status === "fulfilled") {
+        const v: any = r.value;
+        return {
+          directive_id,
+          app_key,
+          delivery_status: v.ok ? "delivered" : "failed",
+          nonce: v.nonce,
+          delivered_at: v.ok ? new Date().toISOString() : null,
+          error: v.ok ? null : (v.error ?? `status_${v.status}`),
+        };
+      }
+      return { directive_id, app_key, delivery_status: "failed", error: String((r as any).reason) };
+    });
+    await supabase.from("vos_strategy_targets").insert(targetRows).then(() => {}, () => {});
+    await supabase.from("vos_strategy_directives")
+      .update({ status: "broadcast" }).eq("id", directive_id).then(() => {}, () => {});
+
+    return json({ ok: true, delivered: targetRows });
   }
 
   // ---------- INBOUND: verify signed snapshot/pong from spoke ----------
