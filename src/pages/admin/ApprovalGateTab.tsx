@@ -95,6 +95,14 @@ export default function ApprovalGateTab() {
     }
   };
 
+  const soloApprove = async (r: Approval) => {
+    if (!confirm(`Solo approve "${r.approval_title}"?\n\nThis stamps both first and second review with your admin identity (temporary single-operator bypass of the two-key rule). It does NOT execute the underlying action.`)) return;
+    const { error } = await supabase.rpc("vos_solo_approve" as any, { p_approval_id: r.id });
+    if (error) { toast.error(`Solo approve failed: ${error.message}`); return; }
+    toast.success("Solo approved (super-admin single-key). Status: second_reviewed.");
+    await load();
+  };
+
   const load = async () => {
     setLoading(true);
     try {
