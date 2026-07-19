@@ -3908,6 +3908,39 @@ export type Database = {
           },
         ]
       }
+      vos_approval_type_policies: {
+        Row: {
+          active: boolean
+          approval_type: string
+          created_at: string
+          first_role: Database["public"]["Enums"]["app_role"]
+          notes: string | null
+          require_active_second: boolean
+          second_role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          approval_type: string
+          created_at?: string
+          first_role: Database["public"]["Enums"]["app_role"]
+          notes?: string | null
+          require_active_second?: boolean
+          second_role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          approval_type?: string
+          created_at?: string
+          first_role?: Database["public"]["Enums"]["app_role"]
+          notes?: string | null
+          require_active_second?: boolean
+          second_role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       vos_crm_internal_notes: {
         Row: {
           archive_reason: string | null
@@ -5166,6 +5199,18 @@ export type Database = {
       vos_compute_source_chain_hash: {
         Args: { approval_id: string }
         Returns: string
+      }
+      vos_generic_first_review: {
+        Args: { p_approval_id: string }
+        Returns: Json
+      }
+      vos_generic_reject: {
+        Args: { p_approval_id: string; p_reason: string }
+        Returns: Json
+      }
+      vos_generic_second_review: {
+        Args: { p_approval_id: string }
+        Returns: Json
       }
       vos_run_revocation_rehearsal_once: {
         Args: { _reason: string }
