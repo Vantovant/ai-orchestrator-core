@@ -228,8 +228,13 @@ export default function VantoOSConsolePage() {
         <CardContent className="text-sm space-y-1">
           <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 1 — DB rails complete</div>
           <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 2 — Verifiers complete</div>
-          <div className="flex items-center gap-2"><FlaskConical className="h-4 w-4 text-amber-500" /> Step 3 — Admin console (in progress)</div>
-          <div className="flex items-center gap-2 text-muted-foreground"><Lock className="h-4 w-4" /> Live traffic NOT authorised</div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 3 — Admin console complete (read-only + dry-run + rehearsals)</div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 4 — Payload rehearsals harness live (4D, 4G, 4L, 4O, 4Q, 4S, 4U, 4W, 4Y, 5B, 5E, 5F)</div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 5D — Two-key governance PROVEN</div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 5E — Generic two-key flow live</div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Step 5F — Audit consolidation live</div>
+          <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> United Brain Phases A–F — Suite bridge, Strategy Engine, Telemetry, Lifecycle, Central Brain AI, Consolidation</div>
+          <div className="flex items-center gap-2 text-muted-foreground"><Lock className="h-4 w-4" /> Traffic Gate → requires two-key human authorization (Vanto + Sylvia). Build is DONE; approval is manual.</div>
         </CardContent>
       </Card>
 
