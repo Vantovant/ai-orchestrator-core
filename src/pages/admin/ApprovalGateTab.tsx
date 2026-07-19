@@ -268,9 +268,9 @@ export default function ApprovalGateTab() {
                     <div className="font-medium">{r.approval_title}</div>
                     <div className="text-sm text-muted-foreground">{r.approval_summary}</div>
                     <div className="text-xs text-muted-foreground">
-                      Source dry-run: <code className="font-mono">{r.source_dry_run_id.slice(0,8)}…</code>{" • "}
-                      Source proposal: <code className="font-mono">{r.source_proposal_id.slice(0,8)}…</code>{" • "}
-                      Expires: {new Date(r.expires_at).toLocaleString()}
+                      Source dry-run: <code className="font-mono">{(r.source_dry_run_id ?? "—").slice(0,8)}…</code>{" • "}
+                      Source proposal: <code className="font-mono">{(r.source_proposal_id ?? "—").slice(0,8)}…</code>{" • "}
+                      Expires: {r.expires_at ? new Date(r.expires_at).toLocaleString() : "—"}
                     </div>
                     {(r.reviewed_by || r.second_reviewed_by) && (
                       <div className="text-xs text-muted-foreground">
