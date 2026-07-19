@@ -53,7 +53,6 @@ const SPOKES = [
   { key: "getwell_grow", label: "GetWell Grow" },
   { key: "getwell_africa", label: "GetWell Africa" },
   { key: "mlm_course", label: "MLM Course" },
-  { key: "vanto_crm", label: "Vanto CRM" },
 ];
 
 function StatusBadge({ state }: { state: string }) {
