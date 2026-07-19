@@ -90,7 +90,8 @@ Deno.serve(async (req) => {
         body: bodyStr,
       });
       spokeStatus = resp.status;
-      try { spokeBody = await resp.json(); } catch { spokeBody = await resp.text(); }
+      const raw = await resp.text();
+      try { spokeBody = JSON.parse(raw); } catch { spokeBody = raw; }
     } catch (e) {
       return json({ error: "spoke_unreachable", target, detail: String(e) }, 502);
     }
