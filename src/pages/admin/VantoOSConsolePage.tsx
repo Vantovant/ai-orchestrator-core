@@ -19,6 +19,7 @@ import ManualActionPilotTab from "./ManualActionPilotTab";
 import IntegrationDraftsTab from "./IntegrationDraftsTab";
 import CRMInternalNotesTab from "./CRMInternalNotesTab";
 import CentralBrainChat from "@/components/admin/vanto-os/CentralBrainChat";
+import StrategyEngineTab from "./StrategyEngineTab";
 
 type Row = Record<string, any>;
 
@@ -250,8 +251,13 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="manual4w">Manual Action Pilot</TabsTrigger>
           <TabsTrigger value="drafts4y">Integration Drafts</TabsTrigger>
           <TabsTrigger value="crmnotes5b">CRM Internal Notes</TabsTrigger>
+          <TabsTrigger value="strategy">🎯 Strategy Engine</TabsTrigger>
           <TabsTrigger value="brain">🧠 Central Brain (AI)</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="strategy" className="pt-4">
+          <StrategyEngineTab />
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-4 pt-4">
           <div className="grid gap-3 md:grid-cols-4">
