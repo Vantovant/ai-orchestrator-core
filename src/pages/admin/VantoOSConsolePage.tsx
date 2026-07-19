@@ -21,6 +21,7 @@ import CRMInternalNotesTab from "./CRMInternalNotesTab";
 // CentralBrainChat retired — merged into Portfolio Partner (tag: VantoOS Suite)
 import StrategyEngineTab from "./StrategyEngineTab";
 import SuiteOverviewTab from "./SuiteOverviewTab";
+import AuditConsolidationTab from "./AuditConsolidationTab";
 
 type Row = Record<string, any>;
 
