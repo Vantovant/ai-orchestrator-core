@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send, Loader2, Plus, MessageSquare, Pin, Trash2,
-  Hash, BookOpen, FolderKanban, Globe, X,
+  Hash, BookOpen, FolderKanban, Globe, X, ShieldAlert,
 } from "lucide-react";
 import ChatDictation from "@/components/voice/ChatDictation";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ const TAG_OPTIONS = [
   { value: "@all-projects", label: "All Projects", icon: FolderKanban },
   { value: "@knowledge", label: "Knowledge Base", icon: BookOpen },
   { value: "@global-only", label: "Global Only", icon: Globe },
+  { value: "@central_brain", label: "VantoOS Suite", icon: ShieldAlert },
 ];
 
 interface PortfolioPartnerChatProps {
@@ -239,9 +240,19 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                 <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("What are my biggest risks right now?"); inputRef.current?.focus(); }}>
                   Top risks
                 </Badge>
+                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("For the most recent Strategy Engine directive, list every spoke's delivery status and explain any failures."); setContextTags(prev => prev.includes("@central_brain") ? prev : [...prev, "@central_brain"]); inputRef.current?.focus(); }}>
+                  🛡️ Suite: directive status
+                </Badge>
+                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("Give me a health check across all VantoOS suite apps — approvals, kill switches, and recent spoke activity."); setContextTags(prev => prev.includes("@central_brain") ? prev : [...prev, "@central_brain"]); inputRef.current?.focus(); }}>
+                  🛡️ Suite: health check
+                </Badge>
+                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("What needs my attention today across projects AND the VantoOS suite? Give me one unified executive briefing."); setContextTags(prev => { const next = new Set(prev); next.add("@central_brain"); next.add("@all-projects"); return Array.from(next); }); inputRef.current?.focus(); }}>
+                  ⚡ Everything briefing
+                </Badge>
               </div>
             </div>
           )}
+
 
           {messages.map(msg => (
             <div key={msg.id} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>

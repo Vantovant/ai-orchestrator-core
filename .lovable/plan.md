@@ -1,97 +1,67 @@
-# Phase B — Strategy Engine
+## Context loaded. Here's the plan.
 
-Governance-level orchestrator that lets the CEO issue signed strategic directives to all 5 spokes and receive signed snapshots back. **Not** marketing sends — that stays inside each spoke.
-
-Named **Strategy Engine** throughout (UI, tables, functions) to avoid overlap with GetWell Hub's own Campaign Engine.
+**Goal:** Merge Central Brain into the Portfolio Partner surface so you have **one AI co-founder** that knows both your projects AND the full VantoOS suite (governance, strategy engine, spokes). Free up the crowded Governance console.
 
 ---
 
-## Scope (what Phase B ships)
+### The insight
 
-1. **Data model** — directives, snapshots, spoke proposals, approvals.
-2. **Hub outbound** — CEO creates a directive in VantoOS → signed broadcast to selected spokes via existing `suite-bridge-hub`.
-3. **Hub inbound** — spokes reply with signed snapshots/proposals → verified → stored → surfaced.
-4. **Strategy Room UI** — new page under Governance to draft directives, see spoke responses, approve/reject proposals.
-5. **Spoke contract doc** — updated `docs/suite-bridge/` guide so each of the 5 spokes knows exactly which payload shapes to accept and reply with. No spoke code changes required for Phase B — the existing `suite-bridge-spoke` template already routes on `body.kind`.
+Both AIs already run on the same edge function (`portfolio-ai-partner`). The only difference is the `@central_brain` context tag, which swaps the retrieval scope. So this is a **UI + mode consolidation**, not a rebuild.
 
-Out of scope (Phase C+): AI auto-drafting of proposals inside spokes, weekly auto-briefing digest, RAG over all spoke snapshots.
-
----
-
-## Data model (new tables, RLS + GRANTs)
-
-- `vos_strategy_directives`
-  - id, title, goal_text, kpi_target (jsonb), horizon_days, status (`draft|broadcast|closed`), created_by, created_at, closed_at
-- `vos_strategy_targets`
-  - id, directive_id, app_key, delivery_status (`pending|delivered|failed`), nonce, delivered_at, error
-- `vos_strategy_snapshots` (inbound from spokes)
-  - id, directive_id (nullable — spokes can push unsolicited), app_key, kind (`snapshot|proposal|status`), payload jsonb, signature, nonce, received_at, verified bool
-- `vos_strategy_proposals` (CEO-visible, promoted from snapshots where kind='proposal')
-  - id, directive_id, app_key, summary, detail jsonb, review_state (`pending|approved|rejected`), reviewed_by, reviewed_at
-
-All tables: RLS on, admin-only via `has_role(auth.uid(),'admin')`, GRANTs to `authenticated` + `service_role`.
+| Today | After |
+|---|---|
+| Portfolio Partner → projects, tasks, KB | Portfolio Partner → projects + suite governance + strategy engine |
+| Central Brain (buried in Governance) → suite tables only | **Removed from Governance** |
+| Two chat histories | One unified history |
 
 ---
 
-## Hub edge functions
+### Plan
 
-**Extend `suite-bridge-hub`** — add two new actions on top of existing `ping|send|receive`:
+**1. Portfolio Partner gets a "Scope" selector** (right next to the existing project pills)
+- **All Projects** (current default)
+- **VantoOS Suite** (governance + strategy + spokes — what Central Brain does today)
+- **Everything** (both merged — the new power mode)
 
-- `action: "broadcast_directive"` → for each target app_key, sign+POST `{kind:"directive", directive_id, title, goal_text, kpi_target, horizon_days}` to that spoke's `suite-bridge-spoke`. Log per-target row in `vos_strategy_targets`.
-- `action: "receive"` (existing) — extend to detect `body.kind in ("snapshot","proposal","status")` and route into `vos_strategy_snapshots` (+ promote proposals into `vos_strategy_proposals`). Signature verification is already in place.
+Selecting a scope injects the right context tag (`@central_brain`, `@all_projects`, or both) into the request.
 
-No new function file needed. Keeps signing/replay-window logic in one place.
+**2. Merged retrieval in the edge function**
+- When scope = Everything, run both `retrievePortfolio()` AND `retrieveCentralBrain()` in parallel, concatenate into the prompt.
+- Keep token budget safe by trimming each source to top 15 rows.
 
----
+**3. Quick-action chips** on the empty state, tailored per scope:
+- All Projects: Daily review · Portfolio health · Top risks
+- VantoOS Suite: Directive status · Spoke health · Pending approvals
+- Everything: Executive briefing · What needs my attention today
 
-## UI — Strategy Room
+**4. Remove Central Brain tab from Governance console**
+- Delete the tab entry in `VantoOSConsolePage.tsx`.
+- Keep `CentralBrainChat.tsx` file for now (unused) in case you want to revert — remove in a follow-up once verified.
+- Add a one-line notice in Governance: *"Central Brain has moved to Portfolio Partner → Scope: VantoOS Suite."*
 
-New route `/app/governance/strategy` (linked from existing Governance sidebar section):
-
-- **Directives list** — draft / active / closed tabs.
-- **Draft form** — title, goal, KPI target (freeform jsonb helper), horizon, spoke checkboxes.
-- **Broadcast button** — calls `suite-bridge-hub` with `broadcast_directive`, shows per-spoke delivery receipts.
-- **Directive detail** — timeline of snapshots + proposals from each spoke; approve/reject buttons on proposals (write to `vos_strategy_proposals.review_state`).
-- **Empty-state** — plain-English explainer: "Strategy Engine issues suite-wide goals. Spokes execute in their own way."
-
-Executive copy conventions: "Directives" not "Campaigns", "Receipts" not "Logs", data sovereignty language preserved.
-
----
-
-## Spoke contract (docs only, no spoke code change)
-
-Update `docs/suite-bridge/README_SUITE_BRIDGE.md` with a **Phase B addendum**:
-
-- Accepted inbound `body.kind`: `directive` (spoke should store + optionally trigger internal work; reply is optional but if sent must be signed back to hub's `receive`).
-- Outbound `body.kind` a spoke may send unsolicited: `snapshot` (KPI heartbeat), `proposal` (spoke's suggestion to improve toward directive), `status` (progress).
-- Signing rules unchanged (HMAC-SHA256 over `${ts}.${nonce}.${app_key}.${body}` with `SUITE_BRIDGE_SECRET`).
-- Include one worked example per kind.
-
-Each spoke team implements the branches inside their existing `suite-bridge-spoke/index.ts` at their own pace — Phase B works end-to-end from day one for any spoke that opts in, and stays silent for those that haven't yet.
+**5. History migration**
+- Central Brain threads live in the same `portfolio_ai_threads` table already (verified). They'll just appear in the unified Portfolio Partner sidebar automatically — no data migration needed.
+- Add a small "Suite" badge on threads that were created in Central Brain mode so you can still find them.
 
 ---
 
-## Verification steps (built into this ship)
+### Technical section (skip if not interested)
 
-1. Migration applied; tables + policies + grants in place (confirm via linter).
-2. Draft a test directive in Strategy Room, broadcast to `getwell_hub` only.
-3. Confirm receipt row in `vos_strategy_targets` = delivered.
-4. Simulate a signed inbound proposal from `getwell_hub` (using existing self-test pattern) → row appears in `vos_strategy_snapshots` + promoted to `vos_strategy_proposals`.
-5. Approve it in UI → `review_state='approved'`, `reviewed_by=admin`.
-6. Baseline check: Step 5D governance state untouched (PROVEN / RED / LOCKED).
+Files to change:
+- `src/pages/PortfolioPartnerPage.tsx` — add Scope dropdown, pass to service
+- `src/services/portfolioChatService.ts` — forward scope → context_tags
+- `supabase/functions/portfolio-ai-partner/index.ts` — when both tags present, merge `retrievePortfolio` + `retrieveCentralBrain` outputs
+- `src/pages/admin/VantoOSConsolePage.tsx` — remove Central Brain tab, add moved-notice
+- `src/components/portfolio/PortfolioPartnerChat.tsx` — add "Suite" badge on threads with central_brain tag in metadata
 
----
-
-## Technical details (engineer section)
-
-- Reuse existing `hmacSha256Hex` and timing-safe compare in `suite-bridge-hub/index.ts`.
-- `broadcast_directive` loops sequentially with `Promise.allSettled` to keep one bad spoke from blocking others; each result written to `vos_strategy_targets` regardless.
-- Proposal promotion done in a Postgres trigger on `vos_strategy_snapshots` (after insert where kind='proposal') to keep hub function thin.
-- All new UI queries go through TanStack Query with 30s stale time; no direct realtime channels this phase (add in C if needed).
-- Sidebar item guarded by `has_role('admin')` — same pattern as existing Governance tabs.
+No DB changes. No new tables. No breaking changes to existing threads.
 
 ---
 
-## Ready to build
+### What you'll experience
 
-Say **GO** and I ship all four pieces (migration, hub extension, Strategy Room UI, docs addendum) in one pass, then run the verification steps above.
+Open Portfolio Partner → pick **Everything** → ask *"What happened with the last directive and how does it affect the ZAZI CRM project?"* → get one answer that pulls from both the strategy engine AND the project data.
+
+**Category:** UI + backend (edge function retrieval merge only, no schema work).
+
+Approve and I'll build it.

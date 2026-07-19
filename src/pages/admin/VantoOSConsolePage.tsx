@@ -18,7 +18,7 @@ import ApprovalGateTab from "./ApprovalGateTab";
 import ManualActionPilotTab from "./ManualActionPilotTab";
 import IntegrationDraftsTab from "./IntegrationDraftsTab";
 import CRMInternalNotesTab from "./CRMInternalNotesTab";
-import CentralBrainChat from "@/components/admin/vanto-os/CentralBrainChat";
+// CentralBrainChat retired — merged into Portfolio Partner (tag: VantoOS Suite)
 import StrategyEngineTab from "./StrategyEngineTab";
 
 type Row = Record<string, any>;
@@ -252,7 +252,7 @@ export default function VantoOSConsolePage() {
           <TabsTrigger value="drafts4y">Integration Drafts</TabsTrigger>
           <TabsTrigger value="crmnotes5b">CRM Internal Notes</TabsTrigger>
           <TabsTrigger value="strategy">🎯 Strategy Engine</TabsTrigger>
-          <TabsTrigger value="brain">🧠 Central Brain (AI)</TabsTrigger>
+          
         </TabsList>
 
         <TabsContent value="strategy" className="pt-4">
@@ -424,9 +424,8 @@ export default function VantoOSConsolePage() {
           <CRMInternalNotesTab />
         </TabsContent>
 
-        <TabsContent value="brain" className="space-y-4 pt-4">
-          <CentralBrainChat />
-        </TabsContent>
+        {/* Central Brain moved to Portfolio Partner → tag "VantoOS Suite" */}
+
       </Tabs>
     </div>
   );
