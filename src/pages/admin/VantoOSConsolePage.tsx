@@ -19,6 +19,7 @@ import ManualActionPilotTab from "./ManualActionPilotTab";
 import IntegrationDraftsTab from "./IntegrationDraftsTab";
 import CRMInternalNotesTab from "./CRMInternalNotesTab";
 import CentralBrainChat from "@/components/admin/vanto-os/CentralBrainChat";
+import StrategyEngineTab from "./StrategyEngineTab";
 
 type Row = Record<string, any>;
 
