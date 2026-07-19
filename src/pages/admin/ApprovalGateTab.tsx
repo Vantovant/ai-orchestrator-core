@@ -126,30 +126,23 @@ export default function ApprovalGateTab() {
     }
   };
 
+  // Step 5E: server-enforced two-key via generic RPCs.
   const markReviewed = async (r: Approval) => {
     if (!currentUserId) { toast.error("No active session."); return; }
-    const { error } = await supabase.from("vos_approval_requests" as any).update({
-      approval_status: "reviewed",
-      reviewed_by: currentUserId,
-      reviewed_at: new Date().toISOString(),
-    }).eq("id", r.id);
-    if (error) { toast.error(`Update failed: ${error.message}`); return; }
-    toast.success("Marked reviewed.");
+    const { error } = await supabase.rpc("vos_generic_first_review" as any, { p_approval_id: r.id });
+    if (error) { toast.error(`First review failed: ${error.message}`); return; }
+    toast.success("First review recorded.");
     await load();
   };
 
   const secondReviewConfirm = async (r: Approval) => {
     if (!currentUserId) { toast.error("No active session."); return; }
     if (r.reviewed_by && r.reviewed_by === currentUserId) {
-      toast.error("Two-key rule: second reviewer must be a different admin.");
+      toast.error("Two-key rule: second reviewer must be a different user.");
       return;
     }
-    const { error } = await supabase.from("vos_approval_requests" as any).update({
-      approval_status: "second_reviewed",
-      second_reviewed_by: currentUserId,
-      second_reviewed_at: new Date().toISOString(),
-    }).eq("id", r.id);
-    if (error) { toast.error(`Update failed: ${error.message}`); return; }
+    const { error } = await supabase.rpc("vos_generic_second_review" as any, { p_approval_id: r.id });
+    if (error) { toast.error(`Second review failed: ${error.message}`); return; }
     toast.success("Second-review confirmed.");
     await load();
   };
@@ -157,10 +150,7 @@ export default function ApprovalGateTab() {
   const reject = async (r: Approval) => {
     const reason = (rejectionReasons[r.id] ?? "").trim();
     if (!reason) { toast.error("Rejection reason required."); return; }
-    const { error } = await supabase.from("vos_approval_requests" as any).update({
-      approval_status: "rejected",
-      rejection_reason: reason,
-    }).eq("id", r.id);
+    const { error } = await supabase.rpc("vos_generic_reject" as any, { p_approval_id: r.id, p_reason: reason });
     if (error) { toast.error(`Reject failed: ${error.message}`); return; }
     toast.success("Rejected.");
     await load();
