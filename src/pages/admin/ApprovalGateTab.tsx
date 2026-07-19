@@ -78,6 +78,22 @@ export default function ApprovalGateTab() {
   const [fStatus, setFStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
+  const [executing, setExecuting] = useState<Record<string, boolean>>({});
+
+  const executePlatformFlagFlip = async (r: Approval) => {
+    if (!confirm(`Execute platform flag flip for "${r.approval_title}"?\n\nThis writes the new flag value and is logged to vos_killswitch_log.`)) return;
+    setExecuting(p => ({ ...p, [r.id]: true }));
+    try {
+      const { error } = await supabase.rpc("vos_execute_platform_flag_flip" as any, { p_approval_id: r.id });
+      if (error) throw error;
+      toast.success("Platform flag flipped and recorded to kill-switch log.");
+      await load();
+    } catch (e: any) {
+      toast.error(`Execute failed: ${e.message ?? e}`);
+    } finally {
+      setExecuting(p => ({ ...p, [r.id]: false }));
+    }
+  };
 
   const load = async () => {
     setLoading(true);
