@@ -240,7 +240,15 @@ export default function PortfolioPartnerChat({ projects }: PortfolioPartnerChatP
                 <Badge variant="outline" className="cursor-pointer text-xs" onClick={() => { setInput("What are my biggest risks right now?"); inputRef.current?.focus(); }}>
                   Top risks
                 </Badge>
-              </div>
+                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("For the most recent Strategy Engine directive, list every spoke's delivery status and explain any failures."); setContextTags(prev => prev.includes("@central_brain") ? prev : [...prev, "@central_brain"]); inputRef.current?.focus(); }}>
+                  🛡️ Suite: directive status
+                </Badge>
+                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("Give me a health check across all VantoOS suite apps — approvals, kill switches, and recent spoke activity."); setContextTags(prev => prev.includes("@central_brain") ? prev : [...prev, "@central_brain"]); inputRef.current?.focus(); }}>
+                  🛡️ Suite: health check
+                </Badge>
+                <Badge variant="outline" className="cursor-pointer text-xs border-primary/40" onClick={() => { setInput("What needs my attention today across projects AND the VantoOS suite? Give me one unified executive briefing."); setContextTags(prev => { const next = new Set(prev); next.add("@central_brain"); next.add("@all-projects"); return Array.from(next); }); inputRef.current?.focus(); }}>
+                  ⚡ Everything briefing
+                </Badge>
             </div>
           )}
 
