@@ -338,6 +338,9 @@ export default function ApprovalGateTab() {
                       <div className="space-y-2 pt-1">
                         <div className="flex flex-wrap gap-2">
                           <Button size="sm" variant="secondary" onClick={() => markReviewed(r)}>Mark reviewed</Button>
+                          <Button size="sm" onClick={() => soloApprove(r)} title="Super-admin single-key bypass (Sylvia not required)">
+                            <KeyRound className="h-3 w-3 mr-1" /> Solo approve (super-admin)
+                          </Button>
                           <Button size="sm" variant="outline" onClick={() => archive(r)}>Archive</Button>
                         </div>
                         <div className="flex flex-col gap-2">
