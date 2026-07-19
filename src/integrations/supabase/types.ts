@@ -4800,6 +4800,33 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_spoke_lifecycle_log: {
+        Row: {
+          action: string
+          actor_user_id: string | null
+          app_key: string
+          created_at: string
+          detail: Json
+          id: string
+        }
+        Insert: {
+          action: string
+          actor_user_id?: string | null
+          app_key: string
+          created_at?: string
+          detail?: Json
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor_user_id?: string | null
+          app_key?: string
+          created_at?: string
+          detail?: Json
+          id?: string
+        }
+        Relationships: []
+      }
       vos_strategy_directives: {
         Row: {
           closed_at: string | null
@@ -5023,6 +5050,39 @@ export type Database = {
           room?: string
           updated_at?: string
           url?: string
+        }
+        Relationships: []
+      }
+      vos_suite_telemetry: {
+        Row: {
+          app_key: string
+          detail: Json
+          error: string | null
+          http_status: number | null
+          id: string
+          latency_ms: number | null
+          ok: boolean
+          probed_at: string
+        }
+        Insert: {
+          app_key: string
+          detail?: Json
+          error?: string | null
+          http_status?: number | null
+          id?: string
+          latency_ms?: number | null
+          ok: boolean
+          probed_at?: string
+        }
+        Update: {
+          app_key?: string
+          detail?: Json
+          error?: string | null
+          http_status?: number | null
+          id?: string
+          latency_ms?: number | null
+          ok?: boolean
+          probed_at?: string
         }
         Relationships: []
       }
