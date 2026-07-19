@@ -230,6 +230,16 @@ export default function Step5DConsolePage() {
                     <Badge variant="default">✓ Two-key complete</Badge>
                   )}
                 </div>
+                {a.approval_status === "requested" && isReviewer && !isAdmin && (
+                  <p className="text-xs text-amber-600 pt-1">
+                    Waiting on Admin 1 to complete first review. Your "Second review" button will appear here once that's done.
+                  </p>
+                )}
+                {a.approval_status === "reviewed" && isReviewer && a.reviewed_by === user?.id && (
+                  <p className="text-xs text-amber-600 pt-1">
+                    You performed the first review. A different reviewer must complete second review (two-key rule).
+                  </p>
+                )}
               </div>
             );
           })}
