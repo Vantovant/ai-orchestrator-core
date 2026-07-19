@@ -3819,8 +3819,8 @@ export type Database = {
           second_reviewed_at: string | null
           second_reviewed_by: string | null
           source_chain_hash_at_approval: string | null
-          source_dry_run_id: string
-          source_proposal_id: string
+          source_dry_run_id: string | null
+          source_proposal_id: string | null
           would_execute: boolean
         }
         Insert: {
@@ -3853,8 +3853,8 @@ export type Database = {
           second_reviewed_at?: string | null
           second_reviewed_by?: string | null
           source_chain_hash_at_approval?: string | null
-          source_dry_run_id: string
-          source_proposal_id: string
+          source_dry_run_id?: string | null
+          source_proposal_id?: string | null
           would_execute?: boolean
         }
         Update: {
@@ -3887,8 +3887,8 @@ export type Database = {
           second_reviewed_at?: string | null
           second_reviewed_by?: string | null
           source_chain_hash_at_approval?: string | null
-          source_dry_run_id?: string
-          source_proposal_id?: string
+          source_dry_run_id?: string | null
+          source_proposal_id?: string | null
           would_execute?: boolean
         }
         Relationships: [
@@ -5199,6 +5199,10 @@ export type Database = {
       vos_compute_source_chain_hash: {
         Args: { approval_id: string }
         Returns: string
+      }
+      vos_execute_platform_flag_flip: {
+        Args: { p_approval_id: string }
+        Returns: Json
       }
       vos_generic_first_review: {
         Args: { p_approval_id: string }
