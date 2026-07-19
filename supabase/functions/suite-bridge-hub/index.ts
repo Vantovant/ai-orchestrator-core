@@ -97,10 +97,10 @@ Deno.serve(async (req) => {
 
     await supabase.from("vos_outbound_log").insert({
       target_app: app.app_key,
-      action: body?.kind ?? "directive",
-      payload: body,
-      status: spokeStatus >= 200 && spokeStatus < 300 ? "delivered" : "failed",
-      response_status: spokeStatus,
+      event_name: body?.kind ?? "directive",
+      idempotency_key: nonce,
+      outcome: spokeStatus >= 200 && spokeStatus < 300 ? "delivered" : "failed",
+      detail: { payload: body, spoke_status: spokeStatus, spoke_body: spokeBody },
     }).then(() => {}, () => {});
 
     return json({ ok: spokeStatus >= 200 && spokeStatus < 300, target, spoke_status: spokeStatus, spoke_body: spokeBody });
@@ -132,11 +132,16 @@ Deno.serve(async (req) => {
 
     await supabase.from("vos_signed_inbox").insert({
       source_app: app_key,
-      nonce,
-      timestamp_epoch: Number(ts),
-      payload: payload?.body ?? {},
+      app_id: app_key,
+      event_name: payload?.body?.kind ?? "snapshot",
+      idempotency_key: nonce,
+      dedupe_key: `${app_key}:${nonce}`,
+      ts: Number(ts),
       signature: sig,
-      verified: true,
+      signature_header: sig,
+      signature_version: "v1",
+      payload: payload?.body ?? {},
+      processing_state: "verified",
     }).then(() => {}, () => {});
 
     return json({ ok: true, verified: true });

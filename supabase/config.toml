@@ -198,3 +198,7 @@ verify_jwt = false
 
 [functions.vos-step5e-archive-test-runner]
 verify_jwt = false
+
+[functions.suite-bridge-hub]
+verify_jwt = false
+
