@@ -186,6 +186,7 @@ export default function ApprovalGateTab() {
   };
 
   return (
+    <TabErrorBoundary>
     <div className="space-y-4">
       <Card>
         <CardHeader>
