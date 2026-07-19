@@ -5224,6 +5224,7 @@ export type Database = {
         Args: { _reason: string; _target_user_id: string }
         Returns: Json
       }
+      vos_solo_approve: { Args: { p_approval_id: string }; Returns: Json }
       vos_step5d_create_rehearsal: { Args: never; Returns: Json }
       vos_step5d_first_review: {
         Args: { p_approval_id: string }
