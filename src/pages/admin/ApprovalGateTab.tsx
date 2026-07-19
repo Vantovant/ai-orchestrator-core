@@ -78,6 +78,22 @@ export default function ApprovalGateTab() {
   const [fStatus, setFStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [rejectionReasons, setRejectionReasons] = useState<Record<string, string>>({});
+  const [executing, setExecuting] = useState<Record<string, boolean>>({});
+
+  const executePlatformFlagFlip = async (r: Approval) => {
+    if (!confirm(`Execute platform flag flip for "${r.approval_title}"?\n\nThis writes the new flag value and is logged to vos_killswitch_log.`)) return;
+    setExecuting(p => ({ ...p, [r.id]: true }));
+    try {
+      const { error } = await supabase.rpc("vos_execute_platform_flag_flip" as any, { p_approval_id: r.id });
+      if (error) throw error;
+      toast.success("Platform flag flipped and recorded to kill-switch log.");
+      await load();
+    } catch (e: any) {
+      toast.error(`Execute failed: ${e.message ?? e}`);
+    } finally {
+      setExecuting(p => ({ ...p, [r.id]: false }));
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -359,9 +375,30 @@ export default function ApprovalGateTab() {
                       </div>
                     )}
 
-                    {(r.approval_status === "second_reviewed" ||
-                      r.approval_status === "rejected" ||
-                      r.approval_status === "expired") && (
+                    {r.approval_status === "second_reviewed" && (
+                      <div className="space-y-2 pt-1">
+                        {r.approval_type === "platform_flag_flip" && (
+                          <div className="flex flex-wrap gap-2 items-center">
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={!!executing[r.id]}
+                              onClick={() => executePlatformFlagFlip(r)}
+                            >
+                              <PlayCircle className={`h-3 w-3 mr-1 ${executing[r.id] ? "animate-pulse" : ""}`} />
+                              Execute platform flag flip
+                            </Button>
+                            <span className="text-xs text-muted-foreground">
+                              Writes the new flag value and records to vos_killswitch_log. Two-key already satisfied.
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => archive(r)}>Archive</Button>
+                        </div>
+                      </div>
+                    )}
+                    {(r.approval_status === "rejected" || r.approval_status === "expired") && (
                       <div className="flex gap-2 pt-1">
                         <Button size="sm" variant="outline" onClick={() => archive(r)}>Archive</Button>
                       </div>
