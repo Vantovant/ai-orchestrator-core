@@ -424,9 +424,8 @@ export default function VantoOSConsolePage() {
           <CRMInternalNotesTab />
         </TabsContent>
 
-        <TabsContent value="brain" className="space-y-4 pt-4">
-          <CentralBrainChat />
-        </TabsContent>
+        {/* Central Brain moved to Portfolio Partner → tag "VantoOS Suite" */}
+
       </Tabs>
     </div>
   );
