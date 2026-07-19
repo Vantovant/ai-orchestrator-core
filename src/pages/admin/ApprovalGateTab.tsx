@@ -174,7 +174,7 @@ export default function ApprovalGateTab() {
             Approval Gate
             <Badge variant="outline" className="ml-2">DECISION RECORDS ONLY</Badge>
             <Badge variant="outline" className="gap-1"><Lock className="h-3 w-3" /> NO EXECUTION</Badge>
-            <Badge variant="outline" className="gap-1"><KeyRound className="h-3 w-3" /> TWO-KEY</Badge>
+            <Badge variant="outline" className="gap-1"><KeyRound className="h-3 w-3" /> TWO-KEY (5E GENERIC)</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
