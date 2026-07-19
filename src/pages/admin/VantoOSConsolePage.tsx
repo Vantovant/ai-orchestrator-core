@@ -20,6 +20,7 @@ import IntegrationDraftsTab from "./IntegrationDraftsTab";
 import CRMInternalNotesTab from "./CRMInternalNotesTab";
 // CentralBrainChat retired — merged into Portfolio Partner (tag: VantoOS Suite)
 import StrategyEngineTab from "./StrategyEngineTab";
+import SuiteOverviewTab from "./SuiteOverviewTab";
 
 type Row = Record<string, any>;
 
