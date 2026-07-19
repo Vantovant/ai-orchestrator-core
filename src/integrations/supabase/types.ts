@@ -4800,6 +4800,54 @@ export type Database = {
         }
         Relationships: []
       }
+      vos_suite_apps: {
+        Row: {
+          app_key: string
+          bridge_secret_slot: string
+          capabilities: Json
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          persona: string
+          role: string
+          room: string
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          app_key: string
+          bridge_secret_slot: string
+          capabilities?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          persona: string
+          role?: string
+          room: string
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          app_key?: string
+          bridge_secret_slot?: string
+          capabilities?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          persona?: string
+          role?: string
+          room?: string
+          updated_at?: string
+          url?: string
+        }
+        Relationships: []
+      }
       whatsapp_action_log: {
         Row: {
           action_type: string
