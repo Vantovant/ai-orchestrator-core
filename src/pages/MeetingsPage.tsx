@@ -34,10 +34,28 @@ export default function MeetingsPage() {
   });
 
   return (
+  const filtered = (meetings.data ?? []).filter((m) => {
+    if (filter === "pending" && m.is_done) return false;
+    if (filter === "done" && !m.is_done) return false;
+    return true;
+  });
+
+  return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">Meetings</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <div className="flex items-center gap-2">
+          <Select value={filter} onValueChange={(v) => setFilter(v as FilterOption)}>
+            <SelectTrigger className="h-8 w-[110px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="done">Done</SelectItem>
+            </SelectContent>
+          </Select>
+          <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild><Button size="sm" className="gap-1"><Plus className="h-4 w-4" />Add Meeting</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>New Meeting</DialogTitle></DialogHeader>
