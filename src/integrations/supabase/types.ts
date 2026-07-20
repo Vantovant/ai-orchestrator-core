@@ -1511,61 +1511,94 @@ export type Database = {
       }
       hub_contacts: {
         Row: {
+          assigned_to: string | null
           consent_email: boolean
           consent_sms: boolean
           consent_whatsapp: boolean
+          contact_confidence: string | null
+          contact_source: string | null
           contact_type: string
           created_at: string
           email: string | null
+          first_name: string | null
           full_name: string
           id: string
           is_deleted: boolean
+          last_name: string | null
           last_synced_at: string | null
+          lead_type: string | null
+          name_needs_confirmation: boolean
+          notes: string | null
           phone_e164: string | null
           source_app: string
           source_id: string | null
+          stage_id: string | null
           tags: string[]
+          temperature: string | null
           unsubscribed_channels: string[]
           updated_at: string
           version: number
+          whatsapp_display_name: string | null
         }
         Insert: {
+          assigned_to?: string | null
           consent_email?: boolean
           consent_sms?: boolean
           consent_whatsapp?: boolean
+          contact_confidence?: string | null
+          contact_source?: string | null
           contact_type: string
           created_at?: string
           email?: string | null
+          first_name?: string | null
           full_name: string
           id?: string
           is_deleted?: boolean
+          last_name?: string | null
           last_synced_at?: string | null
+          lead_type?: string | null
+          name_needs_confirmation?: boolean
+          notes?: string | null
           phone_e164?: string | null
           source_app: string
           source_id?: string | null
+          stage_id?: string | null
           tags?: string[]
+          temperature?: string | null
           unsubscribed_channels?: string[]
           updated_at?: string
           version?: number
+          whatsapp_display_name?: string | null
         }
         Update: {
+          assigned_to?: string | null
           consent_email?: boolean
           consent_sms?: boolean
           consent_whatsapp?: boolean
+          contact_confidence?: string | null
+          contact_source?: string | null
           contact_type?: string
           created_at?: string
           email?: string | null
+          first_name?: string | null
           full_name?: string
           id?: string
           is_deleted?: boolean
+          last_name?: string | null
           last_synced_at?: string | null
+          lead_type?: string | null
+          name_needs_confirmation?: boolean
+          notes?: string | null
           phone_e164?: string | null
           source_app?: string
           source_id?: string | null
+          stage_id?: string | null
           tags?: string[]
+          temperature?: string | null
           unsubscribed_channels?: string[]
           updated_at?: string
           version?: number
+          whatsapp_display_name?: string | null
         }
         Relationships: []
       }

@@ -1,19 +1,21 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { contactService } from "@/services/contactService";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { contactService, type HubContactWithLinks } from "@/services/contactService";
+import ContactDrawer from "@/components/contacts/ContactDrawer";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Contact, Search, Mail, Phone, MessageCircle, Send, Link2, Smartphone, ShieldAlert } from "lucide-react";
+import { Contact, Search, Mail, Phone, MessageCircle, Link2, Smartphone, ShieldAlert, Pencil } from "lucide-react";
 import { format } from "date-fns";
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
   const [appFilter, setAppFilter] = useState<string>("all");
   const [showDeleted, setShowDeleted] = useState(false);
+  const [editing, setEditing] = useState<HubContactWithLinks | null>(null);
 
   const contacts = useQuery({
     queryKey: ["hub-contacts", { includeDeleted: showDeleted }],
@@ -125,9 +127,11 @@ export default function ContactsPage() {
           {!contacts.isLoading && filtered.length > 0 && (
             <div className="space-y-2">
               {filtered.map((c) => (
-                <div
+                <button
                   key={c.id}
-                  className={`flex flex-col gap-3 rounded-lg border border-border/60 p-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between ${
+                  type="button"
+                  onClick={() => setEditing(c)}
+                  className={`w-full text-left flex flex-col gap-3 rounded-lg border border-border/60 p-4 transition-colors hover:bg-muted/40 hover:border-primary/40 sm:flex-row sm:items-center sm:justify-between ${
                     c.is_deleted ? "opacity-60" : ""
                   }`}
                 >
@@ -138,6 +142,7 @@ export default function ContactsPage() {
                         {c.contact_type}
                       </Badge>
                       {c.is_deleted && <Badge variant="destructive" className="text-xs">Deleted</Badge>}
+                      <Pencil className="h-3 w-3 text-muted-foreground ml-auto sm:hidden" />
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       {c.email && (
@@ -182,8 +187,8 @@ export default function ContactsPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-1.5">
-                      {c.hub_contact_links.map((link) => (
-                        <Badge key={link.id} variant="outline" className="text-[10px] gap-1 capitalize">
+                      {c.hub_contact_links.map((link, i) => (
+                        <Badge key={link.id ?? `${link.app_key}-${i}`} variant="outline" className="text-[10px] gap-1 capitalize">
                           <Link2 className="h-3 w-3" /> {link.app_key}
                         </Badge>
                       ))}
@@ -195,12 +200,14 @@ export default function ContactsPage() {
                       </div>
                     )}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
+
+      <ContactDrawer contact={editing} open={!!editing} onOpenChange={(o) => !o && setEditing(null)} />
     </div>
   );
 }

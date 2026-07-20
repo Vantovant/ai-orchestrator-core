@@ -16,11 +16,11 @@ const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os"];
 const navItems = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard },
   { to: "/plan", label: "Plan", icon: ClipboardList },
+  { to: "/contacts", label: "Contacts", icon: Contact },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/dashboard/partner", label: "Partner", icon: Brain },
-  { to: "/contacts", label: "Contacts", icon: Contact },
   { to: "/voice-diary", label: "Voice Diary", icon: BookHeart },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/investor-report", label: "Reports", icon: FileText },
