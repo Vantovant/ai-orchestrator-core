@@ -293,6 +293,73 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Spec Kit v1 contacts_upsert delivered via /receive → materialize into hub_contacts
+    if (bodyKind === "contacts_upsert" && Array.isArray(payload?.body?.contacts)) {
+      const { data: appRow } = await supabase
+        .from("vos_suite_apps").select("allowed_contact_types")
+        .eq("app_key", app_key).maybeSingle();
+      const allowed: string[] = (appRow as any)?.allowed_contact_types ?? [];
+      const defaultType = allowed.includes("email_marketing") ? "email_marketing"
+                        : allowed.includes("mlm") ? "mlm"
+                        : allowed[0] ?? "mixed";
+
+      let enriched = 0, created = 0;
+      for (const c of payload.body.contacts as any[]) {
+        const remote_id = String(c?.local_id ?? "");
+        const full_name = String(c?.identity?.name ?? "").trim();
+        const email = c?.identity?.email ? String(c.identity.email).trim().toLowerCase() : null;
+        const phone_e164 = c?.identity?.phone_normalized ? String(c.identity.phone_normalized).trim() : null;
+        if (!remote_id || !full_name || (!email && !phone_e164)) continue;
+
+        let hubId: string | null = null;
+        const { data: link } = await supabase.from("hub_contact_links")
+          .select("hub_contact_id").eq("app_key", app_key).eq("remote_id", remote_id).maybeSingle();
+        if (link) hubId = link.hub_contact_id;
+        if (!hubId && email) {
+          const { data: byE } = await supabase.from("hub_contacts")
+            .select("id").eq("email", email).eq("is_deleted", false).maybeSingle();
+          if (byE) hubId = byE.id;
+        }
+        if (!hubId && phone_e164) {
+          const { data: byP } = await supabase.from("hub_contacts")
+            .select("id").eq("phone_e164", phone_e164).eq("is_deleted", false).maybeSingle();
+          if (byP) hubId = byP.id;
+        }
+
+        const unsubscribed = !!c?.attributes?.unsubscribed;
+        const patch: Record<string, unknown> = {
+          full_name,
+          first_name: c?.identity?.first_name ?? null,
+          last_name: c?.identity?.last_name ?? null,
+          whatsapp_display_name: c?.identity?.whatsapp_display_name ?? null,
+          lead_type: c?.attributes?.lead_type ?? null,
+          notes: c?.attributes?.notes ?? null,
+          unsubscribed_channels: unsubscribed ? ["email"] : [],
+          consent_email: !unsubscribed,
+          last_synced_at: new Date().toISOString(),
+        };
+        if (email) patch.email = email;
+        if (phone_e164) patch.phone_e164 = phone_e164;
+
+        if (hubId) {
+          await supabase.from("hub_contacts").update(patch).eq("id", hubId);
+          enriched++;
+        } else {
+          const { data: ins } = await supabase.from("hub_contacts").insert({
+            ...patch, contact_type: defaultType, source_app: app_key, source_id: remote_id, version: 1,
+          }).select("id").maybeSingle();
+          hubId = ins?.id ?? null;
+          if (hubId) created++;
+        }
+        if (hubId) {
+          await supabase.from("hub_contact_links").upsert({
+            hub_contact_id: hubId, app_key, remote_id, last_pushed_at: new Date().toISOString(),
+          }, { onConflict: "hub_contact_id,app_key" });
+        }
+      }
+      return json({ ok: true, verified: true, materialized: { enriched, created } });
+    }
+
     return json({ ok: true, verified: true, snapshot_id: snapshotId });
   }
 
