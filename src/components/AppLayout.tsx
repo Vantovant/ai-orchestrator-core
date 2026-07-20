@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus, BookHeart, ShieldAlert, Home
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus, BookHeart, ShieldAlert, Home, Contact
 } from "lucide-react";
 import vantoosLogo from "@/assets/vantoos-logo.png";
 import { useState, useEffect } from "react";
@@ -20,6 +20,7 @@ const navItems = [
   { to: "/finance", label: "Finance", icon: DollarSign },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/dashboard/partner", label: "Partner", icon: Brain },
+  { to: "/contacts", label: "Contacts", icon: Contact },
   { to: "/voice-diary", label: "Voice Diary", icon: BookHeart },
   { to: "/knowledge", label: "Knowledge", icon: BookOpen },
   { to: "/investor-report", label: "Reports", icon: FileText },
