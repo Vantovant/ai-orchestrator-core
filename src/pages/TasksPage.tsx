@@ -27,7 +27,7 @@ export default function TasksPage() {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [sort, setSort] = useState<SortOption>("latest");
-  const [filter, setFilter] = useState<FilterOption>("all");
+  const [filter, setFilter] = useState<FilterOption>("pending");
   const tasks = useQuery({ queryKey: ["tasks", sort], queryFn: () => taskService.list(sort) });
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -69,7 +69,7 @@ export default function TasksPage() {
   const filtered = (tasks.data ?? []).filter(t => {
     if (projectId && t.project_id !== projectId) return false;
     if (source && t.source !== source) return false;
-    if (filter === "pending" && t.status === "done") return false;
+    if (filter === "pending" && (t.status === "done" || t.status === "cancelled")) return false;
     if (filter === "done" && t.status !== "done") return false;
     if (filter === "critical" && t.priority !== "critical") return false;
     if (filter === "high" && t.priority !== "high") return false;
