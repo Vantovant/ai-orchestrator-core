@@ -1474,6 +1474,101 @@ export type Database = {
           },
         ]
       }
+      hub_contact_links: {
+        Row: {
+          app_key: string
+          created_at: string
+          hub_contact_id: string
+          last_pulled_at: string | null
+          last_pushed_at: string | null
+          remote_id: string
+        }
+        Insert: {
+          app_key: string
+          created_at?: string
+          hub_contact_id: string
+          last_pulled_at?: string | null
+          last_pushed_at?: string | null
+          remote_id: string
+        }
+        Update: {
+          app_key?: string
+          created_at?: string
+          hub_contact_id?: string
+          last_pulled_at?: string | null
+          last_pushed_at?: string | null
+          remote_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hub_contact_links_hub_contact_id_fkey"
+            columns: ["hub_contact_id"]
+            isOneToOne: false
+            referencedRelation: "hub_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hub_contacts: {
+        Row: {
+          consent_email: boolean
+          consent_sms: boolean
+          consent_whatsapp: boolean
+          contact_type: string
+          created_at: string
+          email: string | null
+          full_name: string
+          id: string
+          is_deleted: boolean
+          last_synced_at: string | null
+          phone_e164: string | null
+          source_app: string
+          source_id: string | null
+          tags: string[]
+          unsubscribed_channels: string[]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          consent_email?: boolean
+          consent_sms?: boolean
+          consent_whatsapp?: boolean
+          contact_type: string
+          created_at?: string
+          email?: string | null
+          full_name: string
+          id?: string
+          is_deleted?: boolean
+          last_synced_at?: string | null
+          phone_e164?: string | null
+          source_app: string
+          source_id?: string | null
+          tags?: string[]
+          unsubscribed_channels?: string[]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          consent_email?: boolean
+          consent_sms?: boolean
+          consent_whatsapp?: boolean
+          contact_type?: string
+          created_at?: string
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_deleted?: boolean
+          last_synced_at?: string | null
+          phone_e164?: string | null
+          source_app?: string
+          source_id?: string | null
+          tags?: string[]
+          unsubscribed_channels?: string[]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       income_streams: {
         Row: {
           created_at: string
@@ -5040,6 +5135,7 @@ export type Database = {
       }
       vos_suite_apps: {
         Row: {
+          allowed_contact_types: string[]
           app_key: string
           bridge_secret_slot: string
           capabilities: Json
@@ -5055,6 +5151,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          allowed_contact_types?: string[]
           app_key: string
           bridge_secret_slot: string
           capabilities?: Json
@@ -5070,6 +5167,7 @@ export type Database = {
           url: string
         }
         Update: {
+          allowed_contact_types?: string[]
           app_key?: string
           bridge_secret_slot?: string
           capabilities?: Json
