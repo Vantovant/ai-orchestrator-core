@@ -1,0 +1,1 @@
+UPDATE public.vos_suite_apps SET is_active = true WHERE app_key = 'zazi_email';
