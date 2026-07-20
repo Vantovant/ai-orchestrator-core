@@ -16,6 +16,7 @@ export default function MeetingsPage() {
   const qc = useQueryClient();
   const meetings = useQuery({ queryKey: ["meetings"], queryFn: meetingService.list });
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<FilterOption>("pending");
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
