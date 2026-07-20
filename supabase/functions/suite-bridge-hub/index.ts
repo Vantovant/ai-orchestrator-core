@@ -296,5 +296,198 @@ Deno.serve(async (req) => {
     return json({ ok: true, verified: true, snapshot_id: snapshotId });
   }
 
+  // ---------- UNIFIED CONTACTS HUB (Phase G) ----------
+  // Actions: contacts_upsert | contacts_pull | contacts_delete
+  // All three require an HMAC signature from a registered spoke, exactly like `receive`.
+  if (action === "contacts_upsert" || action === "contacts_pull" || action === "contacts_delete") {
+    const app_key = req.headers.get("x-bridge-app") ?? "";
+    const ts = req.headers.get("x-bridge-timestamp") ?? "";
+    const nonce = req.headers.get("x-bridge-nonce") ?? "";
+    const sig = req.headers.get("x-bridge-signature") ?? "";
+    const bodyStr = JSON.stringify(payload?.body ?? {});
+
+    if (!app_key || !ts || !nonce || !sig) return json({ error: "missing_signature_headers" }, 400);
+    if (Math.abs(Math.floor(Date.now() / 1000) - Number(ts)) > SIG_WINDOW_SECONDS) {
+      return json({ error: "stale_timestamp" }, 400);
+    }
+
+    const { data: app } = await supabase
+      .from("vos_suite_apps")
+      .select("app_key, bridge_secret_slot, is_active, allowed_contact_types")
+      .eq("app_key", app_key).maybeSingle();
+    if (!app || !app.is_active) return json({ error: "unknown_or_inactive_app" }, 401);
+
+    const secret = Deno.env.get(app.bridge_secret_slot);
+    if (!secret) return json({ error: "missing_secret" }, 500);
+
+    const expected = await hmacSha256Hex(secret, `${ts}.${nonce}.${app_key}.${bodyStr}`);
+    if (!timingSafeEqual(sig, expected)) return json({ error: "bad_signature" }, 401);
+
+    const allowed: string[] = (app as any).allowed_contact_types ?? [];
+    const body: any = payload?.body ?? {};
+
+    // ----- contacts_upsert -----
+    if (action === "contacts_upsert") {
+      const records = Array.isArray(body?.records) ? body.records : [];
+      if (records.length === 0) return json({ error: "no_records" }, 400);
+      if (records.length > 500) return json({ error: "batch_too_large" }, 400);
+
+      const results: any[] = [];
+      for (const r of records) {
+        const remote_id = String(r?.remote_id ?? "");
+        const full_name = String(r?.full_name ?? "").trim();
+        const phone_e164 = r?.phone_e164 ? String(r.phone_e164).trim() : null;
+        const email = r?.email ? String(r.email).trim().toLowerCase() : null;
+        const contact_type = String(r?.contact_type ?? "");
+        if (!remote_id || !full_name || !contact_type) {
+          results.push({ remote_id, action: "invalid", error: "missing_required_fields" });
+          continue;
+        }
+        if (!["mlm", "email_marketing", "personal", "mixed"].includes(contact_type)) {
+          results.push({ remote_id, action: "invalid", error: "bad_contact_type" });
+          continue;
+        }
+        // Hub-side gating: spoke may only push types it's allowed to own.
+        if (allowed.length > 0 && !allowed.includes(contact_type)) {
+          results.push({ remote_id, action: "rejected", error: "contact_type_not_allowed_for_spoke" });
+          continue;
+        }
+        if (!phone_e164 && !email) {
+          results.push({ remote_id, action: "invalid", error: "need_phone_or_email" });
+          continue;
+        }
+
+        // Match: existing link -> phone -> email
+        let hubId: string | null = null;
+        const { data: existingLink } = await supabase
+          .from("hub_contact_links").select("hub_contact_id")
+          .eq("app_key", app_key).eq("remote_id", remote_id).maybeSingle();
+        if (existingLink) hubId = existingLink.hub_contact_id;
+
+        if (!hubId && phone_e164) {
+          const { data: byPhone } = await supabase
+            .from("hub_contacts").select("id")
+            .eq("phone_e164", phone_e164).eq("is_deleted", false).maybeSingle();
+          if (byPhone) hubId = byPhone.id;
+        }
+        if (!hubId && email) {
+          const { data: byEmail } = await supabase
+            .from("hub_contacts").select("id")
+            .eq("email", email).eq("is_deleted", false).maybeSingle();
+          if (byEmail) hubId = byEmail.id;
+        }
+
+        const incomingVersion = Number.isFinite(r?.version) ? Number(r.version) : 1;
+        let actionTag: "created" | "updated" | "conflict" = "created";
+
+        if (hubId) {
+          const { data: cur } = await supabase
+            .from("hub_contacts").select("version").eq("id", hubId).maybeSingle();
+          if (cur && incomingVersion < cur.version) {
+            const { data: full } = await supabase
+              .from("hub_contacts").select("*").eq("id", hubId).maybeSingle();
+            results.push({ remote_id, hub_contact_id: hubId, action: "conflict", current: full });
+            continue;
+          }
+          const patch: Record<string, unknown> = {
+            full_name,
+            contact_type,
+            version: Math.max(incomingVersion, (cur?.version ?? 1)) + 1,
+            last_synced_at: new Date().toISOString(),
+          };
+          if (phone_e164) patch.phone_e164 = phone_e164;
+          if (email) patch.email = email;
+          if (Array.isArray(r?.tags)) patch.tags = r.tags;
+          if (typeof r?.consent_whatsapp === "boolean") patch.consent_whatsapp = r.consent_whatsapp;
+          if (typeof r?.consent_email === "boolean") patch.consent_email = r.consent_email;
+          if (typeof r?.consent_sms === "boolean") patch.consent_sms = r.consent_sms;
+          if (Array.isArray(r?.unsubscribed_channels)) patch.unsubscribed_channels = r.unsubscribed_channels;
+          await supabase.from("hub_contacts").update(patch).eq("id", hubId);
+          actionTag = "updated";
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from("hub_contacts").insert({
+              full_name, phone_e164, email, contact_type,
+              tags: Array.isArray(r?.tags) ? r.tags : [],
+              consent_whatsapp: !!r?.consent_whatsapp,
+              consent_email: !!r?.consent_email,
+              consent_sms: !!r?.consent_sms,
+              unsubscribed_channels: Array.isArray(r?.unsubscribed_channels) ? r.unsubscribed_channels : [],
+              source_app: app_key,
+              source_id: remote_id,
+              version: incomingVersion,
+              last_synced_at: new Date().toISOString(),
+            }).select("id").maybeSingle();
+          if (insErr || !inserted) {
+            results.push({ remote_id, action: "error", error: insErr?.message ?? "insert_failed" });
+            continue;
+          }
+          hubId = inserted.id;
+          actionTag = "created";
+        }
+
+        await supabase.from("hub_contact_links").upsert({
+          hub_contact_id: hubId,
+          app_key,
+          remote_id,
+          last_pushed_at: new Date().toISOString(),
+        }, { onConflict: "hub_contact_id,app_key" });
+
+        results.push({ remote_id, hub_contact_id: hubId, action: actionTag });
+      }
+      return json({ ok: true, results });
+    }
+
+    // ----- contacts_pull -----
+    if (action === "contacts_pull") {
+      const since = body?.since ? new Date(body.since).toISOString() : new Date(0).toISOString();
+      const limit = Math.min(Math.max(Number(body?.limit ?? 500), 1), 1000);
+      const requested: string[] = Array.isArray(body?.types) ? body.types : allowed;
+      const types = allowed.length > 0 ? requested.filter((t) => allowed.includes(t)) : requested;
+      if (types.length === 0) return json({ ok: true, records: [], next_since: since });
+
+      let q = supabase.from("hub_contacts")
+        .select("id, full_name, phone_e164, email, contact_type, tags, consent_whatsapp, consent_email, consent_sms, unsubscribed_channels, version, updated_at, is_deleted")
+        .gt("updated_at", since)
+        .in("contact_type", types)
+        .order("updated_at", { ascending: true })
+        .limit(limit);
+      if (allowed.length === 1 && allowed[0] === "email_marketing") {
+        q = q.not("email", "is", null);
+      }
+      const { data: records, error } = await q;
+      if (error) return json({ error: "pull_failed", detail: error.message }, 500);
+
+      const next_since = records && records.length > 0
+        ? records[records.length - 1].updated_at
+        : since;
+
+      if (records && records.length > 0) {
+        const ids = records.map((r) => r.id);
+        await supabase.from("hub_contact_links")
+          .update({ last_pulled_at: new Date().toISOString() })
+          .eq("app_key", app_key)
+          .in("hub_contact_id", ids);
+      }
+
+      return json({ ok: true, records: records ?? [], next_since });
+    }
+
+    // ----- contacts_delete (soft) -----
+    if (action === "contacts_delete") {
+      const remote_id = String(body?.remote_id ?? "");
+      const reason = body?.reason ? String(body.reason) : null;
+      if (!remote_id) return json({ error: "missing_remote_id" }, 400);
+      const { data: link } = await supabase
+        .from("hub_contact_links").select("hub_contact_id")
+        .eq("app_key", app_key).eq("remote_id", remote_id).maybeSingle();
+      if (!link) return json({ ok: true, action: "not_found" });
+      await supabase.from("hub_contacts")
+        .update({ is_deleted: true, last_synced_at: new Date().toISOString() })
+        .eq("id", link.hub_contact_id);
+      return json({ ok: true, action: "soft_deleted", hub_contact_id: link.hub_contact_id, reason });
+    }
+  }
+
   return json({ error: "unknown_action", action }, 400);
 });
