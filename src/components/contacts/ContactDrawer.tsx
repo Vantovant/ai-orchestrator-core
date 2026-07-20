@@ -1,0 +1,377 @@
+import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { contactService, type ContactEditableFields, type HubContactWithLinks } from "@/services/contactService";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
+import { Link2, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
+import { format } from "date-fns";
+
+const CONTACT_SOURCES = ["unknown", "facebook", "twilio", "maytapi", "manual", "google", "email"];
+const CONFIDENCES = ["confirmed", "guessed", "unknown"];
+const LEAD_TYPES = ["prospect", "registered", "buyer", "vip", "expired"];
+const TEMPERATURES = ["hot", "warm", "cold"];
+const CONTACT_TYPES = ["mlm", "email_marketing", "personal", "mixed"];
+
+interface Props {
+  contact: HubContactWithLinks | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+function initialFromContact(c: HubContactWithLinks | null): ContactEditableFields {
+  if (!c) return {};
+  return {
+    full_name: c.full_name,
+    first_name: c.first_name ?? "",
+    last_name: c.last_name ?? "",
+    whatsapp_display_name: c.whatsapp_display_name ?? "",
+    email: c.email ?? "",
+    phone_e164: c.phone_e164 ?? "",
+    contact_type: c.contact_type,
+    contact_source: c.contact_source ?? "unknown",
+    contact_confidence: c.contact_confidence ?? "unknown",
+    name_needs_confirmation: c.name_needs_confirmation,
+    lead_type: c.lead_type ?? "prospect",
+    temperature: c.temperature ?? "warm",
+    notes: c.notes ?? "",
+    tags: c.tags ?? [],
+    consent_email: c.consent_email,
+    consent_sms: c.consent_sms,
+    consent_whatsapp: c.consent_whatsapp,
+  };
+}
+
+export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
+  const qc = useQueryClient();
+  const [form, setForm] = useState<ContactEditableFields>({});
+  const [tagInput, setTagInput] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  useEffect(() => {
+    setForm(initialFromContact(contact));
+    setTagInput((contact?.tags ?? []).join(", "));
+  }, [contact]);
+
+  const set = <K extends keyof ContactEditableFields>(k: K, v: ContactEditableFields[K]) =>
+    setForm((p) => ({ ...p, [k]: v }));
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (!contact) throw new Error("No contact");
+      const payload: ContactEditableFields = {
+        ...form,
+        tags: tagInput
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+      };
+      // Null-safe: send empty strings as null so we don't overwrite with junk
+      for (const k of ["first_name", "last_name", "whatsapp_display_name", "email", "phone_e164", "notes"] as const) {
+        if (payload[k] === "") (payload as Record<string, unknown>)[k] = null;
+      }
+      if (!payload.full_name || payload.full_name.trim() === "") {
+        throw new Error("Full name is required");
+      }
+      return contactService.update(contact.id, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hub-contacts"] });
+      toast.success("Contact saved — will sync to connected apps on next pull");
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async () => {
+      if (!contact) throw new Error("No contact");
+      return contact.is_deleted
+        ? contactService.restore(contact.id)
+        : contactService.softDelete(contact.id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["hub-contacts"] });
+      toast.success(contact?.is_deleted ? "Contact restored" : "Contact deleted");
+      setConfirmDelete(false);
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (!contact) return null;
+
+  const nameMismatch =
+    !!form.whatsapp_display_name &&
+    !!form.full_name &&
+    form.whatsapp_display_name.trim().toLowerCase() !== form.full_name.trim().toLowerCase();
+
+  return (
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="w-full sm:max-w-[28rem] overflow-y-auto">
+          <SheetHeader className="pb-3 border-b">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                {(form.full_name ?? contact.full_name).slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <SheetTitle className="truncate text-base">{form.full_name || "Untitled contact"}</SheetTitle>
+                <div className="text-xs text-muted-foreground truncate">
+                  {form.phone_e164 || form.email || "No phone or email"}
+                </div>
+              </div>
+            </div>
+          </SheetHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Core Identity */}
+            <section className="space-y-3">
+              <SectionTitle>Core Identity</SectionTitle>
+              <Field label="Full name" required>
+                <Input
+                  value={form.full_name ?? ""}
+                  onChange={(e) => set("full_name", e.target.value)}
+                  placeholder="Display name"
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="First name">
+                  <Input
+                    value={form.first_name ?? ""}
+                    onChange={(e) => set("first_name", e.target.value)}
+                  />
+                </Field>
+                <Field label="Last name">
+                  <Input
+                    value={form.last_name ?? ""}
+                    onChange={(e) => set("last_name", e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field label="Phone (E.164)">
+                <Input
+                  value={form.phone_e164 ?? ""}
+                  onChange={(e) => set("phone_e164", e.target.value)}
+                  placeholder="+27..."
+                />
+              </Field>
+              <Field label="Email">
+                <Input
+                  type="email"
+                  value={form.email ?? ""}
+                  onChange={(e) => set("email", e.target.value.toLowerCase())}
+                  placeholder="name@example.com"
+                />
+              </Field>
+            </section>
+
+            {/* Contact Identity Bridge */}
+            <section className="space-y-3">
+              <SectionTitle>Contact Identity Bridge</SectionTitle>
+              <Field label="WhatsApp display name">
+                <Input
+                  value={form.whatsapp_display_name ?? ""}
+                  onChange={(e) => set("whatsapp_display_name", e.target.value)}
+                />
+              </Field>
+              {nameMismatch && (
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+                  <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>WhatsApp display name doesn't match Full name — consider setting "Name needs confirmation".</span>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Source">
+                  <Select value={form.contact_source ?? "unknown"} onValueChange={(v) => set("contact_source", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{CONTACT_SOURCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Confidence">
+                  <Select value={form.contact_confidence ?? "unknown"} onValueChange={(v) => set("contact_confidence", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{CONFIDENCES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              <div className="flex items-center justify-between rounded-md border p-2">
+                <Label className="text-xs">Name needs confirmation</Label>
+                <Switch
+                  checked={!!form.name_needs_confirmation}
+                  onCheckedChange={(v) => set("name_needs_confirmation", v)}
+                />
+              </div>
+            </section>
+
+            {/* Classification */}
+            <section className="space-y-3">
+              <SectionTitle>Classification</SectionTitle>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Lead type">
+                  <Select value={form.lead_type ?? "prospect"} onValueChange={(v) => set("lead_type", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{LEAD_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Temperature">
+                  <Select value={form.temperature ?? "warm"} onValueChange={(v) => set("temperature", v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{TEMPERATURES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              <Field label="Contact type (hub gate)">
+                <Select value={form.contact_type ?? "mixed"} onValueChange={(v) => set("contact_type", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{CONTACT_TYPES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+            </section>
+
+            {/* Notes & Tags */}
+            <section className="space-y-3">
+              <SectionTitle>Notes &amp; Tags</SectionTitle>
+              <Field label="Notes">
+                <Textarea
+                  rows={3}
+                  value={form.notes ?? ""}
+                  onChange={(e) => set("notes", e.target.value)}
+                  placeholder="Free-text notes"
+                />
+              </Field>
+              <Field label="Tags (comma-separated)">
+                <Input value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="vip, jhb, 2026" />
+              </Field>
+            </section>
+
+            {/* Consent */}
+            <section className="space-y-2">
+              <SectionTitle>Consent</SectionTitle>
+              <ConsentRow label="WhatsApp" checked={!!form.consent_whatsapp} onChange={(v) => set("consent_whatsapp", v)} />
+              <ConsentRow label="Email" checked={!!form.consent_email} onChange={(v) => set("consent_email", v)} />
+              <ConsentRow label="SMS" checked={!!form.consent_sms} onChange={(v) => set("consent_sms", v)} />
+              {contact.unsubscribed_channels.length > 0 && (
+                <div className="text-xs text-destructive">
+                  Unsubscribed: {contact.unsubscribed_channels.join(", ")}
+                </div>
+              )}
+            </section>
+
+            {/* Sync map */}
+            <section className="space-y-2">
+              <SectionTitle>Linked Apps</SectionTitle>
+              <div className="text-xs text-muted-foreground">
+                Source: <span className="font-medium text-foreground">{contact.source_app}</span> · v{contact.version}
+                {contact.last_synced_at && (
+                  <> · last synced {format(new Date(contact.last_synced_at), "dd MMM yyyy HH:mm")}</>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {contact.hub_contact_links.length === 0 ? (
+                  <span className="text-xs text-muted-foreground">Not linked yet.</span>
+                ) : (
+                  contact.hub_contact_links.map((l, i) => (
+                    <Badge key={l.id ?? `${l.app_key}-${i}`} variant="outline" className="text-[10px] gap-1 capitalize">
+                      <Link2 className="h-3 w-3" /> {l.app_key}
+                    </Badge>
+                  ))
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground pt-1">
+                Saving here bumps the hub version. Connected apps (Vanto CRM, Zazi Email, …) will pick up your correction on their next scheduled pull.
+              </p>
+            </section>
+          </div>
+
+          <div className="sticky bottom-0 bg-background border-t pt-3 pb-2 flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className={contact.is_deleted ? "" : "text-destructive"}
+              onClick={() => setConfirmDelete(true)}
+            >
+              {contact.is_deleted ? (
+                <><RotateCcw className="h-4 w-4 mr-1" /> Restore</>
+              ) : (
+                <><Trash2 className="h-4 w-4 mr-1" /> Delete</>
+              )}
+            </Button>
+            <div className="flex-1" />
+            <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+              {saveMut.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {contact.is_deleted ? "Restore this contact?" : "Delete this contact?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {contact.is_deleted
+                ? "The contact will be restored and pushed to linked apps on the next sync."
+                : "The contact will be soft-deleted on the hub. Connected apps will be signaled to remove it on their next pull."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteMut.mutate()}>
+              {contact.is_deleted ? "Restore" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">{children}</h3>;
+}
+
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">
+        {label} {required && <span className="text-destructive">*</span>}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function ConsentRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border p-2">
+      <Label className="text-xs">{label}</Label>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}

@@ -3,9 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 export interface HubContact {
   id: string;
   full_name: string;
+  first_name: string | null;
+  last_name: string | null;
+  whatsapp_display_name: string | null;
   phone_e164: string | null;
   email: string | null;
   contact_type: string;
+  contact_source: string | null;
+  contact_confidence: string | null;
+  name_needs_confirmation: boolean;
+  lead_type: string | null;
+  temperature: string | null;
+  stage_id: string | null;
+  assigned_to: string | null;
+  notes: string | null;
   tags: string[];
   consent_whatsapp: boolean;
   consent_email: boolean;
@@ -21,7 +32,7 @@ export interface HubContact {
 }
 
 export interface HubContactLink {
-  id: string;
+  id?: string;
   hub_contact_id: string;
   app_key: string;
   remote_id: string;
@@ -29,6 +40,33 @@ export interface HubContactLink {
   last_pulled_at: string | null;
   created_at: string;
 }
+
+export type HubContactWithLinks = HubContact & { hub_contact_links: HubContactLink[] };
+
+export type ContactEditableFields = Partial<
+  Pick<
+    HubContact,
+    | "full_name"
+    | "first_name"
+    | "last_name"
+    | "whatsapp_display_name"
+    | "email"
+    | "phone_e164"
+    | "contact_type"
+    | "contact_source"
+    | "contact_confidence"
+    | "name_needs_confirmation"
+    | "lead_type"
+    | "temperature"
+    | "stage_id"
+    | "assigned_to"
+    | "notes"
+    | "tags"
+    | "consent_email"
+    | "consent_sms"
+    | "consent_whatsapp"
+  >
+>;
 
 export const contactService = {
   async list({ includeDeleted = false }: { includeDeleted?: boolean } = {}) {
@@ -39,7 +77,7 @@ export const contactService = {
     if (!includeDeleted) q = q.eq("is_deleted", false);
     const { data, error } = await q;
     if (error) throw error;
-    return data as (HubContact & { hub_contact_links: HubContactLink[] })[];
+    return (data ?? []) as unknown as HubContactWithLinks[];
   },
 
   async listApps() {
@@ -52,7 +90,7 @@ export const contactService = {
     return data as { app_key: string; name: string; role: string }[];
   },
 
-  async update(id: string, updates: Partial<Pick<HubContact, "full_name" | "email" | "phone_e164" | "contact_type" | "tags" | "consent_email" | "consent_sms" | "consent_whatsapp">>) {
+  async update(id: string, updates: ContactEditableFields) {
     const { data, error } = await supabase
       .from("hub_contacts")
       .update({ ...updates, updated_at: new Date().toISOString() })
@@ -60,13 +98,21 @@ export const contactService = {
       .select()
       .single();
     if (error) throw error;
-    return data as HubContact;
+    return data as unknown as HubContact;
   },
 
   async softDelete(id: string) {
     const { error } = await supabase
       .from("hub_contacts")
       .update({ is_deleted: true, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  async restore(id: string) {
+    const { error } = await supabase
+      .from("hub_contacts")
+      .update({ is_deleted: false, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) throw error;
   },
