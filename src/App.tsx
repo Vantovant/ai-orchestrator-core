@@ -30,6 +30,7 @@ import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
 import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
 import VantoOSConsolePage from "@/pages/admin/VantoOSConsolePage";
 import Step5DConsolePage from "@/pages/admin/Step5DConsolePage";
+import ContactsPage from "@/pages/ContactsPage";
 
 // Marketing pages
 import HomePage from "@/pages/marketing/HomePage";
@@ -146,6 +147,7 @@ function AppRoutes() {
         <Route path="/manual" element={<UserManualPage />} />
         <Route path="/onboarding-emails" element={<OnboardingEmailsPage />} />
         <Route path="/voice-diary" element={<VoiceDiaryPage />} />
+        <Route path="/contacts" element={<ContactsPage />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />
