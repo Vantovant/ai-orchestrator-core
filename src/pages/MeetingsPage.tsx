@@ -33,7 +33,6 @@ export default function MeetingsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["meetings"] }); toast.success("Meeting deleted"); },
   });
 
-  return (
   const filtered = (meetings.data ?? []).filter((m) => {
     if (filter === "pending" && m.is_done) return false;
     if (filter === "done" && !m.is_done) return false;
