@@ -75,15 +75,17 @@ export default function ContactsPage() {
       );
     }
     if (appFilter !== "all") {
+      const match = (k: string) => k === appFilter || (appFilter === "getwell_hub" && k === "vanto_crm");
       list = list.filter(
-        (c) => c.source_app === appFilter || c.hub_contact_links.some((l) => l.app_key === appFilter)
+        (c) => match(c.source_app ?? "") || c.hub_contact_links.some((l) => match(l.app_key))
       );
     }
     return list;
   }, [contacts.data, search, appFilter]);
 
+  // vanto_crm and getwell_hub share the same runtime — surface only getwell_hub in the UI.
   const activeApps = useMemo(() => {
-    return (apps.data ?? []).filter((a) => a.role === "spoke");
+    return (apps.data ?? []).filter((a) => a.role === "spoke" && a.app_key !== "vanto_crm");
   }, [apps.data]);
 
   const stats = useMemo(() => {
@@ -99,14 +101,16 @@ export default function ContactsPage() {
     const needsAttention = live.filter((c) => c.name_needs_confirmation || !c.full_name || c.full_name.toLowerCase().startsWith("unnamed")).length;
     const deleted = all.length - live.length;
 
-    // per-app breakdown (source_app + linked apps combined)
+    // per-app breakdown (source_app + linked apps combined); fold vanto_crm into getwell_hub.
+    const alias = (k: string) => (k === "vanto_crm" ? "getwell_hub" : k);
     const perApp = new Map<string, number>();
     for (const c of live) {
       const keys = new Set<string>();
-      if (c.source_app) keys.add(c.source_app);
-      for (const l of c.hub_contact_links ?? []) keys.add(l.app_key);
+      if (c.source_app) keys.add(alias(c.source_app));
+      for (const l of c.hub_contact_links ?? []) keys.add(alias(l.app_key));
       for (const k of keys) perApp.set(k, (perApp.get(k) ?? 0) + 1);
     }
+
 
     // tag frequency
     const tagCounts = new Map<string, number>();
