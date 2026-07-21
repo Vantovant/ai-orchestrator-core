@@ -577,5 +577,116 @@ Deno.serve(async (req) => {
     }
   }
 
+  // ---------- HUB → SPOKE SEED (Phase G.A) ----------
+  // Admin-initiated bulk push. Walks hub_contacts and delivers signed
+  // contacts_upsert batches straight to a target spoke — independent of
+  // whether the spoke's pull loop is implemented.
+  if (action === "contacts_seed_spoke") {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
+      return json({ error: "auth_required" }, 401);
+    }
+    const authed = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: userRes } = await authed.auth.getUser();
+    const user = userRes?.user;
+    if (!user) return json({ error: "auth_required" }, 401);
+    const { data: isAdmin } = await supabase.rpc("has_role", { _user_id: user.id, _role: "admin" });
+    if (!isAdmin) return json({ error: "admin_only" }, 403);
+
+    const target_app_key = String(payload?.app_key ?? "");
+    if (!target_app_key) return json({ error: "missing_app_key" }, 400);
+    const batchSize = Math.min(Math.max(Number(payload?.batch_size ?? 200), 1), 500);
+    const maxBatches = Math.min(Math.max(Number(payload?.max_batches ?? 20), 1), 100);
+    const sinceRaw = payload?.since ? new Date(payload.since).toISOString() : null;
+
+    const { data: targetApp } = await supabase
+      .from("vos_suite_apps")
+      .select("app_key, allowed_contact_types, is_active, role")
+      .eq("app_key", target_app_key).maybeSingle();
+    if (!targetApp || !targetApp.is_active || targetApp.role !== "spoke") {
+      return json({ error: "unknown_or_inactive_spoke" }, 400);
+    }
+    const allowedTypes: string[] = (targetApp as any).allowed_contact_types ?? [];
+
+    let cursor = sinceRaw ?? new Date(0).toISOString();
+    let totalScanned = 0;
+    let totalSent = 0;
+    let totalDelivered = 0;
+    let totalFailed = 0;
+    const batchResults: any[] = [];
+
+    for (let i = 0; i < maxBatches; i++) {
+      let q = supabase.from("hub_contacts")
+        .select("id, full_name, phone_e164, email, contact_type, tags, consent_whatsapp, consent_email, consent_sms, unsubscribed_channels, version, updated_at, is_deleted")
+        .gt("updated_at", cursor)
+        .eq("is_deleted", false)
+        .order("updated_at", { ascending: true })
+        .limit(batchSize);
+      if (allowedTypes.length > 0) q = q.in("contact_type", allowedTypes);
+      const { data: rows, error: pullErr } = await q;
+      if (pullErr) return json({ error: "hub_read_failed", detail: pullErr.message }, 500);
+      if (!rows || rows.length === 0) break;
+
+      totalScanned += rows.length;
+      const records = rows
+        .filter((r) => r.email || r.phone_e164)
+        .map((r) => ({
+          remote_id: r.id,
+          full_name: r.full_name,
+          phone_e164: r.phone_e164,
+          email: r.email,
+          contact_type: r.contact_type,
+          tags: r.tags ?? [],
+          consent_whatsapp: !!r.consent_whatsapp,
+          consent_email: !!r.consent_email,
+          consent_sms: !!r.consent_sms,
+          unsubscribed_channels: r.unsubscribed_channels ?? [],
+          version: r.version ?? 1,
+        }));
+
+      cursor = rows[rows.length - 1].updated_at;
+
+      if (records.length === 0) continue;
+
+      const body = { kind: "contacts_upsert", records };
+      const res = await deliverToSpoke(target_app_key, body);
+      totalSent += records.length;
+      const ok = res.ok === true;
+      if (ok) totalDelivered += records.length; else totalFailed += records.length;
+      batchResults.push({
+        batch: i + 1,
+        sent: records.length,
+        status: res.status ?? 0,
+        ok,
+        error: ok ? null : ((res as any).error ?? (res as any).body?.error ?? null),
+      });
+
+      await supabase.from("vos_outbound_log").insert({
+        target_app: target_app_key,
+        event_name: "contacts_upsert",
+        idempotency_key: (res as any).nonce ?? crypto.randomUUID(),
+        outcome: ok ? "delivered" : "failed",
+        detail: { seed: true, batch: i + 1, count: records.length, spoke_status: res.status ?? 0 },
+      }).then(() => {}, () => {});
+
+      if (!ok) break; // stop on first failure so we don't hammer a broken spoke
+    }
+
+    return json({
+      ok: totalFailed === 0,
+      app_key: target_app_key,
+      scanned: totalScanned,
+      sent: totalSent,
+      delivered: totalDelivered,
+      failed: totalFailed,
+      next_since: cursor,
+      batches: batchResults,
+    });
+  }
+
   return json({ error: "unknown_action", action }, 400);
 });
