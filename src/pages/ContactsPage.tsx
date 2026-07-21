@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Contact, Search, Mail, Phone, MessageCircle, Link2, Smartphone, ShieldAlert, Pencil, RefreshCw } from "lucide-react";
-import { format } from "date-fns";
+import { Contact, Search, Mail, Phone, MessageCircle, Link2, Smartphone, ShieldAlert, Pencil, RefreshCw, Users, CheckCircle2, AlertCircle, Sparkles, Activity, Layers, Tag as TagIcon, TrendingUp } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
 
