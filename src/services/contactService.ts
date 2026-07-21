@@ -1,5 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export interface SyncResult {
+  app_key: string;
+  ok: boolean;
+  spoke_status?: number;
+  error?: string;
+}
+
+
 export interface HubContact {
   id: string;
   full_name: string;
