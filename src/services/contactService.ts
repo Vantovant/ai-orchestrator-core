@@ -194,6 +194,8 @@ export const contactService = {
       failed: data?.failed ?? 0,
       error: data?.ok ? undefined : (data?.error ?? "seed_failed"),
     };
+  },
+
 
   async merge(primaryId: string, duplicateIds: string[]): Promise<{ merged_duplicates: number; moved_links: number; removed_links: number }> {
     const { data, error } = await supabase.rpc("hub_merge_contacts", {
