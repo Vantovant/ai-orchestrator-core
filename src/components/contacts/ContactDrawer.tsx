@@ -441,9 +441,103 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet open={mergeOpen} onOpenChange={setMergeOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-[26rem] overflow-y-auto">
+          <SheetHeader className="pb-3 border-b">
+            <SheetTitle className="text-base flex items-center gap-2">
+              <GitMerge className="h-4 w-4" /> Merge into "{contact.full_name}"
+            </SheetTitle>
+            <p className="text-xs text-muted-foreground">
+              Pick the duplicate rows to fold into this contact. Their app links (Vanto CRM, Zazi, GetWell) move here, missing fields fill in, and duplicates are soft-deleted so spokes remove them on the next pull.
+            </p>
+          </SheetHeader>
+
+          <div className="py-3 space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="pl-7"
+                placeholder="Search by name, email, phone…"
+                value={mergeQuery}
+                onChange={(e) => setMergeQuery(e.target.value)}
+              />
+            </div>
+
+            <div className="text-[11px] text-muted-foreground">
+              {selectedDupIds.size} selected · showing {mergeCandidates.length} candidates
+            </div>
+
+            <div className="space-y-1 max-h-[55vh] overflow-y-auto pr-1">
+              {mergeCandidates.length === 0 ? (
+                <div className="text-xs text-muted-foreground py-6 text-center">
+                  No matching contacts.
+                </div>
+              ) : (
+                mergeCandidates.map((c) => {
+                  const checked = selectedDupIds.has(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedDupIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(c.id)) next.delete(c.id);
+                          else next.add(c.id);
+                          return next;
+                        })
+                      }
+                      className={`w-full text-left rounded-md border p-2 flex items-start gap-2 transition ${
+                        checked ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        readOnly
+                        checked={checked}
+                        className="mt-1 h-3.5 w-3.5 accent-primary"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{c.full_name}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">
+                          {[c.phone_e164, c.email].filter(Boolean).join(" · ") || "no phone or email"}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {c.hub_contact_links.map((l) => (
+                            <Badge key={`${c.id}-${l.app_key}`} variant="outline" className="text-[9px] capitalize">
+                              {l.app_key}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="sticky bottom-0 bg-background border-t pt-3 pb-2 flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setMergeOpen(false)}>
+              Cancel
+            </Button>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              onClick={() => mergeMut.mutate()}
+              disabled={mergeMut.isPending || selectedDupIds.size === 0}
+            >
+              <GitMerge className="h-4 w-4 mr-1" />
+              {mergeMut.isPending ? "Merging…" : `Merge ${selectedDupIds.size || ""}`.trim()}
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
+
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">{children}</h3>;
