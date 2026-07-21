@@ -12,7 +12,6 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BRIDGE_SECRET = Deno.env.get("SUITE_BRIDGE_SECRET") ?? "";
 const HASH_SALT = Deno.env.get("MAYTAPI_HASH_SALT") ?? "";
 
 const enc = new TextEncoder();
