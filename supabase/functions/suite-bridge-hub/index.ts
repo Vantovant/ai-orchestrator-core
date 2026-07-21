@@ -688,5 +688,88 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ---------- SPOKE-INITIATED PULL (contract: {action:"pull", body:{kind:"pull_contacts", since, limit}}) ----------
+  // Response shape: { contacts: [...], next_cursor } with hub_contacts_mirror field names.
+  if (action === "pull") {
+    const app_key = req.headers.get("x-bridge-app") ?? "";
+    const ts = req.headers.get("x-bridge-timestamp") ?? "";
+    const nonce = req.headers.get("x-bridge-nonce") ?? "";
+    const sig = req.headers.get("x-bridge-signature") ?? "";
+    const bodyStr = JSON.stringify(payload?.body ?? {});
+
+    if (!app_key || !ts || !nonce || !sig) return json({ error: "missing_signature_headers" }, 400);
+    if (Math.abs(Math.floor(Date.now() / 1000) - Number(ts)) > SIG_WINDOW_SECONDS) {
+      return json({ error: "stale_timestamp" }, 400);
+    }
+
+    const { data: app } = await supabase
+      .from("vos_suite_apps")
+      .select("app_key, bridge_secret_slot, is_active, allowed_contact_types")
+      .eq("app_key", app_key).maybeSingle();
+    if (!app || !app.is_active) return json({ error: "unknown_or_inactive_app" }, 401);
+
+    const secret = Deno.env.get(app.bridge_secret_slot);
+    if (!secret) return json({ error: "missing_secret" }, 500);
+    const expected = await hmacSha256Hex(secret, `${ts}.${nonce}.${app_key}.${bodyStr}`);
+    if (!timingSafeEqual(sig, expected)) return json({ error: "bad_signature" }, 401);
+
+    const body: any = payload?.body ?? {};
+    if (body?.kind !== "pull_contacts") return json({ error: "unsupported_pull_kind", kind: body?.kind }, 400);
+
+    const allowed: string[] = (app as any).allowed_contact_types ?? [];
+    const since = body?.since ? new Date(body.since).toISOString() : new Date(0).toISOString();
+    const limit = Math.min(Math.max(Number(body?.limit ?? 500), 1), 1000);
+    const requested: string[] = Array.isArray(body?.types) ? body.types : allowed;
+    const types = allowed.length > 0 ? requested.filter((t) => allowed.includes(t)) : requested;
+    if (types.length === 0) return json({ ok: true, contacts: [], next_cursor: since });
+
+    let q = supabase.from("hub_contacts")
+      .select("id, full_name, first_name, last_name, whatsapp_display_name, phone_e164, email, contact_type, lead_type, temperature, tags, consent_whatsapp, consent_email, consent_sms, unsubscribed_channels, notes, version, is_deleted, updated_at")
+      .gt("updated_at", since)
+      .in("contact_type", types)
+      .order("updated_at", { ascending: true })
+      .limit(limit);
+    if (allowed.length === 1 && allowed[0] === "email_marketing") {
+      q = q.not("email", "is", null);
+    }
+    const { data: rows, error } = await q;
+    if (error) return json({ error: "pull_failed", detail: error.message }, 500);
+
+    const contacts = (rows ?? []).map((r: any) => ({
+      id: r.id,
+      full_name: r.full_name,
+      first_name: r.first_name,
+      last_name: r.last_name,
+      whatsapp_display_name: r.whatsapp_display_name,
+      phone_e164: r.phone_e164,
+      email: r.email,
+      contact_type: r.contact_type,
+      lead_type: r.lead_type,
+      temperature: r.temperature,
+      tags: r.tags ?? [],
+      consent_whatsapp: !!r.consent_whatsapp,
+      consent_email: !!r.consent_email,
+      consent_sms: !!r.consent_sms,
+      unsubscribed_channels: r.unsubscribed_channels ?? [],
+      notes: r.notes,
+      version: r.version,
+      is_deleted: !!r.is_deleted,
+      hub_updated_at: r.updated_at,
+    }));
+
+    const next_cursor = contacts.length > 0 ? contacts[contacts.length - 1].hub_updated_at : since;
+
+    if (contacts.length > 0) {
+      const ids = contacts.map((c) => c.id);
+      await supabase.from("hub_contact_links")
+        .update({ last_pulled_at: new Date().toISOString() })
+        .eq("app_key", app_key)
+        .in("hub_contact_id", ids);
+    }
+
+    return json({ ok: true, contacts, next_cursor });
+  }
+
   return json({ error: "unknown_action", action }, 400);
+
 });
