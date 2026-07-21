@@ -48,6 +48,19 @@ export default function ContactsPage() {
     },
   });
 
+  const seedMutation = useMutation({
+    mutationFn: (app_key: string) => contactService.seedSpoke(app_key),
+    onSuccess: (r, app_key) => {
+      if (r.ok) {
+        toast.success(`Seeded ${r.delivered.toLocaleString()} contacts to ${app_key} (scanned ${r.scanned}).`, { duration: 6000 });
+      } else {
+        toast.error(`Seed to ${app_key} partial/failed: delivered ${r.delivered}/${r.sent}. ${r.error ?? ""}`.trim(), { duration: 8000 });
+      }
+      queryClient.invalidateQueries({ queryKey: ["hub-contacts"] });
+    },
+    onError: (err) => toast.error(`Seed failed: ${(err as Error).message}`),
+  });
+
 
   const filtered = useMemo(() => {
     let list = contacts.data ?? [];
