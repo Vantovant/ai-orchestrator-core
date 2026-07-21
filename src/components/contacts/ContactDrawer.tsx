@@ -26,7 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Link2, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
+import { Link2, Trash2, AlertTriangle, RotateCcw, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 
 const CONTACT_SOURCES = ["unknown", "facebook", "twilio", "maytapi", "manual", "google", "email"];
@@ -103,6 +103,25 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
+  });
+
+  const syncOneMut = useMutation({
+    mutationFn: async () => {
+      if (!contact) throw new Error("No contact");
+      return contactService.syncOne(contact.id);
+    },
+    onSuccess: (results) => {
+      const ok = results.filter((r) => r.ok).length;
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        toast.success(`Sync sent to ${ok} connected app${ok === 1 ? "" : "s"}.`);
+      } else {
+        toast.error(`${failed.length} app${failed.length === 1 ? "" : "s"} failed. ${ok} succeeded.`);
+        failed.forEach((r) => toast.error(`${r.app_key}: ${r.error ?? "no response"}`));
+      }
+      qc.invalidateQueries({ queryKey: ["hub-contacts"] });
+    },
+    onError: (e: Error) => toast.error(`Sync failed: ${e.message}`),
   });
 
   const deleteMut = useMutation({
@@ -320,6 +339,16 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
               )}
             </Button>
             <div className="flex-1" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => syncOneMut.mutate()}
+              disabled={syncOneMut.isPending || saveMut.isPending}
+              title="Push this contact to all connected apps now"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${syncOneMut.isPending ? "animate-spin" : ""}`} />
+              {syncOneMut.isPending ? "Syncing…" : "Sync now"}
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
               {saveMut.isPending ? "Saving…" : "Save"}
