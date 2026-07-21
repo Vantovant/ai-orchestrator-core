@@ -1,0 +1,1 @@
+UPDATE public.vos_suite_apps SET is_active = false, allowed_contact_types = ARRAY[]::text[], updated_at = now() WHERE app_key = 'mlm_course';
