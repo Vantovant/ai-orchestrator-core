@@ -83,7 +83,17 @@ export default function ContactsPage() {
             Central hub contacts synced from Vanto CRM, Zazi Email, and other suite apps.
           </p>
         </div>
+        <Button
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          size="sm"
+          className="gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+          {syncMutation.isPending ? "Syncing..." : "Sync now"}
+        </Button>
       </div>
+
 
       <Card className="border-border/60">
         <CardHeader className="pb-3">
