@@ -30,6 +30,7 @@ import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
 import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
 import VantoOSConsolePage from "@/pages/admin/VantoOSConsolePage";
 import Step5DConsolePage from "@/pages/admin/Step5DConsolePage";
+import MaytapiHubPage from "@/pages/admin/MaytapiHubPage";
 import ContactsPage from "@/pages/ContactsPage";
 
 // Marketing pages
