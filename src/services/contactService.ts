@@ -127,7 +127,9 @@ export const contactService = {
 
   async _pushPullToSpokes(extraBody: Record<string, unknown> = {}): Promise<SyncResult[]> {
     const apps = await this.listApps();
-    const spokes = apps.filter((a) => a.role === "spoke");
+    const spokes = apps.filter(
+      (a) => a.role === "spoke" && Array.isArray(a.allowed_contact_types) && a.allowed_contact_types.length > 0,
+    );
     const results: SyncResult[] = [];
     for (const app of spokes) {
       try {
