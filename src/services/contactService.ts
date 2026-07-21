@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface SyncResult {
   app_key: string;
   ok: boolean;
-  spoke_status?: number;
+  spoke_status?: number | null;
   error?: string;
 }
 
