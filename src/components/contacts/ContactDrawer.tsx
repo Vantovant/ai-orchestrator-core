@@ -70,6 +70,58 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
   const [form, setForm] = useState<ContactEditableFields>({});
   const [tagInput, setTagInput] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeQuery, setMergeQuery] = useState("");
+  const [selectedDupIds, setSelectedDupIds] = useState<Set<string>>(new Set());
+
+  const { data: allContacts = [] } = useQuery({
+    queryKey: ["hub-contacts"],
+    queryFn: () => contactService.list(),
+    enabled: mergeOpen,
+  });
+
+  const mergeCandidates = useMemo(() => {
+    if (!contact) return [] as HubContactWithLinks[];
+    const q = mergeQuery.trim().toLowerCase();
+    return allContacts
+      .filter((c) => c.id !== contact.id && !c.is_deleted)
+      .filter((c) => {
+        if (!q) return true;
+        return (
+          c.full_name.toLowerCase().includes(q) ||
+          (c.email ?? "").toLowerCase().includes(q) ||
+          (c.phone_e164 ?? "").toLowerCase().includes(q) ||
+          (c.whatsapp_display_name ?? "").toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 25);
+  }, [allContacts, contact, mergeQuery]);
+
+  const mergeMut = useMutation({
+    mutationFn: async () => {
+      if (!contact) throw new Error("No contact");
+      if (selectedDupIds.size === 0) throw new Error("Select at least one duplicate to merge");
+      return contactService.merge(contact.id, Array.from(selectedDupIds));
+    },
+    onSuccess: async (r) => {
+      toast.success(
+        `Merged ${r.merged_duplicates} duplicate${r.merged_duplicates === 1 ? "" : "s"}. Moved ${r.moved_links} app link${r.moved_links === 1 ? "" : "s"}.`,
+      );
+      qc.invalidateQueries({ queryKey: ["hub-contacts"] });
+      setMergeOpen(false);
+      setSelectedDupIds(new Set());
+      setMergeQuery("");
+      // Push consolidated state (and tombstones for the duplicates) to spokes
+      try {
+        await contactService.syncNow();
+        toast.success("Pushed merged state to connected apps.");
+      } catch (e) {
+        toast.error(`Merged, but push to spokes failed: ${(e as Error).message}`);
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
 
   useEffect(() => {
     setForm(initialFromContact(contact));
