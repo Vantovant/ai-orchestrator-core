@@ -18,6 +18,7 @@ export default function ContactsPage() {
   const [appFilter, setAppFilter] = useState<string>("all");
   const [showDeleted, setShowDeleted] = useState(false);
   const [editing, setEditing] = useState<HubContactWithLinks | null>(null);
+  const queryClient = useQueryClient();
 
   const contacts = useQuery({
     queryKey: ["hub-contacts", { includeDeleted: showDeleted }],
@@ -25,6 +26,27 @@ export default function ContactsPage() {
   });
 
   const apps = useQuery({ queryKey: ["suite-apps"], queryFn: () => contactService.listApps() });
+
+  const syncMutation = useMutation({
+    mutationFn: () => contactService.syncNow(),
+    onSuccess: (results) => {
+      const ok = results.filter((r) => r.ok).length;
+      const failed = results.filter((r) => !r.ok).length;
+      if (failed === 0) {
+        toast.success(`Sync sent to ${ok} connected app${ok === 1 ? "" : "s"}. Spokes will pull latest contacts on their next cycle.`, { duration: 5000 });
+      } else {
+        toast.error(`${failed} app${failed === 1 ? "" : "s"} failed to receive sync. ${ok} succeeded.`, { duration: 6000 });
+      }
+      results.forEach((r) => {
+        if (!r.ok) toast.error(`${r.app_key}: ${r.error}`);
+      });
+      queryClient.invalidateQueries({ queryKey: ["hub-contacts"] });
+    },
+    onError: (err) => {
+      toast.error(`Sync failed: ${(err as Error).message}`);
+    },
+  });
+
 
   const filtered = useMemo(() => {
     let list = contacts.data ?? [];
