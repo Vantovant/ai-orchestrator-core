@@ -507,7 +507,8 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {c.hub_contact_links.map((l) => (
                             <Badge key={`${c.id}-${l.app_key}`} variant="outline" className="text-[9px] capitalize">
-                              {l.app_key}
+                              {l.app_key === "vanto_crm" ? "getwell_hub" : l.app_key}
+
                             </Badge>
                           ))}
                         </div>
