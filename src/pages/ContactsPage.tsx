@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contactService, type HubContactWithLinks } from "@/services/contactService";
 import ContactDrawer from "@/components/contacts/ContactDrawer";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -8,14 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Contact, Search, Mail, Phone, MessageCircle, Link2, Smartphone, ShieldAlert, Pencil } from "lucide-react";
+import { Contact, Search, Mail, Phone, MessageCircle, Link2, Smartphone, ShieldAlert, Pencil, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
+
 
 export default function ContactsPage() {
   const [search, setSearch] = useState("");
   const [appFilter, setAppFilter] = useState<string>("all");
   const [showDeleted, setShowDeleted] = useState(false);
   const [editing, setEditing] = useState<HubContactWithLinks | null>(null);
+  const queryClient = useQueryClient();
 
   const contacts = useQuery({
     queryKey: ["hub-contacts", { includeDeleted: showDeleted }],
@@ -23,6 +26,27 @@ export default function ContactsPage() {
   });
 
   const apps = useQuery({ queryKey: ["suite-apps"], queryFn: () => contactService.listApps() });
+
+  const syncMutation = useMutation({
+    mutationFn: () => contactService.syncNow(),
+    onSuccess: (results) => {
+      const ok = results.filter((r) => r.ok).length;
+      const failed = results.filter((r) => !r.ok).length;
+      if (failed === 0) {
+        toast.success(`Sync sent to ${ok} connected app${ok === 1 ? "" : "s"}. Spokes will pull latest contacts on their next cycle.`, { duration: 5000 });
+      } else {
+        toast.error(`${failed} app${failed === 1 ? "" : "s"} failed to receive sync. ${ok} succeeded.`, { duration: 6000 });
+      }
+      results.forEach((r) => {
+        if (!r.ok) toast.error(`${r.app_key}: ${r.error}`);
+      });
+      queryClient.invalidateQueries({ queryKey: ["hub-contacts"] });
+    },
+    onError: (err) => {
+      toast.error(`Sync failed: ${(err as Error).message}`);
+    },
+  });
+
 
   const filtered = useMemo(() => {
     let list = contacts.data ?? [];
@@ -59,7 +83,17 @@ export default function ContactsPage() {
             Central hub contacts synced from Vanto CRM, Zazi Email, and other suite apps.
           </p>
         </div>
+        <Button
+          onClick={() => syncMutation.mutate()}
+          disabled={syncMutation.isPending}
+          size="sm"
+          className="gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+          {syncMutation.isPending ? "Syncing..." : "Sync now"}
+        </Button>
       </div>
+
 
       <Card className="border-border/60">
         <CardHeader className="pb-3">
