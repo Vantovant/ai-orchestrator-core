@@ -94,7 +94,12 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { ok: false, error: "method_not_allowed" });
 
   const rawBody = await req.text();
-  const verified = await verifySignature(req, rawBody);
+
+  const sb = createClient(SUPABASE_URL, SERVICE_ROLE, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const verified = await verifySignature(req, rawBody, sb);
   if (!verified.ok) return json(401, { ok: false, error: verified.error });
   const app_key = verified.app_key;
 
@@ -106,10 +111,6 @@ Deno.serve(async (req) => {
   }
   const action = parsed?.action as string;
   const body = parsed?.body ?? {};
-
-  const sb = createClient(SUPABASE_URL, SERVICE_ROLE, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
   try {
     switch (action) {
