@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Link2, Trash2, AlertTriangle, RotateCcw, RefreshCw } from "lucide-react";
+import { Link2, Trash2, AlertTriangle, RotateCcw, RefreshCw, GitMerge, Search } from "lucide-react";
 import { format } from "date-fns";
 
 const CONTACT_SOURCES = ["unknown", "facebook", "twilio", "maytapi", "manual", "google", "email"];
