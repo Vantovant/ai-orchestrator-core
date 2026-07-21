@@ -356,7 +356,7 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
             <section className="space-y-2">
               <SectionTitle>Linked Apps</SectionTitle>
               <div className="text-xs text-muted-foreground">
-                Source: <span className="font-medium text-foreground">{contact.source_app}</span> · v{contact.version}
+                Source: <span className="font-medium text-foreground">{contact.source_app === "vanto_crm" ? "getwell_hub" : contact.source_app}</span> · v{contact.version}
                 {contact.last_synced_at && (
                   <> · last synced {format(new Date(contact.last_synced_at), "dd MMM yyyy HH:mm")}</>
                 )}
