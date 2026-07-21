@@ -48,6 +48,19 @@ export default function ContactsPage() {
     },
   });
 
+  const seedMutation = useMutation({
+    mutationFn: (app_key: string) => contactService.seedSpoke(app_key),
+    onSuccess: (r, app_key) => {
+      if (r.ok) {
+        toast.success(`Seeded ${r.delivered.toLocaleString()} contacts to ${app_key} (scanned ${r.scanned}).`, { duration: 6000 });
+      } else {
+        toast.error(`Seed to ${app_key} partial/failed: delivered ${r.delivered}/${r.sent}. ${r.error ?? ""}`.trim(), { duration: 8000 });
+      }
+      queryClient.invalidateQueries({ queryKey: ["hub-contacts"] });
+    },
+    onError: (err) => toast.error(`Seed failed: ${(err as Error).message}`),
+  });
+
 
   const filtered = useMemo(() => {
     let list = contacts.data ?? [];
@@ -214,21 +227,34 @@ export default function ContactsPage() {
             )}
             {activeApps.map((app) => {
               const count = stats.perApp.get(app.app_key) ?? 0;
+              const seeding = seedMutation.isPending && seedMutation.variables === app.app_key;
               return (
-                <button
-                  key={app.app_key}
-                  type="button"
-                  onClick={() => setAppFilter(app.app_key)}
-                  className="w-full text-left group"
-                >
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="font-medium capitalize group-hover:text-primary transition-colors">{app.name}</span>
-                    <span className="text-muted-foreground tabular-nums">
-                      {count.toLocaleString()} <span className="text-xs">({pct(count)}%)</span>
+                <div key={app.app_key} className="w-full">
+                  <div className="flex items-center justify-between text-sm gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setAppFilter(app.app_key)}
+                      className="flex-1 text-left font-medium capitalize hover:text-primary transition-colors"
+                    >
+                      {app.name}
+                    </button>
+                    <span className="text-muted-foreground tabular-nums text-xs">
+                      {count.toLocaleString()} ({pct(count)}%)
                     </span>
+                    {count === 0 && stats.total > 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-xs"
+                        disabled={seedMutation.isPending}
+                        onClick={(e) => { e.stopPropagation(); seedMutation.mutate(app.app_key); }}
+                      >
+                        {seeding ? "Seeding…" : "Seed"}
+                      </Button>
+                    )}
                   </div>
                   <Progress value={pct(count)} className="h-2 mt-1" />
-                </button>
+                </div>
               );
             })}
           </CardContent>

@@ -181,6 +181,22 @@ export const contactService = {
     return this._pushPullToSpokes({ contact_id: contactId, targeted: true });
   },
 
+  async seedSpoke(app_key: string): Promise<{ ok: boolean; scanned: number; sent: number; delivered: number; failed: number; error?: string }> {
+    const { data, error } = await supabase.functions.invoke("suite-bridge-hub", {
+      body: { action: "contacts_seed_spoke", app_key, batch_size: 200, max_batches: 20 },
+    });
+    if (error) return { ok: false, scanned: 0, sent: 0, delivered: 0, failed: 0, error: error.message };
+    return {
+      ok: !!data?.ok,
+      scanned: data?.scanned ?? 0,
+      sent: data?.sent ?? 0,
+      delivered: data?.delivered ?? 0,
+      failed: data?.failed ?? 0,
+      error: data?.ok ? undefined : (data?.error ?? "seed_failed"),
+    };
+  },
+
+
   async merge(primaryId: string, duplicateIds: string[]): Promise<{ merged_duplicates: number; moved_links: number; removed_links: number }> {
     const { data, error } = await supabase.rpc("hub_merge_contacts", {
       primary_id: primaryId,
