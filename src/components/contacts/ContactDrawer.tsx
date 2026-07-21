@@ -391,7 +391,18 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
                 <><Trash2 className="h-4 w-4 mr-1" /> Delete</>
               )}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMergeOpen(true)}
+              disabled={contact.is_deleted}
+              title="Merge duplicate contacts into this one"
+            >
+              <GitMerge className="h-4 w-4 mr-1" />
+              Merge…
+            </Button>
             <div className="flex-1" />
+
             <Button
               variant="outline"
               size="sm"
