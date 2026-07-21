@@ -125,9 +125,9 @@ export const contactService = {
     if (error) throw error;
   },
 
-  async syncNow(): Promise<SyncResult[]> {
+  async _pushPullToSpokes(extraBody: Record<string, unknown> = {}): Promise<SyncResult[]> {
     const apps = await this.listApps();
-    const spokes = apps.filter((a) => a.role === "spoke" && a.is_active);
+    const spokes = apps.filter((a) => a.role === "spoke");
     const results: SyncResult[] = [];
     for (const app of spokes) {
       try {
@@ -135,7 +135,7 @@ export const contactService = {
           body: {
             action: "send",
             app_key: app.app_key,
-            body: { kind: "contacts_pull" },
+            body: { kind: "contacts_pull", ...extraBody },
           },
         });
         if (error) throw error;
@@ -147,7 +147,7 @@ export const contactService = {
             typeof body === "string"
               ? body.slice(0, 140)
               : body?.error || body?.message || (body ? JSON.stringify(body).slice(0, 140) : undefined);
-          errMsg = bodyErr || data?.error || `HTTP ${data?.spoke_status ?? "?"}`;
+          errMsg = bodyErr || data?.error || `HTTP ${data?.spoke_status ?? "no response"}`;
         }
         results.push({
           app_key: app.app_key,
@@ -164,6 +164,19 @@ export const contactService = {
       }
     }
     return results;
+  },
+
+  async syncNow(): Promise<SyncResult[]> {
+    return this._pushPullToSpokes();
+  },
+
+  async syncOne(contactId: string): Promise<SyncResult[]> {
+    // Touch updated_at so spokes pulling by cursor pick this contact up.
+    await supabase
+      .from("hub_contacts")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", contactId);
+    return this._pushPullToSpokes({ contact_id: contactId, targeted: true });
   },
 };
 
