@@ -105,6 +105,25 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const syncOneMut = useMutation({
+    mutationFn: async () => {
+      if (!contact) throw new Error("No contact");
+      return contactService.syncOne(contact.id);
+    },
+    onSuccess: (results) => {
+      const ok = results.filter((r) => r.ok).length;
+      const failed = results.filter((r) => !r.ok);
+      if (failed.length === 0) {
+        toast.success(`Sync sent to ${ok} connected app${ok === 1 ? "" : "s"}.`);
+      } else {
+        toast.error(`${failed.length} app${failed.length === 1 ? "" : "s"} failed. ${ok} succeeded.`);
+        failed.forEach((r) => toast.error(`${r.app_key}: ${r.error ?? "no response"}`));
+      }
+      qc.invalidateQueries({ queryKey: ["hub-contacts"] });
+    },
+    onError: (e: Error) => toast.error(`Sync failed: ${e.message}`),
+  });
+
   const deleteMut = useMutation({
     mutationFn: async () => {
       if (!contact) throw new Error("No contact");
