@@ -91,11 +91,11 @@ export const contactService = {
   async listApps() {
     const { data, error } = await supabase
       .from("vos_suite_apps")
-      .select("app_key, name, role")
+      .select("app_key, name, role, allowed_contact_types")
       .eq("is_active", true)
       .order("name");
     if (error) throw error;
-    return data as { app_key: string; name: string; role: string }[];
+    return data as { app_key: string; name: string; role: string; allowed_contact_types: string[] | null }[];
   },
 
   async update(id: string, updates: ContactEditableFields) {
