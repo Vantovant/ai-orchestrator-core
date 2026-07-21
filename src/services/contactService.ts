@@ -180,5 +180,20 @@ export const contactService = {
       .eq("id", contactId);
     return this._pushPullToSpokes({ contact_id: contactId, targeted: true });
   },
+
+  async merge(primaryId: string, duplicateIds: string[]): Promise<{ merged_duplicates: number; moved_links: number; removed_links: number }> {
+    const { data, error } = await supabase.rpc("hub_merge_contacts", {
+      primary_id: primaryId,
+      duplicate_ids: duplicateIds,
+    });
+    if (error) throw error;
+    const r = (data ?? {}) as { merged_duplicates?: number; moved_links?: number; removed_links?: number };
+    return {
+      merged_duplicates: r.merged_duplicates ?? 0,
+      moved_links: r.moved_links ?? 0,
+      removed_links: r.removed_links ?? 0,
+    };
+  },
 };
+
 
