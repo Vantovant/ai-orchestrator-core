@@ -11,6 +11,12 @@ const corsHeaders = {
 };
 
 const SIG_WINDOW_SECONDS = 300;
+const OUTBOUND_SIGNING_ALIAS: Record<string, string> = {
+  // getwell_hub currently shares the Vanto CRM spoke runtime. That runtime verifies
+  // inbound hub messages with the vanto_crm signing identity, while the registry
+  // still keeps getwell_hub as a distinct contact-sync target.
+  getwell_hub: "vanto_crm",
+};
 
 const enc = new TextEncoder();
 
@@ -61,13 +67,28 @@ Deno.serve(async (req) => {
     if (!app) return { ok: false, error: "unknown_app", status: 404, nonce: null };
     if (!app.is_active) return { ok: false, error: "app_inactive", status: 400, nonce: null };
     if (app.role !== "spoke") return { ok: false, error: "not_a_spoke", status: 400, nonce: null };
-    const secret = Deno.env.get(app.bridge_secret_slot);
+    let signingApp = app;
+    const signingAlias = OUTBOUND_SIGNING_ALIAS[app.app_key];
+    if (signingAlias) {
+      const { data: aliasApp } = await supabase
+        .from("vos_suite_apps")
+        .select("app_key, bridge_secret_slot, is_active")
+        .eq("app_key", signingAlias)
+        .maybeSingle();
+      if (!aliasApp || !aliasApp.is_active) return { ok: false, error: "signing_alias_inactive", status: 500, nonce: null };
+      signingApp = { ...app, app_key: aliasApp.app_key, bridge_secret_slot: aliasApp.bridge_secret_slot };
+    }
+
+    const secret = Deno.env.get(signingApp.bridge_secret_slot);
     if (!secret) return { ok: false, error: "missing_secret", status: 500, nonce: null };
 
-    const bodyStr = JSON.stringify(body);
+    const outboundBody = signingAlias && typeof body === "object" && body !== null
+      ? { ...(body as Record<string, unknown>), target_app_key: app.app_key }
+      : body;
+    const bodyStr = JSON.stringify(outboundBody);
     const ts = Math.floor(Date.now() / 1000).toString();
     const nonce = crypto.randomUUID();
-    const sig = await hmacSha256Hex(secret, `${ts}.${nonce}.${app.app_key}.${bodyStr}`);
+    const sig = await hmacSha256Hex(secret, `${ts}.${nonce}.${signingApp.app_key}.${bodyStr}`);
     const target = new URL("/functions/v1/suite-bridge-spoke", app.url).toString();
 
     try {
