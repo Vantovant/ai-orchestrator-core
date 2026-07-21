@@ -3234,6 +3234,126 @@ export type Database = {
         }
         Relationships: []
       }
+      suite_maytapi_cooldowns: {
+        Row: {
+          cooldown_seconds: number
+          created_at: string
+          event_class: string
+          notes: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cooldown_seconds: number
+          created_at?: string
+          event_class: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cooldown_seconds?: number
+          created_at?: string
+          event_class?: string
+          notes?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      suite_maytapi_dnc: {
+        Row: {
+          cleared_at: string | null
+          created_at: string
+          metadata: Json
+          phone_hash: string
+          phone_last4: string
+          reason: string
+          recorded_at: string
+          source_spoke: string
+          updated_at: string
+        }
+        Insert: {
+          cleared_at?: string | null
+          created_at?: string
+          metadata?: Json
+          phone_hash: string
+          phone_last4: string
+          reason: string
+          recorded_at?: string
+          source_spoke: string
+          updated_at?: string
+        }
+        Update: {
+          cleared_at?: string | null
+          created_at?: string
+          metadata?: Json
+          phone_hash?: string
+          phone_last4?: string
+          reason?: string
+          recorded_at?: string
+          source_spoke?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      suite_maytapi_events: {
+        Row: {
+          campaign_type: string | null
+          created_at: string
+          delivered_at: string | null
+          direction: string
+          failed_at: string | null
+          id: string
+          maytapi_message_id: string | null
+          metadata: Json
+          phone_hash: string
+          phone_last4: string
+          read_at: string | null
+          sent_at: string
+          spoke_app_key: string
+          spoke_event_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          campaign_type?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          direction: string
+          failed_at?: string | null
+          id?: string
+          maytapi_message_id?: string | null
+          metadata?: Json
+          phone_hash: string
+          phone_last4: string
+          read_at?: string | null
+          sent_at?: string
+          spoke_app_key: string
+          spoke_event_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          campaign_type?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          direction?: string
+          failed_at?: string | null
+          id?: string
+          maytapi_message_id?: string | null
+          metadata?: Json
+          phone_hash?: string
+          phone_last4?: string
+          read_at?: string | null
+          sent_at?: string
+          spoke_app_key?: string
+          spoke_event_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       tags: {
         Row: {
           color: string | null
