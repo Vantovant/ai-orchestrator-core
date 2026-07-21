@@ -141,6 +141,7 @@ function AppRoutes() {
         <Route path="/admin/health" element={<AdminHealthPage />} />
         <Route path="/admin/vanto-os" element={<VantoOSConsolePage />} />
         <Route path="/admin/step5d" element={<Step5DConsolePage />} />
+        <Route path="/admin/maytapi" element={<MaytapiHubPage />} />
         <Route path="/dashboard/partner" element={<PortfolioPartnerPage />} />
         <Route path="/knowledge" element={<KnowledgeBasePage />} />
         <Route path="/investor-report" element={<InvestorReportPage />} />
