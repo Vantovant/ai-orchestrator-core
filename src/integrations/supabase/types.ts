@@ -5318,6 +5318,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      hub_merge_contacts: {
+        Args: { duplicate_ids: string[]; primary_id: string }
+        Returns: Json
+      }
       priority_rank: { Args: { p: string }; Returns: number }
       revoke_user_role: {
         Args: {
