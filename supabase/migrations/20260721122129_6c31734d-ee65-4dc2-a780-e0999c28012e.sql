@@ -1,0 +1,1 @@
+UPDATE public.vos_suite_apps SET url = 'https://nqyyvqcmcyggvlcswkio.supabase.co/functions/v1/suite-bridge-spoke', allowed_contact_types = ARRAY['mlm','mixed']::text[], is_active = true, updated_at = now() WHERE app_key = 'getwell_hub';
