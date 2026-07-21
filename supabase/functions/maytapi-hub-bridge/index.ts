@@ -12,7 +12,6 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const BRIDGE_SECRET = Deno.env.get("SUITE_BRIDGE_SECRET") ?? "";
 const HASH_SALT = Deno.env.get("MAYTAPI_HASH_SALT") ?? "";
 
 const enc = new TextEncoder();
@@ -60,7 +59,7 @@ function json(status: number, body: unknown) {
   });
 }
 
-async function verifySignature(req: Request, rawBody: string): Promise<
+async function verifySignature(req: Request, rawBody: string, sb: any): Promise<
   { ok: true; app_key: string } | { ok: false; error: string }
 > {
   const app_key = req.headers.get("x-bridge-app") ?? "";
@@ -68,14 +67,24 @@ async function verifySignature(req: Request, rawBody: string): Promise<
   const nonce = req.headers.get("x-bridge-nonce") ?? "";
   const sig = req.headers.get("x-bridge-signature") ?? "";
   if (!app_key || !ts || !nonce || !sig) return { ok: false, error: "missing_headers" };
-  if (!BRIDGE_SECRET) return { ok: false, error: "hub_secret_missing" };
 
   const drift = Math.abs(Date.now() - Number(ts));
   if (!Number.isFinite(drift) || drift > 5 * 60 * 1000) {
     return { ok: false, error: "timestamp_drift" };
   }
 
-  const expected = await hmacHex(BRIDGE_SECRET, `${ts}.${nonce}.${app_key}.${rawBody}`);
+  // Resolve per-spoke secret via registry (bridge_secret_slot env var)
+  const { data: app } = await sb
+    .from("vos_suite_apps")
+    .select("app_key, bridge_secret_slot, is_active")
+    .eq("app_key", app_key)
+    .maybeSingle();
+  if (!app) return { ok: false, error: "unknown_app_key" };
+  if (!app.is_active) return { ok: false, error: "app_inactive" };
+  const secret = Deno.env.get(app.bridge_secret_slot) ?? "";
+  if (!secret) return { ok: false, error: `secret_missing:${app.bridge_secret_slot}` };
+
+  const expected = await hmacHex(secret, `${ts}.${nonce}.${app_key}.${rawBody}`);
   if (expected !== sig) return { ok: false, error: "bad_signature" };
   return { ok: true, app_key };
 }
@@ -85,7 +94,12 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json(405, { ok: false, error: "method_not_allowed" });
 
   const rawBody = await req.text();
-  const verified = await verifySignature(req, rawBody);
+
+  const sb = createClient(SUPABASE_URL, SERVICE_ROLE, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const verified = await verifySignature(req, rawBody, sb);
   if (!verified.ok) return json(401, { ok: false, error: verified.error });
   const app_key = verified.app_key;
 
@@ -97,10 +111,6 @@ Deno.serve(async (req) => {
   }
   const action = parsed?.action as string;
   const body = parsed?.body ?? {};
-
-  const sb = createClient(SUPABASE_URL, SERVICE_ROLE, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
 
   try {
     switch (action) {
