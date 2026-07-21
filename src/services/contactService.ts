@@ -127,7 +127,7 @@ export const contactService = {
 
   async syncNow(): Promise<SyncResult[]> {
     const apps = await this.listApps();
-    const spokes = apps.filter((a) => a.role === "spoke");
+    const spokes = apps.filter((a) => a.role === "spoke" && a.is_active);
     const results: SyncResult[] = [];
     for (const app of spokes) {
       try {
@@ -139,16 +139,27 @@ export const contactService = {
           },
         });
         if (error) throw error;
+        const ok = data?.ok ?? false;
+        let errMsg: string | undefined;
+        if (!ok) {
+          const body = data?.spoke_body;
+          const bodyErr =
+            typeof body === "string"
+              ? body.slice(0, 140)
+              : body?.error || body?.message || (body ? JSON.stringify(body).slice(0, 140) : undefined);
+          errMsg = bodyErr || data?.error || `HTTP ${data?.spoke_status ?? "?"}`;
+        }
         results.push({
           app_key: app.app_key,
-          ok: data?.ok ?? true,
-          spoke_status: data?.spoke_status ?? 200,
+          ok,
+          spoke_status: data?.spoke_status ?? null,
+          error: errMsg,
         });
       } catch (err) {
         results.push({
           app_key: app.app_key,
           ok: false,
-          error: (err as Error).message,
+          error: (err as Error).message || "request_failed",
         });
       }
     }
