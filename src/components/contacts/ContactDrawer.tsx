@@ -356,7 +356,7 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
             <section className="space-y-2">
               <SectionTitle>Linked Apps</SectionTitle>
               <div className="text-xs text-muted-foreground">
-                Source: <span className="font-medium text-foreground">{contact.source_app}</span> · v{contact.version}
+                Source: <span className="font-medium text-foreground">{contact.source_app === "vanto_crm" ? "getwell_hub" : contact.source_app}</span> · v{contact.version}
                 {contact.last_synced_at && (
                   <> · last synced {format(new Date(contact.last_synced_at), "dd MMM yyyy HH:mm")}</>
                 )}
@@ -367,7 +367,8 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
                 ) : (
                   contact.hub_contact_links.map((l, i) => (
                     <Badge key={l.id ?? `${l.app_key}-${i}`} variant="outline" className="text-[10px] gap-1 capitalize">
-                      <Link2 className="h-3 w-3" /> {l.app_key}
+                      <Link2 className="h-3 w-3" /> {l.app_key === "vanto_crm" ? "getwell_hub" : l.app_key}
+
                     </Badge>
                   ))
                 )}
@@ -506,7 +507,8 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
                         <div className="flex flex-wrap gap-1 mt-1">
                           {c.hub_contact_links.map((l) => (
                             <Badge key={`${c.id}-${l.app_key}`} variant="outline" className="text-[9px] capitalize">
-                              {l.app_key}
+                              {l.app_key === "vanto_crm" ? "getwell_hub" : l.app_key}
+
                             </Badge>
                           ))}
                         </div>
