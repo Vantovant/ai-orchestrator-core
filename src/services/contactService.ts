@@ -124,4 +124,35 @@ export const contactService = {
       .eq("id", id);
     if (error) throw error;
   },
+
+  async syncNow(): Promise<SyncResult[]> {
+    const apps = await this.listApps();
+    const spokes = apps.filter((a) => a.role === "spoke");
+    const results: SyncResult[] = [];
+    for (const app of spokes) {
+      try {
+        const { data, error } = await supabase.functions.invoke("suite-bridge-hub", {
+          body: {
+            action: "send",
+            app_key: app.app_key,
+            body: { kind: "contacts_pull" },
+          },
+        });
+        if (error) throw error;
+        results.push({
+          app_key: app.app_key,
+          ok: data?.ok ?? true,
+          spoke_status: data?.spoke_status ?? 200,
+        });
+      } catch (err) {
+        results.push({
+          app_key: app.app_key,
+          ok: false,
+          error: (err as Error).message,
+        });
+      }
+    }
+    return results;
+  },
 };
+
