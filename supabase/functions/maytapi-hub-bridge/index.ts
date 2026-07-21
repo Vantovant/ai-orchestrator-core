@@ -59,7 +59,7 @@ function json(status: number, body: unknown) {
   });
 }
 
-async function verifySignature(req: Request, rawBody: string): Promise<
+async function verifySignature(req: Request, rawBody: string, sb: any): Promise<
   { ok: true; app_key: string } | { ok: false; error: string }
 > {
   const app_key = req.headers.get("x-bridge-app") ?? "";
@@ -67,14 +67,24 @@ async function verifySignature(req: Request, rawBody: string): Promise<
   const nonce = req.headers.get("x-bridge-nonce") ?? "";
   const sig = req.headers.get("x-bridge-signature") ?? "";
   if (!app_key || !ts || !nonce || !sig) return { ok: false, error: "missing_headers" };
-  if (!BRIDGE_SECRET) return { ok: false, error: "hub_secret_missing" };
 
   const drift = Math.abs(Date.now() - Number(ts));
   if (!Number.isFinite(drift) || drift > 5 * 60 * 1000) {
     return { ok: false, error: "timestamp_drift" };
   }
 
-  const expected = await hmacHex(BRIDGE_SECRET, `${ts}.${nonce}.${app_key}.${rawBody}`);
+  // Resolve per-spoke secret via registry (bridge_secret_slot env var)
+  const { data: app } = await sb
+    .from("vos_suite_apps")
+    .select("app_key, bridge_secret_slot, is_active")
+    .eq("app_key", app_key)
+    .maybeSingle();
+  if (!app) return { ok: false, error: "unknown_app_key" };
+  if (!app.is_active) return { ok: false, error: "app_inactive" };
+  const secret = Deno.env.get(app.bridge_secret_slot) ?? "";
+  if (!secret) return { ok: false, error: `secret_missing:${app.bridge_secret_slot}` };
+
+  const expected = await hmacHex(secret, `${ts}.${nonce}.${app_key}.${rawBody}`);
   if (expected !== sig) return { ok: false, error: "bad_signature" };
   return { ok: true, app_key };
 }
