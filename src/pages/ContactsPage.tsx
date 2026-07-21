@@ -427,10 +427,11 @@ export default function ContactsPage() {
                     <div className="flex items-center gap-1.5">
                       {c.hub_contact_links.map((link, i) => (
                         <Badge key={link.id ?? `${link.app_key}-${i}`} variant="outline" className="text-[10px] gap-1 capitalize">
-                          <Link2 className="h-3 w-3" /> {link.app_key}
+                          <Link2 className="h-3 w-3" /> {link.app_key === "vanto_crm" ? "getwell_hub" : link.app_key}
                         </Badge>
                       ))}
-                      <span className="text-xs text-muted-foreground">Source: {c.source_app}</span>
+                      <span className="text-xs text-muted-foreground">Source: {c.source_app === "vanto_crm" ? "getwell_hub" : c.source_app}</span>
+
                     </div>
                     {c.unsubscribed_channels.length > 0 && (
                       <div className="text-xs text-destructive">
