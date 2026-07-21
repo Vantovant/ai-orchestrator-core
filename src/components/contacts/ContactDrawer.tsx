@@ -339,6 +339,16 @@ export default function ContactDrawer({ contact, open, onOpenChange }: Props) {
               )}
             </Button>
             <div className="flex-1" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => syncOneMut.mutate()}
+              disabled={syncOneMut.isPending || saveMut.isPending}
+              title="Push this contact to all connected apps now"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${syncOneMut.isPending ? "animate-spin" : ""}`} />
+              {syncOneMut.isPending ? "Syncing…" : "Sync now"}
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button size="sm" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
               {saveMut.isPending ? "Saving…" : "Save"}
