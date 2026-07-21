@@ -73,15 +73,57 @@ export default function ContactsPage() {
     return (apps.data ?? []).filter((a) => a.role === "spoke");
   }, [apps.data]);
 
+  const stats = useMemo(() => {
+    const all = contacts.data ?? [];
+    const live = all.filter((c) => !c.is_deleted);
+    const total = live.length;
+    const withEmail = live.filter((c) => !!c.email).length;
+    const withPhone = live.filter((c) => !!c.phone_e164).length;
+    const emailConsent = live.filter((c) => c.consent_email).length;
+    const waConsent = live.filter((c) => c.consent_whatsapp).length;
+    const smsConsent = live.filter((c) => c.consent_sms).length;
+    const multiApp = live.filter((c) => (c.hub_contact_links?.length ?? 0) > 1).length;
+    const needsAttention = live.filter((c) => c.name_needs_confirmation || !c.full_name || c.full_name.toLowerCase().startsWith("unnamed")).length;
+    const deleted = all.length - live.length;
+
+    // per-app breakdown (source_app + linked apps combined)
+    const perApp = new Map<string, number>();
+    for (const c of live) {
+      const keys = new Set<string>();
+      if (c.source_app) keys.add(c.source_app);
+      for (const l of c.hub_contact_links ?? []) keys.add(l.app_key);
+      for (const k of keys) perApp.set(k, (perApp.get(k) ?? 0) + 1);
+    }
+
+    // tag frequency
+    const tagCounts = new Map<string, number>();
+    for (const c of live) for (const t of c.tags ?? []) tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+    const topTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+    // last sync
+    const syncTimes = live.map((c) => c.last_synced_at).filter(Boolean) as string[];
+    const lastSyncAt = syncTimes.sort().slice(-1)[0] ?? null;
+
+    // recent activity (updated in last 7d)
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const recent = live.filter((c) => new Date(c.updated_at).getTime() > weekAgo).length;
+
+    return { total, withEmail, withPhone, emailConsent, waConsent, smsConsent, multiApp, needsAttention, deleted, perApp, topTags, lastSyncAt, recent };
+  }, [contacts.data]);
+
+  const pct = (n: number) => (stats.total ? Math.round((n / stats.total) * 100) : 0);
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Contact className="h-6 w-6 text-primary" /> Unified Contacts
           </h1>
           <p className="text-sm text-muted-foreground">
-            Central hub contacts synced from Vanto CRM, Zazi Email, and other suite apps.
+            The single source of truth. {stats.total.toLocaleString()} contacts unified across {activeApps.length} connected app{activeApps.length === 1 ? "" : "s"}
+            {stats.lastSyncAt ? ` · last sync ${formatDistanceToNow(new Date(stats.lastSyncAt), { addSuffix: true })}` : ""}.
           </p>
         </div>
         <Button
@@ -94,6 +136,137 @@ export default function ContactsPage() {
           {syncMutation.isPending ? "Syncing..." : "Sync now"}
         </Button>
       </div>
+
+      {/* Hero stats */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+        <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent">
+          <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-primary/20 blur-2xl" aria-hidden />
+          <CardContent className="p-4 relative">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-primary/80">
+              <Users className="h-3.5 w-3.5" /> Total contacts
+            </div>
+            <div className="mt-2 text-3xl font-bold text-foreground">{stats.total.toLocaleString()}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {stats.multiApp.toLocaleString()} linked across multiple apps
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+              <Mail className="h-3.5 w-3.5" /> Reachable by email
+            </div>
+            <div className="mt-2 text-3xl font-bold">{stats.withEmail.toLocaleString()}</div>
+            <div className="mt-2 space-y-1">
+              <Progress value={pct(stats.withEmail)} className="h-1.5" />
+              <div className="text-xs text-muted-foreground">{pct(stats.withEmail)}% of contacts · {stats.emailConsent.toLocaleString()} opted-in</div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+              <Phone className="h-3.5 w-3.5" /> Reachable by phone
+            </div>
+            <div className="mt-2 text-3xl font-bold">{stats.withPhone.toLocaleString()}</div>
+            <div className="mt-2 space-y-1">
+              <Progress value={pct(stats.withPhone)} className="h-1.5" />
+              <div className="text-xs text-muted-foreground">
+                {pct(stats.withPhone)}% · {stats.waConsent.toLocaleString()} WhatsApp · {stats.smsConsent.toLocaleString()} SMS
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={`border-border/60 ${stats.needsAttention > 0 ? "border-amber-500/40 bg-amber-500/5" : ""}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+              {stats.needsAttention > 0 ? <AlertCircle className="h-3.5 w-3.5 text-amber-500" /> : <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
+              Needs attention
+            </div>
+            <div className="mt-2 text-3xl font-bold">{stats.needsAttention.toLocaleString()}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {stats.needsAttention === 0 ? "All contacts clean" : "Unnamed or unconfirmed names"}
+              {stats.deleted > 0 ? ` · ${stats.deleted} in trash` : ""}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Per-app coverage + top tags */}
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card className="border-border/60 lg:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Layers className="h-4 w-4 text-primary" /> Coverage by connected app
+              </div>
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Activity className="h-3 w-3" /> {stats.recent.toLocaleString()} updated this week
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {activeApps.length === 0 && (
+              <p className="text-sm text-muted-foreground">No connected apps yet.</p>
+            )}
+            {activeApps.map((app) => {
+              const count = stats.perApp.get(app.app_key) ?? 0;
+              return (
+                <button
+                  key={app.app_key}
+                  type="button"
+                  onClick={() => setAppFilter(app.app_key)}
+                  className="w-full text-left group"
+                >
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium capitalize group-hover:text-primary transition-colors">{app.name}</span>
+                    <span className="text-muted-foreground tabular-nums">
+                      {count.toLocaleString()} <span className="text-xs">({pct(count)}%)</span>
+                    </span>
+                  </div>
+                  <Progress value={pct(count)} className="h-2 mt-1" />
+                </button>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <TagIcon className="h-4 w-4 text-primary" /> Top tags
+            </div>
+          </CardHeader>
+          <CardContent>
+            {stats.topTags.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No tags yet — tag contacts to segment them.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {stats.topTags.map(([tag, count]) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setSearch(tag)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/40 px-2.5 py-1 text-xs hover:border-primary/50 hover:bg-primary/10 transition-colors"
+                  >
+                    <span className="font-medium">{tag}</span>
+                    <span className="text-muted-foreground tabular-nums">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 pt-3 border-t border-border/40 flex items-center gap-2 text-xs text-muted-foreground">
+              <Sparkles className="h-3 w-3 text-primary" />
+              <span>Hub is source of truth — edits propagate to all spokes.</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+
 
 
       <Card className="border-border/60">
