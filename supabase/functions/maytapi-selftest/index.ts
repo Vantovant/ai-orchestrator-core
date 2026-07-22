@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
   const params = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   const spoke: string = params.spoke ?? "getwell_grow";
   const phone: string = params.phone ?? `+2782${String(Date.now()).slice(-7)}`;
+  const mode: string = params.mode ?? "standard"; // "standard" | "activation"
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false, autoRefreshToken: false },
