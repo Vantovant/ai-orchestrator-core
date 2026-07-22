@@ -52,6 +52,7 @@ Deno.serve(async (req) => {
   const params = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   const spoke: string = params.spoke ?? "getwell_grow";
   const phone: string = params.phone ?? `+2782${String(Date.now()).slice(-7)}`;
+  const mode: string = params.mode ?? "standard"; // "standard" | "activation"
 
   const sb = createClient(SUPABASE_URL, SERVICE_ROLE, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -101,10 +102,35 @@ Deno.serve(async (req) => {
   record("T6b_dnc_check_after_stop", "200 allowed:false reason:dnc:stop_keyword",
     await callHub(spoke, secret, "dnc_check", { phone, event_class: "marketing" }));
 
+  // T7 — activation fan-out with email + tier (only when mode=activation)
+  let activationEventId: string | null = null;
+  if (mode === "activation") {
+    const activationEventIdLocal = `selftest-activation-${crypto.randomUUID()}`;
+    const activationPhone = params.activation_phone ?? `+2783${String(Date.now()).slice(-7)}`;
+    const activationEmail = params.activation_email ?? `selftest+${Date.now()}@example.com`;
+    const tier = params.tier ?? "champion";
+    const r7 = await callHub(spoke, secret, "send_recorded", {
+      spoke_event_id: activationEventIdLocal,
+      phone: activationPhone,
+      campaign_type: "activation",
+      maytapi_message_id: `mt-activation-${Date.now()}`,
+      status: "sent",
+      metadata: {
+        email: activationEmail,
+        template_hint: `monthly_activity_thankyou_${tier}`,
+        tier,
+        tone: tier,
+        contact: { first_name: "Selftest", email_address: activationEmail, aplgo_id: "APL-TEST", country: "ZA" },
+      },
+    });
+    record("T7_activation_fanout", "200 recorded:true fanout.dispatched", r7);
+    activationEventId = r7.body?.event_id ?? null;
+  }
+
   // Verdict
   const pass = (i: number, cond: boolean) => ({ test: results[i].test, pass: cond });
   const b = (i: number) => results[i].body;
-  const verdict = [
+  const verdict: { test: string; pass: boolean }[] = [
     pass(0, b(0)?.ok === true && results[0].status === 200),
     pass(1, results[1].status === 200 && b(1)?.allowed === true),
     pass(2, results[2].status === 200 && b(2)?.allowed === true),
@@ -113,18 +139,26 @@ Deno.serve(async (req) => {
     pass(5, results[5].status === 200 && b(5)?.dnc === true),
     pass(6, results[6].status === 200 && b(6)?.allowed === false && String(b(6)?.reason ?? "").startsWith("dnc:")),
   ];
+  if (mode === "activation") {
+    verdict.push(pass(7, results[7]?.status === 200 && b(7)?.recorded === true && b(7)?.fanout?.fanout_state === "dispatched"));
+  }
   const overall = verdict.every((v) => v.pass) ? "CLEAN" : "HOLD";
 
   // Cleanup test artifacts so we don't pollute the mesh
   try {
-    const { hexHash } = await (async () => {
+    const hashOf = (p: string) => (async () => {
       const salt = Deno.env.get("MAYTAPI_HASH_SALT") ?? "";
-      const p = phone.replace(/[^\d+]/g, "").replace(/^00/, "+");
-      const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${salt}.${p}`));
-      return { hexHash: Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, "0")).join("") };
+      const normalized = p.replace(/[^\d+]/g, "").replace(/^00/, "+");
+      const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${salt}.${normalized}`));
+      return Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, "0")).join("");
     })();
-    await sb.from("suite_maytapi_events").delete().eq("phone_hash", hexHash);
-    await sb.from("suite_maytapi_dnc").delete().eq("phone_hash", hexHash);
+    const cleanupPhones = [phone];
+    if (mode === "activation") cleanupPhones.push(params.activation_phone ?? `+2783${String(Date.now()).slice(-7)}`);
+    for (const p of cleanupPhones) {
+      const hexHash = await hashOf(p);
+      await sb.from("suite_maytapi_events").delete().eq("phone_hash", hexHash);
+      await sb.from("suite_maytapi_dnc").delete().eq("phone_hash", hexHash);
+    }
   } catch (_) { /* best effort */ }
 
   return new Response(JSON.stringify({

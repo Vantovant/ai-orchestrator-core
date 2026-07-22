@@ -121,7 +121,10 @@ async function evaluateFanout(
   }
 
   const contact = (metadata?.contact ?? {}) as Record<string, any>;
-  const email: string | undefined = contact.email;
+  const email: string | undefined =
+    (metadata?.email as string) ||
+    contact.email_address ||
+    contact.email;
   const suppressIf: string[] = Array.isArray(policy.suppress_if) ? policy.suppress_if : [];
 
   // Suppression: no_email
@@ -190,6 +193,9 @@ async function evaluateFanout(
     return;
   }
 
+  const tier = (metadata?.tier as string) || (metadata?.tone as string) || "starter";
+  const templateHint = (policy.template_hint ?? "").replace(/\{tier\}/g, tier);
+
   const bodyObj = {
     action: "email_dispatch",
     body: {
@@ -197,7 +203,7 @@ async function evaluateFanout(
       origin_app: spoke_app_key,
       origin_event_id: spoke_event_id,
       campaign_type,
-      template_hint: policy.template_hint,
+      template_hint: templateHint,
       delay_minutes: policy.delay_minutes,
       contact: {
         email,
