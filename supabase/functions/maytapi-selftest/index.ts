@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
   // Verdict
   const pass = (i: number, cond: boolean) => ({ test: results[i].test, pass: cond });
   const b = (i: number) => results[i].body;
-  const verdict = [
+  const verdict: { test: string; pass: boolean }[] = [
     pass(0, b(0)?.ok === true && results[0].status === 200),
     pass(1, results[1].status === 200 && b(1)?.allowed === true),
     pass(2, results[2].status === 200 && b(2)?.allowed === true),
@@ -139,6 +139,9 @@ Deno.serve(async (req) => {
     pass(5, results[5].status === 200 && b(5)?.dnc === true),
     pass(6, results[6].status === 200 && b(6)?.allowed === false && String(b(6)?.reason ?? "").startsWith("dnc:")),
   ];
+  if (mode === "activation") {
+    verdict.push(pass(7, results[7]?.status === 200 && b(7)?.recorded === true && b(7)?.fanout?.fanout_state === "dispatched"));
+  }
   const overall = verdict.every((v) => v.pass) ? "CLEAN" : "HOLD";
 
   // Cleanup test artifacts so we don't pollute the mesh
