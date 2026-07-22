@@ -14,9 +14,22 @@ type EventRow = {
   spoke_app_key: string;
   phone_last4: string;
   direction: string;
+  channel: string | null;
   campaign_type: string | null;
   status: string;
   sent_at: string;
+  fanout_state: string | null;
+  fanout_reason: string | null;
+};
+
+type FanoutPolicyRow = {
+  campaign_type: string;
+  email_spoke_app_key: string;
+  template_hint: string | null;
+  delay_minutes: number;
+  suppress_if: string[];
+  enabled: boolean;
+  notes: string | null;
 };
 
 type DncRow = {
