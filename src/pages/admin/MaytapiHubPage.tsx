@@ -14,9 +14,22 @@ type EventRow = {
   spoke_app_key: string;
   phone_last4: string;
   direction: string;
+  channel: string | null;
   campaign_type: string | null;
   status: string;
   sent_at: string;
+  fanout_state: string | null;
+  fanout_reason: string | null;
+};
+
+type FanoutPolicyRow = {
+  campaign_type: string;
+  email_spoke_app_key: string;
+  template_hint: string | null;
+  delay_minutes: number;
+  suppress_if: string[];
+  enabled: boolean;
+  notes: string | null;
 };
 
 type DncRow = {
@@ -41,6 +54,7 @@ export default function MaytapiHubPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [dnc, setDnc] = useState<DncRow[]>([]);
   const [cooldowns, setCooldowns] = useState<CooldownRow[]>([]);
+  const [policies, setPolicies] = useState<FanoutPolicyRow[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -58,10 +72,10 @@ export default function MaytapiHubPage() {
 
   const load = async () => {
     setLoading(true);
-    const [ev, dn, cd] = await Promise.all([
+    const [ev, dn, cd, pol] = await Promise.all([
       supabase
         .from("suite_maytapi_events")
-        .select("id,spoke_app_key,phone_last4,direction,campaign_type,status,sent_at")
+        .select("id,spoke_app_key,phone_last4,direction,channel,campaign_type,status,sent_at,fanout_state,fanout_reason")
         .order("sent_at", { ascending: false })
         .limit(100),
       supabase
@@ -74,10 +88,15 @@ export default function MaytapiHubPage() {
         .from("suite_maytapi_cooldowns")
         .select("event_class,cooldown_seconds,notes")
         .order("event_class"),
+      supabase
+        .from("suite_maytapi_fanout_policy" as any)
+        .select("campaign_type,email_spoke_app_key,template_hint,delay_minutes,suppress_if,enabled,notes")
+        .order("campaign_type"),
     ]);
     setEvents((ev.data as EventRow[]) ?? []);
     setDnc((dn.data as DncRow[]) ?? []);
     setCooldowns((cd.data as CooldownRow[]) ?? []);
+    setPolicies(((pol.data as unknown) as FanoutPolicyRow[]) ?? []);
     setLoading(false);
   };
 
@@ -99,6 +118,16 @@ export default function MaytapiHubPage() {
     if (error) return toast.error(error.message);
     toast.success(`Updated ${cls} → ${secs}s`);
     setEdits((e) => ({ ...e, [cls]: "" }));
+    load();
+  };
+
+  const togglePolicy = async (row: FanoutPolicyRow, next: Partial<FanoutPolicyRow>) => {
+    const { error } = await (supabase as any)
+      .from("suite_maytapi_fanout_policy")
+      .update(next)
+      .eq("campaign_type", row.campaign_type);
+    if (error) return toast.error(error.message);
+    toast.success(`${row.campaign_type} updated`);
     load();
   };
 
@@ -168,6 +197,60 @@ export default function MaytapiHubPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">
+            Fan-out policy (WhatsApp → Email)
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Per Contract Addendum v2. Each row governs whether a completed WhatsApp send for that campaign type
+            also triggers a follow-up email dispatch. Kill switch: <code>MAYTAPI_FANOUT_ENFORCE</code> secret.
+            While OFF, the hub only logs the intended dispatch (<em>shadow_logged</em>).
+          </p>
+        </CardHeader>
+        <CardContent>
+          {policies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No policy rows configured.</p>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {policies.map((p) => (
+                <div key={p.campaign_type} className="border rounded p-3 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={p.enabled ? "default" : "outline"}>{p.enabled ? "enabled" : "disabled"}</Badge>
+                    <span className="font-medium">{p.campaign_type}</span>
+                    <span className="text-xs text-muted-foreground">→ {p.email_spoke_app_key}</span>
+                    <span className="ml-auto flex items-center gap-2">
+                      <Input
+                        className="h-8 w-20"
+                        type="number"
+                        defaultValue={p.delay_minutes}
+                        onBlur={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v) && v !== p.delay_minutes) togglePolicy(p, { delay_minutes: v });
+                        }}
+                        title="delay (minutes)"
+                      />
+                      <Button
+                        size="sm"
+                        variant={p.enabled ? "destructive" : "default"}
+                        onClick={() => togglePolicy(p, { enabled: !p.enabled })}
+                      >
+                        {p.enabled ? "Disable" : "Enable"}
+                      </Button>
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    template: <code>{p.template_hint ?? "—"}</code> · suppress_if:{" "}
+                    <code>{Array.isArray(p.suppress_if) ? p.suppress_if.join(", ") : "—"}</code>
+                    {p.notes ? <> · {p.notes}</> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <MessageSquareOff className="h-4 w-4" /> Active Do-Not-Contact ({dnc.length})
           </CardTitle>
@@ -209,10 +292,26 @@ export default function MaytapiHubPage() {
                     {e.direction}
                   </Badge>
                   <div className="text-xs">{e.spoke_app_key}</div>
+                  {e.channel && e.channel !== "whatsapp" && (
+                    <Badge variant="secondary" className="text-xs">{e.channel}</Badge>
+                  )}
                   <div className="font-mono text-xs">••••{e.phone_last4}</div>
                   {e.campaign_type && (
                     <Badge variant="outline" className="text-xs">
                       {e.campaign_type}
+                    </Badge>
+                  )}
+                  {e.fanout_state && e.fanout_state !== "none" && (
+                    <Badge
+                      variant={
+                        e.fanout_state === "dispatched" ? "default"
+                        : e.fanout_state === "failed" ? "destructive"
+                        : "outline"
+                      }
+                      className="text-xs"
+                      title={e.fanout_reason ?? undefined}
+                    >
+                      fanout:{e.fanout_state}
                     </Badge>
                   )}
                   <div className="text-xs text-muted-foreground">{e.status}</div>
