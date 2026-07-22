@@ -381,6 +381,95 @@ Deno.serve(async (req) => {
       return json({ ok: true, verified: true, materialized: { enriched, created } });
     }
 
+    // Singular contact_upsert (GetWell Grow "Sync to VantoOS" button, v2 fan-out contract)
+    // Body shape: { kind:"contact_upsert", contact:{ name, email?, phone?, phone_normalized?,
+    //   first_name?, last_name?, aplgo_id?, sponsor?, lead_type?, notes?, unsubscribed?, remote_id? } }
+    if (bodyKind === "contact_upsert" && payload?.body?.contact) {
+      const { data: appRow } = await supabase
+        .from("vos_suite_apps").select("allowed_contact_types")
+        .eq("app_key", app_key).maybeSingle();
+      const allowed: string[] = (appRow as any)?.allowed_contact_types ?? [];
+      const defaultType = allowed.includes("mlm") ? "mlm"
+                        : allowed.includes("email_marketing") ? "email_marketing"
+                        : allowed[0] ?? "mixed";
+
+      const c: any = payload.body.contact;
+      const full_name = String(c?.name ?? c?.full_name ?? "").trim();
+      const email = c?.email ? String(c.email).trim().toLowerCase() : null;
+      const phone_e164 = c?.phone_normalized
+        ? String(c.phone_normalized).trim()
+        : (c?.phone ? String(c.phone).trim() : null);
+      const remote_id = String(c?.remote_id ?? c?.local_id ?? c?.id ?? "");
+
+      if (!full_name || (!email && !phone_e164)) {
+        return json({ ok: false, error: "hub_rejected", reason: "missing_name_or_identifier" }, 400);
+      }
+
+      // Match: link -> email -> phone
+      let hubId: string | null = null;
+      if (remote_id) {
+        const { data: link } = await supabase.from("hub_contact_links")
+          .select("hub_contact_id").eq("app_key", app_key).eq("remote_id", remote_id).maybeSingle();
+        if (link) hubId = link.hub_contact_id;
+      }
+      if (!hubId && email) {
+        const { data: byE } = await supabase.from("hub_contacts")
+          .select("id").eq("email", email).eq("is_deleted", false).maybeSingle();
+        if (byE) hubId = byE.id;
+      }
+      if (!hubId && phone_e164) {
+        const { data: byP } = await supabase.from("hub_contacts")
+          .select("id").eq("phone_e164", phone_e164).eq("is_deleted", false).maybeSingle();
+        if (byP) hubId = byP.id;
+      }
+
+      const unsubscribed = !!c?.unsubscribed;
+      const extraNotes: string[] = [];
+      if (c?.aplgo_id) extraNotes.push(`APLGO ID: ${c.aplgo_id}`);
+      if (c?.sponsor) extraNotes.push(`Sponsor: ${c.sponsor}`);
+      const notes = [c?.notes, ...extraNotes].filter(Boolean).join("\n") || null;
+
+      const patch: Record<string, unknown> = {
+        full_name,
+        first_name: c?.first_name ?? null,
+        last_name: c?.last_name ?? null,
+        lead_type: c?.lead_type ?? null,
+        notes,
+        unsubscribed_channels: unsubscribed ? ["email"] : [],
+        consent_email: !unsubscribed,
+        last_synced_at: new Date().toISOString(),
+      };
+      if (email) patch.email = email;
+      if (phone_e164) patch.phone_e164 = phone_e164;
+
+      let created = false;
+      if (hubId) {
+        await supabase.from("hub_contacts").update(patch).eq("id", hubId);
+      } else {
+        const { data: ins } = await supabase.from("hub_contacts").insert({
+          ...patch,
+          contact_type: defaultType,
+          source_app: app_key,
+          source_id: remote_id || null,
+          version: 1,
+        }).select("id").maybeSingle();
+        hubId = ins?.id ?? null;
+        created = !!hubId;
+      }
+      if (hubId && remote_id) {
+        await supabase.from("hub_contact_links").upsert({
+          hub_contact_id: hubId, app_key, remote_id, last_pushed_at: new Date().toISOString(),
+        }, { onConflict: "hub_contact_id,app_key" });
+      }
+
+      return json({
+        ok: true,
+        verified: true,
+        hub_contact_id: hubId,
+        action: created ? "created" : "updated",
+      });
+    }
+
     return json({ ok: true, verified: true, snapshot_id: snapshotId });
   }
 
