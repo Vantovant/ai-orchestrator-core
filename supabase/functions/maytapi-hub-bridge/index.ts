@@ -121,7 +121,10 @@ async function evaluateFanout(
   }
 
   const contact = (metadata?.contact ?? {}) as Record<string, any>;
-  const email: string | undefined = contact.email;
+  const email: string | undefined =
+    (metadata?.email as string) ||
+    contact.email_address ||
+    contact.email;
   const suppressIf: string[] = Array.isArray(policy.suppress_if) ? policy.suppress_if : [];
 
   // Suppression: no_email
