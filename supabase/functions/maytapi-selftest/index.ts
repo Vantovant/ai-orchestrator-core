@@ -146,14 +146,19 @@ Deno.serve(async (req) => {
 
   // Cleanup test artifacts so we don't pollute the mesh
   try {
-    const { hexHash } = await (async () => {
+    const hashOf = (p: string) => (async () => {
       const salt = Deno.env.get("MAYTAPI_HASH_SALT") ?? "";
-      const p = phone.replace(/[^\d+]/g, "").replace(/^00/, "+");
-      const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${salt}.${p}`));
-      return { hexHash: Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, "0")).join("") };
+      const normalized = p.replace(/[^\d+]/g, "").replace(/^00/, "+");
+      const buf = await crypto.subtle.digest("SHA-256", enc.encode(`${salt}.${normalized}`));
+      return Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, "0")).join("");
     })();
-    await sb.from("suite_maytapi_events").delete().eq("phone_hash", hexHash);
-    await sb.from("suite_maytapi_dnc").delete().eq("phone_hash", hexHash);
+    const cleanupPhones = [phone];
+    if (mode === "activation") cleanupPhones.push(params.activation_phone ?? `+2783${String(Date.now()).slice(-7)}`);
+    for (const p of cleanupPhones) {
+      const hexHash = await hashOf(p);
+      await sb.from("suite_maytapi_events").delete().eq("phone_hash", hexHash);
+      await sb.from("suite_maytapi_dnc").delete().eq("phone_hash", hexHash);
+    }
   } catch (_) { /* best effort */ }
 
   return new Response(JSON.stringify({
