@@ -16,6 +16,12 @@ const OUTBOUND_SIGNING_ALIAS: Record<string, string> = {
   // inbound hub messages with the vanto_crm signing identity, while the registry
   // still keeps getwell_hub as a distinct contact-sync target.
   getwell_hub: "vanto_crm",
+  // getwell_africa_email + mlm_course share the same Supabase runtime as zazi_email
+  // (host wwuenmmocxtwwgylngui). That shared spoke verifies inbound hub messages
+  // with the zazi_email signing identity, so route the signature through it while
+  // keeping the registry target distinct (target_app_key preserved in body).
+  getwell_africa_email: "zazi_email",
+  mlm_course: "zazi_email",
 };
 
 const enc = new TextEncoder();
