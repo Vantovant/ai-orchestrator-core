@@ -3263,6 +3263,7 @@ export type Database = {
       }
       suite_maytapi_dnc: {
         Row: {
+          channel: string
           cleared_at: string | null
           created_at: string
           metadata: Json
@@ -3274,6 +3275,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          channel?: string
           cleared_at?: string | null
           created_at?: string
           metadata?: Json
@@ -3285,6 +3287,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          channel?: string
           cleared_at?: string | null
           created_at?: string
           metadata?: Json
@@ -3300,10 +3303,15 @@ export type Database = {
       suite_maytapi_events: {
         Row: {
           campaign_type: string | null
+          channel: string
           created_at: string
           delivered_at: string | null
           direction: string
           failed_at: string | null
+          fanout_decided_at: string | null
+          fanout_email_send_id: string | null
+          fanout_reason: string | null
+          fanout_state: string
           id: string
           maytapi_message_id: string | null
           metadata: Json
@@ -3318,10 +3326,15 @@ export type Database = {
         }
         Insert: {
           campaign_type?: string | null
+          channel?: string
           created_at?: string
           delivered_at?: string | null
           direction: string
           failed_at?: string | null
+          fanout_decided_at?: string | null
+          fanout_email_send_id?: string | null
+          fanout_reason?: string | null
+          fanout_state?: string
           id?: string
           maytapi_message_id?: string | null
           metadata?: Json
@@ -3336,10 +3349,15 @@ export type Database = {
         }
         Update: {
           campaign_type?: string | null
+          channel?: string
           created_at?: string
           delivered_at?: string | null
           direction?: string
           failed_at?: string | null
+          fanout_decided_at?: string | null
+          fanout_email_send_id?: string | null
+          fanout_reason?: string | null
+          fanout_state?: string
           id?: string
           maytapi_message_id?: string | null
           metadata?: Json
@@ -3350,6 +3368,42 @@ export type Database = {
           spoke_app_key?: string
           spoke_event_id?: string
           status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      suite_maytapi_fanout_policy: {
+        Row: {
+          campaign_type: string
+          created_at: string
+          delay_minutes: number
+          email_spoke_app_key: string
+          enabled: boolean
+          notes: string | null
+          suppress_if: Json
+          template_hint: string | null
+          updated_at: string
+        }
+        Insert: {
+          campaign_type: string
+          created_at?: string
+          delay_minutes?: number
+          email_spoke_app_key: string
+          enabled?: boolean
+          notes?: string | null
+          suppress_if?: Json
+          template_hint?: string | null
+          updated_at?: string
+        }
+        Update: {
+          campaign_type?: string
+          created_at?: string
+          delay_minutes?: number
+          email_spoke_app_key?: string
+          enabled?: boolean
+          notes?: string | null
+          suppress_if?: Json
+          template_hint?: string | null
           updated_at?: string
         }
         Relationships: []
