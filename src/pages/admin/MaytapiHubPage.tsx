@@ -197,6 +197,60 @@ export default function MaytapiHubPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">
+            Fan-out policy (WhatsApp → Email)
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Per Contract Addendum v2. Each row governs whether a completed WhatsApp send for that campaign type
+            also triggers a follow-up email dispatch. Kill switch: <code>MAYTAPI_FANOUT_ENFORCE</code> secret.
+            While OFF, the hub only logs the intended dispatch (<em>shadow_logged</em>).
+          </p>
+        </CardHeader>
+        <CardContent>
+          {policies.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No policy rows configured.</p>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {policies.map((p) => (
+                <div key={p.campaign_type} className="border rounded p-3 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={p.enabled ? "default" : "outline"}>{p.enabled ? "enabled" : "disabled"}</Badge>
+                    <span className="font-medium">{p.campaign_type}</span>
+                    <span className="text-xs text-muted-foreground">→ {p.email_spoke_app_key}</span>
+                    <span className="ml-auto flex items-center gap-2">
+                      <Input
+                        className="h-8 w-20"
+                        type="number"
+                        defaultValue={p.delay_minutes}
+                        onBlur={(e) => {
+                          const v = Number(e.target.value);
+                          if (Number.isFinite(v) && v !== p.delay_minutes) togglePolicy(p, { delay_minutes: v });
+                        }}
+                        title="delay (minutes)"
+                      />
+                      <Button
+                        size="sm"
+                        variant={p.enabled ? "destructive" : "default"}
+                        onClick={() => togglePolicy(p, { enabled: !p.enabled })}
+                      >
+                        {p.enabled ? "Disable" : "Enable"}
+                      </Button>
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    template: <code>{p.template_hint ?? "—"}</code> · suppress_if:{" "}
+                    <code>{Array.isArray(p.suppress_if) ? p.suppress_if.join(", ") : "—"}</code>
+                    {p.notes ? <> · {p.notes}</> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <MessageSquareOff className="h-4 w-4" /> Active Do-Not-Contact ({dnc.length})
           </CardTitle>
