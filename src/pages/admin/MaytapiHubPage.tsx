@@ -72,10 +72,10 @@ export default function MaytapiHubPage() {
 
   const load = async () => {
     setLoading(true);
-    const [ev, dn, cd] = await Promise.all([
+    const [ev, dn, cd, pol] = await Promise.all([
       supabase
         .from("suite_maytapi_events")
-        .select("id,spoke_app_key,phone_last4,direction,campaign_type,status,sent_at")
+        .select("id,spoke_app_key,phone_last4,direction,channel,campaign_type,status,sent_at,fanout_state,fanout_reason")
         .order("sent_at", { ascending: false })
         .limit(100),
       supabase
@@ -88,10 +88,15 @@ export default function MaytapiHubPage() {
         .from("suite_maytapi_cooldowns")
         .select("event_class,cooldown_seconds,notes")
         .order("event_class"),
+      supabase
+        .from("suite_maytapi_fanout_policy" as any)
+        .select("campaign_type,email_spoke_app_key,template_hint,delay_minutes,suppress_if,enabled,notes")
+        .order("campaign_type"),
     ]);
     setEvents((ev.data as EventRow[]) ?? []);
     setDnc((dn.data as DncRow[]) ?? []);
     setCooldowns((cd.data as CooldownRow[]) ?? []);
+    setPolicies((pol.data as FanoutPolicyRow[]) ?? []);
     setLoading(false);
   };
 
