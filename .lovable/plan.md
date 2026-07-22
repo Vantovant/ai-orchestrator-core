@@ -1,67 +1,47 @@
-## Context loaded. Here's the plan.
+# Maytapi Hub Contract v2 — Fan-out Prep
 
-**Goal:** Merge Central Brain into the Portfolio Partner surface so you have **one AI co-founder** that knows both your projects AND the full VantoOS suite (governance, strategy engine, spokes). Free up the crowded Governance console.
+GetWell Grow proposed extending `maytapi-hub-bridge` so every `send_recorded` for a WhatsApp campaign can trigger a follow-up email dispatch to a sister spoke (email spoke, e.g. `getwell_africa_email`). This is retention-loop plumbing: WhatsApp touch → email touch, same contact, no manual work.
 
----
+Below is exactly what I'll ship on the VantoOS hub side. Nothing here breaks v1 — all new fields are optional and fan-out is default OFF (shadow first).
 
-### The insight
+## What I'll build
 
-Both AIs already run on the same edge function (`portfolio-ai-partner`). The only difference is the `@central_brain` context tag, which swaps the retrieval scope. So this is a **UI + mode consolidation**, not a rebuild.
+### 1. Schema (one migration)
 
-| Today | After |
-|---|---|
-| Portfolio Partner → projects, tasks, KB | Portfolio Partner → projects + suite governance + strategy engine |
-| Central Brain (buried in Governance) → suite tables only | **Removed from Governance** |
-| Two chat histories | One unified history |
+- `suite_maytapi_fanout_policy` — hub-owned config table
+  - `campaign_type` (pk), `email_spoke_app_key`, `template_hint`, `delay_minutes`, `suppress_if` (jsonb: `["no_email","dnc_email"]`), `enabled` (bool, default false).
+  - Seeded rows: `activation`, `birthday`, `zoom` → `getwell_africa_email` (matches their table §2.3).
+- `suite_maytapi_events`: add `channel text default 'whatsapp'`, `fanout_state text` (`none|shadow_logged|dispatched|suppressed|failed`), `fanout_email_send_id text`, `fanout_decided_at timestamptz`.
+- `suite_maytapi_dnc`: add `channel text default 'whatsapp' check (channel in ('whatsapp','email','all'))`, drop-and-recreate unique on `(phone_hash, channel)`.
 
----
+### 2. `maytapi-hub-bridge` edits
 
-### Plan
+- `send_recorded` accepts new optional `metadata` fields: `activation_campaign_recipients[]`, `contact{}`, `body_preview`, `template_hint`, `tone`. Stored verbatim in `metadata` jsonb — no schema change needed for those.
+- After a successful `send_recorded` insert, look up `suite_maytapi_fanout_policy` by `campaign_type`.
+  - If no row / `enabled=false` → set `fanout_state='none'`, return as today.
+  - If enabled → evaluate `suppress_if` against contact email presence + email-channel DNC. Log decision (`shadow_logged` or `suppressed`).
+  - Kill switch `MAYTAPI_FANOUT_ENFORCE` (secret, default `false`). When `false`: log intent only. When `true`: POST to configured email spoke `/functions/v1/hub-email-dispatch` with the v2 body shape and standard HMAC headers signed with that spoke's `bridge_secret_slot`.
+  - Idempotency key = `${spoke_app_key}:${spoke_event_id}:email` so replays dedupe.
+- `dnc_check` accepts optional `channel` (default `whatsapp`), scoped lookup on `suite_maytapi_dnc.channel in (channel,'all')`.
+- `inbound_stop` accepts optional `channel` (default `whatsapp`). Email unsubscribe events from an email spoke can post `channel:'email'`.
 
-**1. Portfolio Partner gets a "Scope" selector** (right next to the existing project pills)
-- **All Projects** (current default)
-- **VantoOS Suite** (governance + strategy + spokes — what Central Brain does today)
-- **Everything** (both merged — the new power mode)
+### 3. Admin UI (`/admin/maytapi`)
 
-Selecting a scope injects the right context tag (`@central_brain`, `@all_projects`, or both) into the request.
+- New **Fan-out policy** tab: edit `enabled`, `delay_minutes`, `suppress_if`, `template_hint` per `campaign_type`. Read-only view of last 50 fan-out decisions with state chip.
+- Extend events ledger with `channel` + `fanout_state` columns.
 
-**2. Merged retrieval in the edge function**
-- When scope = Everything, run both `retrievePortfolio()` AND `retrieveCentralBrain()` in parallel, concatenate into the prompt.
-- Keep token budget safe by trimming each source to top 15 rows.
+### 4. Reply pack for GetWell Grow
 
-**3. Quick-action chips** on the empty state, tailored per scope:
-- All Projects: Daily review · Portfolio health · Top risks
-- VantoOS Suite: Directive status · Spoke health · Pending approvals
-- Everything: Executive briefing · What needs my attention today
+After ship, I'll produce a short "v2 accepted — here's what changed on our side" note covering:
+- Endpoint unchanged.
+- Extra `metadata` fields are accepted and stored.
+- Fan-out is live but `MAYTAPI_FANOUT_ENFORCE=false` (48h shadow window as they requested in §3).
+- `dnc_check` now supports `channel`; existing v1 calls default to `whatsapp` — zero-break.
+- Email spoke contract: they can either point us at their existing email spoke URL or use `getwell_africa_email` once its edge function is deployed.
 
-**4. Remove Central Brain tab from Governance console**
-- Delete the tab entry in `VantoOSConsolePage.tsx`.
-- Keep `CentralBrainChat.tsx` file for now (unused) in case you want to revert — remove in a follow-up once verified.
-- Add a one-line notice in Governance: *"Central Brain has moved to Portfolio Partner → Scope: VantoOS Suite."*
+## Open questions before I ship
 
-**5. History migration**
-- Central Brain threads live in the same `portfolio_ai_threads` table already (verified). They'll just appear in the unified Portfolio Partner sidebar automatically — no data migration needed.
-- Add a small "Suite" badge on threads that were created in Central Brain mode so you can still find them.
+1. **Email spoke target for now**: is `getwell_africa_email` already deployed with a `hub-email-dispatch` handler, or should the initial policy rows have `enabled=false` and we wait for it? (Default assumption: seed disabled, flip per-row from the admin UI.)
+2. **Shadow window auto-flip**: keep manual (I flip `MAYTAPI_FANOUT_ENFORCE` after 48h review) or add a scheduled auto-flip once shadow logs are clean? (Default: manual.)
 
----
-
-### Technical section (skip if not interested)
-
-Files to change:
-- `src/pages/PortfolioPartnerPage.tsx` — add Scope dropdown, pass to service
-- `src/services/portfolioChatService.ts` — forward scope → context_tags
-- `supabase/functions/portfolio-ai-partner/index.ts` — when both tags present, merge `retrievePortfolio` + `retrieveCentralBrain` outputs
-- `src/pages/admin/VantoOSConsolePage.tsx` — remove Central Brain tab, add moved-notice
-- `src/components/portfolio/PortfolioPartnerChat.tsx` — add "Suite" badge on threads with central_brain tag in metadata
-
-No DB changes. No new tables. No breaking changes to existing threads.
-
----
-
-### What you'll experience
-
-Open Portfolio Partner → pick **Everything** → ask *"What happened with the last directive and how does it affect the ZAZI CRM project?"* → get one answer that pulls from both the strategy engine AND the project data.
-
-**Category:** UI + backend (edge function retrieval merge only, no schema work).
-
-Approve and I'll build it.
+Say **go** and I ship all four sections in one pass with the defaults above. Or answer the two questions and I'll adjust.
