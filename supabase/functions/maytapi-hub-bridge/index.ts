@@ -193,6 +193,9 @@ async function evaluateFanout(
     return;
   }
 
+  const tier = (metadata?.tier as string) || (metadata?.tone as string) || "starter";
+  const templateHint = (policy.template_hint ?? "").replace(/\{tier\}/g, tier);
+
   const bodyObj = {
     action: "email_dispatch",
     body: {
@@ -200,7 +203,7 @@ async function evaluateFanout(
       origin_app: spoke_app_key,
       origin_event_id: spoke_event_id,
       campaign_type,
-      template_hint: policy.template_hint,
+      template_hint: templateHint,
       delay_minutes: policy.delay_minutes,
       contact: {
         email,
