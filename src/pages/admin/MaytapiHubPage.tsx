@@ -292,10 +292,26 @@ export default function MaytapiHubPage() {
                     {e.direction}
                   </Badge>
                   <div className="text-xs">{e.spoke_app_key}</div>
+                  {e.channel && e.channel !== "whatsapp" && (
+                    <Badge variant="secondary" className="text-xs">{e.channel}</Badge>
+                  )}
                   <div className="font-mono text-xs">••••{e.phone_last4}</div>
                   {e.campaign_type && (
                     <Badge variant="outline" className="text-xs">
                       {e.campaign_type}
+                    </Badge>
+                  )}
+                  {e.fanout_state && e.fanout_state !== "none" && (
+                    <Badge
+                      variant={
+                        e.fanout_state === "dispatched" ? "default"
+                        : e.fanout_state === "failed" ? "destructive"
+                        : "outline"
+                      }
+                      className="text-xs"
+                      title={e.fanout_reason ?? undefined}
+                    >
+                      fanout:{e.fanout_state}
                     </Badge>
                   )}
                   <div className="text-xs text-muted-foreground">{e.status}</div>
