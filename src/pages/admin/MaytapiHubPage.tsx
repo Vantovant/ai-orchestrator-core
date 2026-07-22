@@ -121,6 +121,16 @@ export default function MaytapiHubPage() {
     load();
   };
 
+  const togglePolicy = async (row: FanoutPolicyRow, next: Partial<FanoutPolicyRow>) => {
+    const { error } = await (supabase as any)
+      .from("suite_maytapi_fanout_policy")
+      .update(next)
+      .eq("campaign_type", row.campaign_type);
+    if (error) return toast.error(error.message);
+    toast.success(`${row.campaign_type} updated`);
+    load();
+  };
+
   if (isAdmin === null) return <div className="p-6"><Skeleton className="h-40" /></div>;
   if (!isAdmin) return <div className="p-6 text-muted-foreground">Admins only.</div>;
 
