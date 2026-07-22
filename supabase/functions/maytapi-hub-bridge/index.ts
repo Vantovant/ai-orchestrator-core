@@ -196,8 +196,10 @@ async function evaluateFanout(
   const tier = (metadata?.tier as string) || (metadata?.tone as string) || "starter";
   const templateHint = (policy.template_hint ?? "").replace(/\{tier\}/g, tier);
 
+  const idempotencyKey = `${spoke_app_key}:${spoke_event_id}:email`;
   const bodyObj = {
     action: "email_dispatch",
+    idempotency_key: idempotencyKey,
     body: {
       hub_event_id: eventId,
       origin_app: spoke_app_key,
@@ -217,7 +219,7 @@ async function evaluateFanout(
         tone: metadata?.tone,
       },
       sent_at: new Date().toISOString(),
-      idempotency_key: `${spoke_app_key}:${spoke_event_id}:email`,
+      idempotency_key: idempotencyKey,
     },
   };
   const rawBody = JSON.stringify(bodyObj);
@@ -235,6 +237,7 @@ async function evaluateFanout(
         "x-bridge-timestamp": ts,
         "x-bridge-nonce": nonce,
         "x-bridge-signature": sig,
+        "x-idempotency-key": idempotencyKey,
       },
       body: rawBody,
     });
