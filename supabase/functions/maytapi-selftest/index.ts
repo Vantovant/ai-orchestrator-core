@@ -102,6 +102,31 @@ Deno.serve(async (req) => {
   record("T6b_dnc_check_after_stop", "200 allowed:false reason:dnc:stop_keyword",
     await callHub(spoke, secret, "dnc_check", { phone, event_class: "marketing" }));
 
+  // T7 — activation fan-out with email + tier (only when mode=activation)
+  let activationEventId: string | null = null;
+  if (mode === "activation") {
+    const activationEventIdLocal = `selftest-activation-${crypto.randomUUID()}`;
+    const activationPhone = params.activation_phone ?? `+2783${String(Date.now()).slice(-7)}`;
+    const activationEmail = params.activation_email ?? `selftest+${Date.now()}@example.com`;
+    const tier = params.tier ?? "champion";
+    const r7 = await callHub(spoke, secret, "send_recorded", {
+      spoke_event_id: activationEventIdLocal,
+      phone: activationPhone,
+      campaign_type: "activation",
+      maytapi_message_id: `mt-activation-${Date.now()}`,
+      status: "sent",
+      metadata: {
+        email: activationEmail,
+        template_hint: `monthly_activity_thankyou_${tier}`,
+        tier,
+        tone: tier,
+        contact: { first_name: "Selftest", email_address: activationEmail, aplgo_id: "APL-TEST", country: "ZA" },
+      },
+    });
+    record("T7_activation_fanout", "200 recorded:true fanout.dispatched", r7);
+    activationEventId = r7.body?.event_id ?? null;
+  }
+
   // Verdict
   const pass = (i: number, cond: boolean) => ({ test: results[i].test, pass: cond });
   const b = (i: number) => results[i].body;
