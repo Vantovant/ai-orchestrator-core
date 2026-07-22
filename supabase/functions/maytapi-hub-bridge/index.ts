@@ -1,11 +1,9 @@
 // Maytapi Hub Bridge — arbitrates WhatsApp sends across all suite spokes.
-// The hub NEVER talks to Maytapi directly. Spokes call the gateway and
-// report events here. Hub answers: "may I send?" (dnc_check),
-// "I sent" (send_recorded), "user replied STOP" (inbound_stop), plus
-// events_backfill and ping.
+// v2: adds WhatsApp → Email fan-out (Contract Addendum v2), channel-aware
+// DNC, and richer send_recorded metadata pass-through.
 //
 // Signing: HMAC-SHA256 over `${ts}.${nonce}.${app_key}.${JSON.stringify(body)}`
-// using SUITE_BRIDGE_SECRET. Same scheme as suite-bridge-hub.
+// using per-spoke secret resolved via vos_suite_apps.bridge_secret_slot.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
@@ -13,6 +11,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const HASH_SALT = Deno.env.get("MAYTAPI_HASH_SALT") ?? "";
+const FANOUT_ENFORCE = (Deno.env.get("MAYTAPI_FANOUT_ENFORCE") ?? "false").toLowerCase() === "true";
 
 const enc = new TextEncoder();
 
@@ -73,7 +72,6 @@ async function verifySignature(req: Request, rawBody: string, sb: any): Promise<
     return { ok: false, error: "timestamp_drift" };
   }
 
-  // Resolve per-spoke secret via registry (bridge_secret_slot env var)
   const { data: app } = await sb
     .from("vos_suite_apps")
     .select("app_key, bridge_secret_slot, is_active")
@@ -87,6 +85,179 @@ async function verifySignature(req: Request, rawBody: string, sb: any): Promise<
   const expected = await hmacHex(secret, `${ts}.${nonce}.${app_key}.${rawBody}`);
   if (expected !== sig) return { ok: false, error: "bad_signature" };
   return { ok: true, app_key };
+}
+
+// ---------- Fan-out evaluator ----------
+//
+// After a send_recorded row lands, look up policy. If disabled → 'none'.
+// If enabled:
+//   - Check suppress_if: no_email (contact.email missing) or dnc_email
+//   - If suppressed → 'suppressed' with reason.
+//   - Else if FANOUT_ENFORCE=false → 'shadow_logged' (no dispatch).
+//   - Else → sign + POST to email spoke; on 2xx 'dispatched', else 'failed'.
+async function evaluateFanout(
+  sb: any,
+  eventId: string,
+  spoke_app_key: string,
+  spoke_event_id: string,
+  campaign_type: string | null,
+  metadata: Record<string, any>,
+): Promise<void> {
+  if (!campaign_type) return;
+
+  const { data: policy } = await sb
+    .from("suite_maytapi_fanout_policy")
+    .select("*")
+    .eq("campaign_type", campaign_type)
+    .maybeSingle();
+
+  if (!policy || !policy.enabled) {
+    await sb.from("suite_maytapi_events").update({
+      fanout_state: "none",
+      fanout_decided_at: new Date().toISOString(),
+      fanout_reason: policy ? "policy_disabled" : "no_policy",
+    }).eq("id", eventId);
+    return;
+  }
+
+  const contact = (metadata?.contact ?? {}) as Record<string, any>;
+  const email: string | undefined = contact.email;
+  const suppressIf: string[] = Array.isArray(policy.suppress_if) ? policy.suppress_if : [];
+
+  // Suppression: no_email
+  if (suppressIf.includes("no_email") && !email) {
+    await sb.from("suite_maytapi_events").update({
+      fanout_state: "suppressed",
+      fanout_decided_at: new Date().toISOString(),
+      fanout_reason: "no_email",
+    }).eq("id", eventId);
+    return;
+  }
+
+  // Suppression: dnc_email
+  if (suppressIf.includes("dnc_email") && email) {
+    const emailHash = await sha256Hex(`${HASH_SALT}.${email.toLowerCase().trim()}`);
+    const { data: dncEmail } = await sb
+      .from("suite_maytapi_dnc")
+      .select("phone_hash")
+      .eq("phone_hash", emailHash)
+      .in("channel", ["email", "all"])
+      .is("cleared_at", null)
+      .maybeSingle();
+    if (dncEmail) {
+      await sb.from("suite_maytapi_events").update({
+        fanout_state: "suppressed",
+        fanout_decided_at: new Date().toISOString(),
+        fanout_reason: "dnc_email",
+      }).eq("id", eventId);
+      return;
+    }
+  }
+
+  // Shadow mode: log intent, no dispatch
+  if (!FANOUT_ENFORCE) {
+    await sb.from("suite_maytapi_events").update({
+      fanout_state: "shadow_logged",
+      fanout_decided_at: new Date().toISOString(),
+      fanout_reason: `would_dispatch:${policy.email_spoke_app_key}:${policy.template_hint ?? ""}`,
+    }).eq("id", eventId);
+    return;
+  }
+
+  // Live dispatch to email spoke
+  const { data: emailApp } = await sb
+    .from("vos_suite_apps")
+    .select("app_key, url, bridge_secret_slot, is_active")
+    .eq("app_key", policy.email_spoke_app_key)
+    .maybeSingle();
+
+  if (!emailApp || !emailApp.is_active || !emailApp.url) {
+    await sb.from("suite_maytapi_events").update({
+      fanout_state: "failed",
+      fanout_decided_at: new Date().toISOString(),
+      fanout_reason: "email_spoke_missing_or_inactive",
+    }).eq("id", eventId);
+    return;
+  }
+
+  const emailSecret = Deno.env.get(emailApp.bridge_secret_slot) ?? "";
+  if (!emailSecret) {
+    await sb.from("suite_maytapi_events").update({
+      fanout_state: "failed",
+      fanout_decided_at: new Date().toISOString(),
+      fanout_reason: `email_secret_missing:${emailApp.bridge_secret_slot}`,
+    }).eq("id", eventId);
+    return;
+  }
+
+  const bodyObj = {
+    action: "email_dispatch",
+    body: {
+      hub_event_id: eventId,
+      origin_app: spoke_app_key,
+      origin_event_id: spoke_event_id,
+      campaign_type,
+      template_hint: policy.template_hint,
+      delay_minutes: policy.delay_minutes,
+      contact: {
+        email,
+        first_name: contact.first_name,
+        aplgo_id: contact.aplgo_id,
+        country: contact.country,
+      },
+      message: {
+        body_preview: metadata?.body_preview,
+        tier: metadata?.tier,
+        tone: metadata?.tone,
+      },
+      sent_at: new Date().toISOString(),
+      idempotency_key: `${spoke_app_key}:${spoke_event_id}:email`,
+    },
+  };
+  const rawBody = JSON.stringify(bodyObj);
+  const ts = String(Date.now());
+  const nonce = crypto.randomUUID();
+  const sig = await hmacHex(emailSecret, `${ts}.${nonce}.vantoos_hub.${rawBody}`);
+
+  try {
+    const url = `${emailApp.url.replace(/\/$/, "")}/functions/v1/hub-email-dispatch`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-bridge-app": "vantoos_hub",
+        "x-bridge-timestamp": ts,
+        "x-bridge-nonce": nonce,
+        "x-bridge-signature": sig,
+      },
+      body: rawBody,
+    });
+    const respText = await resp.text();
+    if (resp.ok) {
+      let emailSendId: string | null = null;
+      try {
+        emailSendId = JSON.parse(respText)?.email_send_id ?? null;
+      } catch { /* ignore */ }
+      await sb.from("suite_maytapi_events").update({
+        fanout_state: "dispatched",
+        fanout_decided_at: new Date().toISOString(),
+        fanout_email_send_id: emailSendId,
+        fanout_reason: `ok:${policy.email_spoke_app_key}`,
+      }).eq("id", eventId);
+    } else {
+      await sb.from("suite_maytapi_events").update({
+        fanout_state: "failed",
+        fanout_decided_at: new Date().toISOString(),
+        fanout_reason: `spoke_status_${resp.status}:${respText.slice(0, 200)}`,
+      }).eq("id", eventId);
+    }
+  } catch (e) {
+    await sb.from("suite_maytapi_events").update({
+      fanout_state: "failed",
+      fanout_decided_at: new Date().toISOString(),
+      fanout_reason: `fetch_error:${(e as Error).message}`,
+    }).eq("id", eventId);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -115,23 +286,30 @@ Deno.serve(async (req) => {
   try {
     switch (action) {
       case "ping": {
-        return json(200, { ok: true, hub: "maytapi-hub-bridge", app_key, at: new Date().toISOString() });
+        return json(200, {
+          ok: true,
+          hub: "maytapi-hub-bridge",
+          version: "v2",
+          fanout_enforce: FANOUT_ENFORCE,
+          app_key,
+          at: new Date().toISOString(),
+        });
       }
 
       case "dnc_check": {
-        // { phone, event_class? }
         const phone = String(body?.phone ?? "");
         const eventClass = String(body?.event_class ?? "default");
+        const channel = String(body?.channel ?? "whatsapp");
         if (!phone) return json(400, { ok: false, error: "phone_required" });
 
         const p_hash = await phoneHash(phone);
         if (!p_hash) return json(500, { ok: false, error: "hash_salt_missing" });
 
-        // 1. DNC lookup
         const { data: dnc } = await sb
           .from("suite_maytapi_dnc")
-          .select("reason,recorded_at,cleared_at")
+          .select("reason,recorded_at,cleared_at,channel")
           .eq("phone_hash", p_hash)
+          .in("channel", [channel, "all"])
           .is("cleared_at", null)
           .maybeSingle();
         if (dnc) {
@@ -140,11 +318,11 @@ Deno.serve(async (req) => {
             allowed: false,
             blocked_until: null,
             reason: `dnc:${dnc.reason}`,
+            channel,
             recorded_at: dnc.recorded_at,
           });
         }
 
-        // 2. Cooldown lookup
         const { data: cd } = await sb
           .from("suite_maytapi_cooldowns")
           .select("cooldown_seconds")
@@ -154,12 +332,12 @@ Deno.serve(async (req) => {
           ?? (await sb.from("suite_maytapi_cooldowns").select("cooldown_seconds").eq("event_class", "default").maybeSingle()).data?.cooldown_seconds
           ?? 21600;
 
-        // 3. Last outbound to this phone across the mesh
         const { data: last } = await sb
           .from("suite_maytapi_events")
           .select("sent_at,spoke_app_key,campaign_type")
           .eq("phone_hash", p_hash)
           .eq("direction", "outbound")
+          .eq("channel", channel)
           .order("sent_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -172,6 +350,7 @@ Deno.serve(async (req) => {
               allowed: false,
               blocked_until: nextOkAt.toISOString(),
               reason: "cooldown",
+              channel,
               last_sent_at: last.sent_at,
               last_sent_by: last.spoke_app_key,
               last_campaign_type: last.campaign_type,
@@ -185,19 +364,23 @@ Deno.serve(async (req) => {
           ok: true,
           allowed: true,
           blocked_until: null,
+          channel,
           cooldown_seconds: cooldownSec,
           event_class: eventClass,
         });
       }
 
       case "send_recorded": {
-        // { spoke_event_id, phone, campaign_type?, maytapi_message_id?, status?, sent_at?, metadata? }
         const spoke_event_id = String(body?.spoke_event_id ?? "");
         const phone = String(body?.phone ?? "");
+        const channel = String(body?.channel ?? "whatsapp");
         if (!spoke_event_id || !phone) return json(400, { ok: false, error: "missing_fields" });
 
         const p_hash = await phoneHash(phone);
         if (!p_hash) return json(500, { ok: false, error: "hash_salt_missing" });
+
+        const metadata = body?.metadata ?? {};
+        const campaign_type = body?.campaign_type ?? null;
 
         const row = {
           spoke_app_key: app_key,
@@ -205,23 +388,38 @@ Deno.serve(async (req) => {
           phone_hash: p_hash,
           phone_last4: last4(phone),
           direction: "outbound" as const,
-          campaign_type: body?.campaign_type ?? null,
+          channel,
+          campaign_type,
           maytapi_message_id: body?.maytapi_message_id ?? null,
           status: (body?.status as string) ?? "sent",
           sent_at: body?.sent_at ?? new Date().toISOString(),
-          metadata: body?.metadata ?? {},
+          metadata,
         };
 
-        const { error } = await sb
+        const { data: upserted, error } = await sb
           .from("suite_maytapi_events")
-          .upsert(row, { onConflict: "spoke_app_key,spoke_event_id" });
+          .upsert(row, { onConflict: "spoke_app_key,spoke_event_id" })
+          .select("id")
+          .maybeSingle();
         if (error) return json(500, { ok: false, error: error.message });
-        return json(200, { ok: true, recorded: true });
+
+        // Fan-out evaluation (only for whatsapp outbound with a campaign_type)
+        let fanout: any = { state: "skipped" };
+        if (upserted?.id && channel === "whatsapp" && campaign_type) {
+          await evaluateFanout(sb, upserted.id, app_key, spoke_event_id, campaign_type, metadata);
+          const { data: after } = await sb
+            .from("suite_maytapi_events")
+            .select("fanout_state,fanout_reason,fanout_email_send_id")
+            .eq("id", upserted.id)
+            .maybeSingle();
+          fanout = after ?? { state: "unknown" };
+        }
+        return json(200, { ok: true, recorded: true, event_id: upserted?.id, fanout });
       }
 
       case "inbound_stop": {
-        // { phone, keyword?, message_id?, received_at? }
         const phone = String(body?.phone ?? "");
+        const channel = String(body?.channel ?? "whatsapp");
         if (!phone) return json(400, { ok: false, error: "phone_required" });
         const p_hash = await phoneHash(phone);
         if (!p_hash) return json(500, { ok: false, error: "hash_salt_missing" });
@@ -232,34 +430,34 @@ Deno.serve(async (req) => {
             {
               phone_hash: p_hash,
               phone_last4: last4(phone),
+              channel,
               reason: "stop_keyword",
               source_spoke: app_key,
               recorded_at: body?.received_at ?? new Date().toISOString(),
               cleared_at: null,
               metadata: { keyword: body?.keyword ?? "STOP", message_id: body?.message_id ?? null },
             },
-            { onConflict: "phone_hash" },
+            { onConflict: "phone_hash,channel" },
           );
         if (error) return json(500, { ok: false, error: error.message });
 
-        // Also log as inbound event
         await sb.from("suite_maytapi_events").insert({
           spoke_app_key: app_key,
           spoke_event_id: `stop-${p_hash.slice(0, 12)}-${Date.now()}`,
           phone_hash: p_hash,
           phone_last4: last4(phone),
           direction: "inbound",
+          channel,
           campaign_type: "stop",
           status: "delivered",
           sent_at: body?.received_at ?? new Date().toISOString(),
           metadata: { keyword: body?.keyword ?? "STOP" },
         });
 
-        return json(200, { ok: true, dnc: true });
+        return json(200, { ok: true, dnc: true, channel });
       }
 
       case "events_backfill": {
-        // { events: [{ spoke_event_id, phone, direction, campaign_type?, status?, sent_at?, metadata? }] }
         const events: any[] = Array.isArray(body?.events) ? body.events : [];
         if (!events.length) return json(400, { ok: false, error: "events_required" });
         if (events.length > 500) return json(400, { ok: false, error: "batch_too_large" });
@@ -273,6 +471,7 @@ Deno.serve(async (req) => {
               phone_hash: p_hash,
               phone_last4: last4(String(e?.phone ?? "")),
               direction: (e?.direction as string) === "inbound" ? "inbound" : "outbound",
+              channel: (e?.channel as string) ?? "whatsapp",
               campaign_type: e?.campaign_type ?? null,
               maytapi_message_id: e?.maytapi_message_id ?? null,
               status: e?.status ?? "sent",
