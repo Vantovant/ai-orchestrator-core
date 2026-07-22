@@ -96,7 +96,7 @@ export default function MaytapiHubPage() {
     setEvents((ev.data as EventRow[]) ?? []);
     setDnc((dn.data as DncRow[]) ?? []);
     setCooldowns((cd.data as CooldownRow[]) ?? []);
-    setPolicies((pol.data as FanoutPolicyRow[]) ?? []);
+    setPolicies(((pol.data as unknown) as FanoutPolicyRow[]) ?? []);
     setLoading(false);
   };
 
