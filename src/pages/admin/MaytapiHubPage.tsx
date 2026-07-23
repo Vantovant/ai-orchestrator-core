@@ -237,6 +237,10 @@ export default function MaytapiHubPage() {
           ) : (
             <div className="space-y-3 text-sm">
               {quotas.map((q) => {
+                const frozen = !!q.freeze_until && new Date(q.freeze_until).getTime() > Date.now();
+                const freezeMs = frozen ? new Date(q.freeze_until!).getTime() - Date.now() : 0;
+                const freezeHrs = Math.floor(freezeMs / 3600000);
+                const freezeMin = Math.floor((freezeMs % 3600000) / 60000);
                 const pct = q.daily_limit > 0
                   ? Math.min(100, Math.round((q.used_in_window / q.daily_limit) * 100))
                   : 0;
