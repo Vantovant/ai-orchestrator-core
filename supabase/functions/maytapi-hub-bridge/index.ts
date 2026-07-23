@@ -332,6 +332,42 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Suite-wide daily quota (shared cap across sister spokes)
+        const { data: quotas } = await sb
+          .from("suite_maytapi_quota")
+          .select("scope_key,daily_limit,member_app_keys,window_hours,enabled")
+          .eq("channel", channel)
+          .eq("enabled", true)
+          .contains("member_app_keys", [app_key]);
+        if (quotas && quotas.length) {
+          for (const q of quotas) {
+            const windowStart = new Date(Date.now() - (q.window_hours ?? 24) * 3600 * 1000).toISOString();
+            const { count } = await sb
+              .from("suite_maytapi_events")
+              .select("id", { count: "exact", head: true })
+              .in("spoke_app_key", q.member_app_keys)
+              .eq("direction", "outbound")
+              .eq("channel", channel)
+              .gte("sent_at", windowStart);
+            const used = count ?? 0;
+            if (used >= q.daily_limit) {
+              const nextOkAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // retry in 1h
+              return json(200, {
+                ok: true,
+                allowed: false,
+                blocked_until: nextOkAt,
+                reason: "suite_daily_cap",
+                channel,
+                scope_key: q.scope_key,
+                daily_limit: q.daily_limit,
+                used_in_window: used,
+                window_hours: q.window_hours,
+                member_app_keys: q.member_app_keys,
+              });
+            }
+          }
+        }
+
         const { data: cd } = await sb
           .from("suite_maytapi_cooldowns")
           .select("cooldown_seconds")
