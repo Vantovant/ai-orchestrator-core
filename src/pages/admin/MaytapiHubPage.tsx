@@ -107,11 +107,53 @@ export default function MaytapiHubPage() {
         .from("suite_maytapi_fanout_policy" as any)
         .select("campaign_type,email_spoke_app_key,template_hint,delay_minutes,suppress_if,enabled,notes")
         .order("campaign_type"),
+      supabase
+        .from("suite_maytapi_quota" as any)
+        .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes")
+        .order("scope_key"),
     ]);
     setEvents((ev.data as EventRow[]) ?? []);
     setDnc((dn.data as DncRow[]) ?? []);
     setCooldowns((cd.data as CooldownRow[]) ?? []);
     setPolicies(((pol.data as unknown) as FanoutPolicyRow[]) ?? []);
+
+    // Compute live usage per quota rule
+    const quotaRows = ((arguments[0], (Array.isArray((await Promise.resolve()).valueOf()) ? [] : [])), []) as any;
+    const rawQuotas = ((await supabase
+      .from("suite_maytapi_quota" as any)
+      .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes")
+      .order("scope_key")).data as any[]) ?? [];
+    const enriched: QuotaRow[] = [];
+    for (const q of rawQuotas) {
+      const windowHours = q.window_hours ?? 24;
+      const since = new Date(Date.now() - windowHours * 3600 * 1000).toISOString();
+      const members: string[] = q.member_app_keys ?? [];
+      const { data: usageRows } = await supabase
+        .from("suite_maytapi_events")
+        .select("spoke_app_key")
+        .eq("direction", "outbound")
+        .eq("channel", q.channel ?? "whatsapp")
+        .in("status", ["sent", "delivered", "queued"])
+        .in("spoke_app_key", members.length ? members : ["__none__"])
+        .gte("sent_at", since);
+      const perMember: Record<string, number> = {};
+      for (const m of members) perMember[m] = 0;
+      for (const r of usageRows ?? []) perMember[r.spoke_app_key] = (perMember[r.spoke_app_key] || 0) + 1;
+      const used = Object.values(perMember).reduce((a, b) => a + b, 0);
+      enriched.push({
+        scope_key: q.scope_key,
+        channel: q.channel,
+        daily_limit: q.daily_limit,
+        member_app_keys: members,
+        window_hours: windowHours,
+        enabled: q.enabled,
+        notes: q.notes,
+        used_in_window: used,
+        per_member: perMember,
+        window_start: since,
+      });
+    }
+    setQuotas(enriched);
     setLoading(false);
   };
 
