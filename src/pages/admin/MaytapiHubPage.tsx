@@ -58,6 +58,8 @@ type QuotaRow = {
   used_in_window: number;
   per_member: Record<string, number>;
   window_start: string;
+  freeze_until: string | null;
+  freeze_reason: string | null;
 };
 
 
