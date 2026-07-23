@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquareOff, RefreshCw, ShieldOff, Timer } from "lucide-react";
+import { Gauge, MessageSquareOff, RefreshCw, ShieldOff, Timer } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 
 type EventRow = {
