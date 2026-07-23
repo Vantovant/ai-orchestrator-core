@@ -274,6 +274,18 @@ export default function MaytapiHubPage() {
                         </span>
                       ))}
                     </div>
+                    {frozen && (
+                      <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
+                        <span className="font-semibold text-destructive">FREEZE ACTIVE</span>
+                        <span className="ml-2">
+                          All sends blocked · resumes in {freezeHrs}h {freezeMin}m
+                        </span>
+                        <div className="text-muted-foreground mt-0.5">
+                          Thaws at {new Date(q.freeze_until!).toLocaleString()}
+                          {q.freeze_reason ? ` · ${q.freeze_reason}` : ""}
+                        </div>
+                      </div>
+                    )}
                     {q.notes && (
                       <div className="text-xs text-muted-foreground">{q.notes}</div>
                     )}
