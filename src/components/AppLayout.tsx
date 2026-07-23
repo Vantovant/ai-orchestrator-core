@@ -30,6 +30,7 @@ const navItems = [
   { to: "/manual", label: "User Manual", icon: BookMarked },
   { to: "/onboarding-emails", label: "Onboarding Emails", icon: MailPlus },
   { to: "/admin/vanto-os", label: "Governance", icon: ShieldAlert },
+  { to: "/admin/maytapi", label: "Maytapi Hub", icon: MessageCircle },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
