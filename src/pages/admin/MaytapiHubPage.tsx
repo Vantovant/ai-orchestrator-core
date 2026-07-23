@@ -149,6 +149,8 @@ export default function MaytapiHubPage() {
         used_in_window: used,
         per_member: perMember,
         window_start: since,
+        freeze_until: q.freeze_until ?? null,
+        freeze_reason: q.freeze_reason ?? null,
       });
     }
     setQuotas(enriched);
