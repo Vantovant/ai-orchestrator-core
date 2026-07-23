@@ -4,14 +4,14 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus, BookHeart, ShieldAlert, Home, Contact
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, MailPlus, BookHeart, ShieldAlert, Home, Contact, MessageCircle
 } from "lucide-react";
 import vantoosLogo from "@/assets/vantoos-logo.png";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 
-const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os"];
+const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os", "/admin/maytapi"];
 
 const navItems = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard },
@@ -30,6 +30,7 @@ const navItems = [
   { to: "/manual", label: "User Manual", icon: BookMarked },
   { to: "/onboarding-emails", label: "Onboarding Emails", icon: MailPlus },
   { to: "/admin/vanto-os", label: "Governance", icon: ShieldAlert },
+  { to: "/admin/maytapi", label: "Maytapi Hub", icon: MessageCircle },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
