@@ -87,7 +87,7 @@ export default function MaytapiHubPage() {
 
   const load = async () => {
     setLoading(true);
-    const [ev, dn, cd, pol] = await Promise.all([
+    const [ev, dn, cd, pol, qt] = await Promise.all([
       supabase
         .from("suite_maytapi_events")
         .select("id,spoke_app_key,phone_last4,direction,channel,campaign_type,status,sent_at,fanout_state,fanout_reason")
