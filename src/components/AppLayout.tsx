@@ -11,7 +11,7 @@ import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { supabase } from "@/integrations/supabase/client";
 
-const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os"];
+const ADMIN_ROUTES = ["/testers", "/onboarding-emails", "/admin/vanto-os", "/admin/maytapi"];
 
 const navItems = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard },
