@@ -17,11 +17,21 @@ const OUTBOUND_SIGNING_ALIAS: Record<string, string> = {
   // still keeps getwell_hub as a distinct contact-sync target.
   getwell_hub: "vanto_crm",
   // getwell_africa_email + mlm_course share the same Supabase runtime as zazi_email
-  // (host wwuenmmocxtwwgylngui). That shared spoke verifies inbound hub messages
-  // with the zazi_email signing identity, so route the signature through it while
-  // keeping the registry target distinct (target_app_key preserved in body).
+  // (host wwuenmmocxtwwgylngui). Use zazi_email's secret slot; the sender label
+  // is overridden below to "vantoos_hub" per Zazi Mail's updated verifier.
   getwell_africa_email: "zazi_email",
   mlm_course: "zazi_email",
+};
+
+// Per-target override for the sender identity ("x-bridge-app" header AND the
+// canonical string used for HMAC). Zazi Mail's spoke now verifies inbound hub
+// messages with sender="vantoos_hub" and canonical
+// `${ts}.${nonce}.vantoos_hub.${raw_body}` — same convention as hub-email-dispatch.
+// The secret still comes from the aliased slot (SUITE_BRIDGE_SECRET_ZAZI_EMAIL).
+const OUTBOUND_SENDER_LABEL: Record<string, string> = {
+  zazi_email: "vantoos_hub",
+  getwell_africa_email: "vantoos_hub",
+  mlm_course: "vantoos_hub",
 };
 
 const enc = new TextEncoder();
@@ -88,13 +98,16 @@ Deno.serve(async (req) => {
     const secret = Deno.env.get(signingApp.bridge_secret_slot);
     if (!secret) return { ok: false, error: "missing_secret", status: 500, nonce: null };
 
-    const outboundBody = signingAlias && typeof body === "object" && body !== null
+    const senderLabel = OUTBOUND_SENDER_LABEL[app.app_key]
+      ?? OUTBOUND_SENDER_LABEL[signingApp.app_key]
+      ?? signingApp.app_key;
+    const outboundBody = (signingAlias || senderLabel !== signingApp.app_key) && typeof body === "object" && body !== null
       ? { ...(body as Record<string, unknown>), target_app_key: app.app_key }
       : body;
     const bodyStr = JSON.stringify(outboundBody);
     const ts = Math.floor(Date.now() / 1000).toString();
     const nonce = crypto.randomUUID();
-    const sig = await hmacSha256Hex(secret, `${ts}.${nonce}.${signingApp.app_key}.${bodyStr}`);
+    const sig = await hmacSha256Hex(secret, `${ts}.${nonce}.${senderLabel}.${bodyStr}`);
     const target = new URL("/functions/v1/suite-bridge-spoke", app.url).toString();
 
     try {
@@ -102,7 +115,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-bridge-app": "vantoos",
+          "x-bridge-app": senderLabel,
           "x-bridge-timestamp": ts,
           "x-bridge-nonce": nonce,
           "x-bridge-signature": sig,
