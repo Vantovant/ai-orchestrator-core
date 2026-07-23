@@ -69,6 +69,7 @@ export default function MaytapiHubPage() {
   const [dnc, setDnc] = useState<DncRow[]>([]);
   const [cooldowns, setCooldowns] = useState<CooldownRow[]>([]);
   const [policies, setPolicies] = useState<FanoutPolicyRow[]>([]);
+  const [quotas, setQuotas] = useState<QuotaRow[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
 
   useEffect(() => {
