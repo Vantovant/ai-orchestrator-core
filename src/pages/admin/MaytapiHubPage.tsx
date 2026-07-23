@@ -118,10 +118,7 @@ export default function MaytapiHubPage() {
     setPolicies(((pol.data as unknown) as FanoutPolicyRow[]) ?? []);
 
     // Compute live usage per quota rule
-    const rawQuotas = ((await supabase
-      .from("suite_maytapi_quota" as any)
-      .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes")
-      .order("scope_key")).data as any[]) ?? [];
+    const rawQuotas = (qt.data as any[]) ?? [];
     const enriched: QuotaRow[] = [];
     for (const q of rawQuotas) {
       const windowHours = q.window_hours ?? 24;
