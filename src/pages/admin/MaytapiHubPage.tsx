@@ -111,7 +111,7 @@ export default function MaytapiHubPage() {
         .order("campaign_type"),
       supabase
         .from("suite_maytapi_quota" as any)
-        .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes")
+        .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes,freeze_until,freeze_reason")
         .order("scope_key"),
     ]);
     setEvents((ev.data as EventRow[]) ?? []);
