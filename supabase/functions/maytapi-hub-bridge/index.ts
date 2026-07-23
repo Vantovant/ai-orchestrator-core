@@ -335,12 +335,25 @@ Deno.serve(async (req) => {
         // Suite-wide daily quota (shared cap across sister spokes)
         const { data: quotas } = await sb
           .from("suite_maytapi_quota")
-          .select("scope_key,daily_limit,member_app_keys,window_hours,enabled")
+          .select("scope_key,daily_limit,member_app_keys,window_hours,enabled,freeze_until,freeze_reason")
           .eq("channel", channel)
           .eq("enabled", true)
           .contains("member_app_keys", [app_key]);
         if (quotas && quotas.length) {
           for (const q of quotas) {
+            // Freeze window takes precedence — blocks all sends until freeze_until.
+            if (q.freeze_until && new Date(q.freeze_until).getTime() > Date.now()) {
+              return json(200, {
+                ok: true,
+                allowed: false,
+                blocked_until: q.freeze_until,
+                reason: "suite_freeze",
+                freeze_reason: q.freeze_reason ?? null,
+                channel,
+                scope_key: q.scope_key,
+                member_app_keys: q.member_app_keys,
+              });
+            }
             const windowStart = new Date(Date.now() - (q.window_hours ?? 24) * 3600 * 1000).toISOString();
             const { count } = await sb
               .from("suite_maytapi_events")
