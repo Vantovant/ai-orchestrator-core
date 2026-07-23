@@ -47,6 +47,19 @@ type CooldownRow = {
   cooldown_seconds: number;
   notes: string | null;
 };
+type QuotaRow = {
+  scope_key: string;
+  channel: string;
+  daily_limit: number;
+  member_app_keys: string[];
+  window_hours: number;
+  enabled: boolean;
+  notes: string | null;
+  used_in_window: number;
+  per_member: Record<string, number>;
+  window_start: string;
+};
+
 
 export default function MaytapiHubPage() {
   const { user } = useAuth();
