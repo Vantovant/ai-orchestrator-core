@@ -219,6 +219,67 @@ export default function MaytapiHubPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
+            <Gauge className="h-4 w-4" /> Shared send quotas
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Live counter of outbound WhatsApp events across grouped spokes. Enforced at the Hub via
+            <code className="mx-1">dnc_check</code>. When usage reaches the limit, spokes receive
+            <code className="mx-1">reason: "suite_daily_cap"</code>.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {quotas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No quota rules configured.</p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              {quotas.map((q) => {
+                const pct = q.daily_limit > 0
+                  ? Math.min(100, Math.round((q.used_in_window / q.daily_limit) * 100))
+                  : 0;
+                const remaining = Math.max(0, q.daily_limit - q.used_in_window);
+                const tone = pct >= 100 ? "destructive" : pct >= 75 ? "default" : "secondary";
+                return (
+                  <div key={`${q.scope_key}:${q.channel}`} className="border rounded p-3 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={q.enabled ? "default" : "outline"}>
+                        {q.enabled ? "enforced" : "disabled"}
+                      </Badge>
+                      <span className="font-medium">{q.scope_key}</span>
+                      <Badge variant="outline" className="text-xs">{q.channel}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        window {q.window_hours}h
+                      </span>
+                      <span className="ml-auto flex items-center gap-2">
+                        <Badge variant={tone as any}>
+                          {q.used_in_window} / {q.daily_limit}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {remaining} left
+                        </span>
+                      </span>
+                    </div>
+                    <Progress value={pct} className={pct >= 100 ? "[&>div]:bg-destructive" : ""} />
+                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      {q.member_app_keys.map((m) => (
+                        <span key={m} className="border rounded px-2 py-0.5">
+                          {m}: <span className="font-mono">{q.per_member[m] ?? 0}</span>
+                        </span>
+                      ))}
+                    </div>
+                    {q.notes && (
+                      <div className="text-xs text-muted-foreground">{q.notes}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
             <Timer className="h-4 w-4" /> Cooldown windows
           </CardTitle>
         </CardHeader>
