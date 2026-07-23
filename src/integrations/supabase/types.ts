@@ -3408,6 +3408,42 @@ export type Database = {
         }
         Relationships: []
       }
+      suite_maytapi_quota: {
+        Row: {
+          channel: string
+          created_at: string
+          daily_limit: number
+          enabled: boolean
+          member_app_keys: string[]
+          notes: string | null
+          scope_key: string
+          updated_at: string
+          window_hours: number
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          daily_limit: number
+          enabled?: boolean
+          member_app_keys: string[]
+          notes?: string | null
+          scope_key: string
+          updated_at?: string
+          window_hours?: number
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          daily_limit?: number
+          enabled?: boolean
+          member_app_keys?: string[]
+          notes?: string | null
+          scope_key?: string
+          updated_at?: string
+          window_hours?: number
+        }
+        Relationships: []
+      }
       tags: {
         Row: {
           color: string | null
