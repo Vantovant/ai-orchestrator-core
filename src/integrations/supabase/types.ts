@@ -3414,6 +3414,8 @@ export type Database = {
           created_at: string
           daily_limit: number
           enabled: boolean
+          freeze_reason: string | null
+          freeze_until: string | null
           member_app_keys: string[]
           notes: string | null
           scope_key: string
@@ -3425,6 +3427,8 @@ export type Database = {
           created_at?: string
           daily_limit: number
           enabled?: boolean
+          freeze_reason?: string | null
+          freeze_until?: string | null
           member_app_keys: string[]
           notes?: string | null
           scope_key: string
@@ -3436,6 +3440,8 @@ export type Database = {
           created_at?: string
           daily_limit?: number
           enabled?: boolean
+          freeze_reason?: string | null
+          freeze_until?: string | null
           member_app_keys?: string[]
           notes?: string | null
           scope_key?: string

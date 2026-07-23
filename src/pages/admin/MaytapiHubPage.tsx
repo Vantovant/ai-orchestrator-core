@@ -58,6 +58,8 @@ type QuotaRow = {
   used_in_window: number;
   per_member: Record<string, number>;
   window_start: string;
+  freeze_until: string | null;
+  freeze_reason: string | null;
 };
 
 
@@ -109,7 +111,7 @@ export default function MaytapiHubPage() {
         .order("campaign_type"),
       supabase
         .from("suite_maytapi_quota" as any)
-        .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes")
+        .select("scope_key,channel,daily_limit,member_app_keys,window_hours,enabled,notes,freeze_until,freeze_reason")
         .order("scope_key"),
     ]);
     setEvents((ev.data as EventRow[]) ?? []);
@@ -147,6 +149,8 @@ export default function MaytapiHubPage() {
         used_in_window: used,
         per_member: perMember,
         window_start: since,
+        freeze_until: q.freeze_until ?? null,
+        freeze_reason: q.freeze_reason ?? null,
       });
     }
     setQuotas(enriched);
@@ -233,6 +237,10 @@ export default function MaytapiHubPage() {
           ) : (
             <div className="space-y-3 text-sm">
               {quotas.map((q) => {
+                const frozen = !!q.freeze_until && new Date(q.freeze_until).getTime() > Date.now();
+                const freezeMs = frozen ? new Date(q.freeze_until!).getTime() - Date.now() : 0;
+                const freezeHrs = Math.floor(freezeMs / 3600000);
+                const freezeMin = Math.floor((freezeMs % 3600000) / 60000);
                 const pct = q.daily_limit > 0
                   ? Math.min(100, Math.round((q.used_in_window / q.daily_limit) * 100))
                   : 0;
@@ -266,6 +274,18 @@ export default function MaytapiHubPage() {
                         </span>
                       ))}
                     </div>
+                    {frozen && (
+                      <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
+                        <span className="font-semibold text-destructive">FREEZE ACTIVE</span>
+                        <span className="ml-2">
+                          All sends blocked · resumes in {freezeHrs}h {freezeMin}m
+                        </span>
+                        <div className="text-muted-foreground mt-0.5">
+                          Thaws at {new Date(q.freeze_until!).toLocaleString()}
+                          {q.freeze_reason ? ` · ${q.freeze_reason}` : ""}
+                        </div>
+                      </div>
+                    )}
                     {q.notes && (
                       <div className="text-xs text-muted-foreground">{q.notes}</div>
                     )}
