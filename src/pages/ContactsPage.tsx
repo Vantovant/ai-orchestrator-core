@@ -155,6 +155,9 @@ export default function ContactsPage() {
         </Button>
       </div>
 
+      {/* Google Contacts sync */}
+      <GoogleContactsPanel onImported={() => queryClient.invalidateQueries({ queryKey: ["hub-contacts"] })} />
+
       {/* Hero stats */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent">
