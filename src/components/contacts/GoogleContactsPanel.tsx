@@ -105,26 +105,16 @@ export default function GoogleContactsPanel({ onImported }: { onImported?: () =>
     try {
       const params = new URLSearchParams({ pageSize: "100" });
       if (pageToken) params.set("pageToken", pageToken);
-      const { data, error } = await supabase.functions.invoke("google-contacts-list", {
-        method: "GET" as any,
-        body: undefined,
-        // supabase-js requires body for POST; we use POST with empty payload since it parses the URL query params server-side too
+      const session = (await supabase.auth.getSession()).data.session;
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-contacts-list?${params}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
       });
-      // Fallback: call fetch directly with query params
-      let payload: any = data;
-      let err: any = error;
-      if (err || !payload?.contacts) {
-        const session = (await supabase.auth.getSession()).data.session;
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-contacts-list?${params}`;
-        const res = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${session?.access_token ?? ""}`,
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          },
-        });
-        payload = await res.json();
-        if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
-      }
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || `HTTP ${res.status}`);
       setRows(pageToken ? [...rows, ...(payload.contacts ?? [])] : (payload.contacts ?? []));
       setNextPageToken(payload.nextPageToken ?? null);
       setTotalPeople(payload.totalPeople ?? null);
