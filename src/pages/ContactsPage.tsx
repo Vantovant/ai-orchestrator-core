@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { contactService, type HubContactWithLinks } from "@/services/contactService";
 import ContactDrawer from "@/components/contacts/ContactDrawer";
+import GoogleContactsPanel from "@/components/contacts/GoogleContactsPanel";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,6 +154,9 @@ export default function ContactsPage() {
           {syncMutation.isPending ? "Syncing..." : "Sync now"}
         </Button>
       </div>
+
+      {/* Google Contacts sync */}
+      <GoogleContactsPanel onImported={() => queryClient.invalidateQueries({ queryKey: ["hub-contacts"] })} />
 
       {/* Hero stats */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">

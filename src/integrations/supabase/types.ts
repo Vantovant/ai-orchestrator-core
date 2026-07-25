@@ -1474,6 +1474,60 @@ export type Database = {
           },
         ]
       }
+      google_contacts_accounts: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          display_name: string | null
+          email_address: string
+          id: string
+          last_pull_at: string | null
+          last_push_at: string | null
+          next_sync_token: string | null
+          refresh_token_encrypted: string | null
+          scopes: string[]
+          status: string
+          token_encrypted: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          display_name?: string | null
+          email_address: string
+          id?: string
+          last_pull_at?: string | null
+          last_push_at?: string | null
+          next_sync_token?: string | null
+          refresh_token_encrypted?: string | null
+          scopes?: string[]
+          status?: string
+          token_encrypted?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          display_name?: string | null
+          email_address?: string
+          id?: string
+          last_pull_at?: string | null
+          last_push_at?: string | null
+          next_sync_token?: string | null
+          refresh_token_encrypted?: string | null
+          scopes?: string[]
+          status?: string
+          token_encrypted?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       hub_contact_links: {
         Row: {
           app_key: string
