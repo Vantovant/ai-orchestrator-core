@@ -114,13 +114,23 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, ha
           {email.waiting_on && <Badge className="text-xs bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">Waiting On</Badge>}
         </div>
 
-        {/* Snippet (no full body yet) */}
-        <div className="rounded-lg border border-border/50 bg-muted/20 p-4 text-sm text-foreground leading-relaxed">
-          {email.snippet}
-          <p className="mt-4 text-xs text-muted-foreground italic">
-            Full email body not loaded – connect Gmail to see full content.
-          </p>
+        {/* Full body */}
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">
+          {bodyLoading && !body ? (
+            <span className="text-muted-foreground italic">Loading full email…</span>
+          ) : (
+            decodeEntities(body || email.snippet)
+          )}
+          {!bodyLoading && !body && (
+            <div className="mt-4 flex items-center gap-2">
+              <p className="text-xs text-muted-foreground italic">Full body not cached yet.</p>
+              <Button variant="outline" size="sm" className="h-6 text-xs" onClick={loadBody}>
+                Load full email
+              </Button>
+            </div>
+          )}
         </div>
+
       </div>
     </div>
   );
