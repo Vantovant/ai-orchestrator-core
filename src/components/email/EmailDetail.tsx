@@ -4,8 +4,9 @@ import type { EmailMessage } from "@/services/emailService";
 import type { SuggestedRoute } from "@/services/emailExtractService";
 import SmartExtractPanel from "@/components/email/SmartExtractPanel";
 import HandledStamp from "@/components/email/HandledStamp";
-import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip } from "lucide-react";
+import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
+import { useState } from "react";
 
 interface Props {
   email: EmailMessage;
