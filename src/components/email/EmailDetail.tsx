@@ -1,12 +1,21 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { EmailMessage } from "@/services/emailService";
+import { emailService, type EmailMessage } from "@/services/emailService";
 import type { SuggestedRoute } from "@/services/emailExtractService";
 import SmartExtractPanel from "@/components/email/SmartExtractPanel";
 import HandledStamp from "@/components/email/HandledStamp";
 import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+/** Decode HTML entities so bodies like "Don&#39;t" render correctly. */
+function decodeEntities(text: string): string {
+  if (!text) return "";
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+}
+
 
 interface Props {
   email: EmailMessage;
