@@ -145,4 +145,17 @@ export const emailService = {
   async unsnooze(id: string) {
     await supabase.from("email_messages").update({ snoozed_until: null, updated_at: new Date().toISOString() }).eq("id", id);
   },
+
+  /** Fetch the full email body (on-demand pull from Gmail if not cached). */
+  async fetchFullBody(messageId: string): Promise<string | null> {
+    const { data, error } = await supabase.functions.invoke("gmail-get", {
+      body: { message_id: messageId, fetch_body: true },
+    });
+    if (error) {
+      console.error("[emailService.fetchFullBody]", error);
+      return null;
+    }
+    return (data as any)?.message?.body_preview ?? null;
+  },
 };
+

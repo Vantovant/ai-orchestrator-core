@@ -1,12 +1,21 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { EmailMessage } from "@/services/emailService";
+import { emailService, type EmailMessage } from "@/services/emailService";
 import type { SuggestedRoute } from "@/services/emailExtractService";
 import SmartExtractPanel from "@/components/email/SmartExtractPanel";
 import HandledStamp from "@/components/email/HandledStamp";
 import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+/** Decode HTML entities so bodies like "Don&#39;t" render correctly. */
+function decodeEntities(text: string): string {
+  if (!text) return "";
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+}
+
 
 interface Props {
   email: EmailMessage;
@@ -26,6 +35,21 @@ interface Props {
 
 export default function EmailDetail({ email, selectedAccount, financeCreated, handledRefreshKey, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
   const [extractOpen, setExtractOpen] = useState(true);
+  const [body, setBody] = useState<string>("");
+  const [bodyLoading, setBodyLoading] = useState(false);
+
+  const loadBody = useCallback(async () => {
+    setBodyLoading(true);
+    const full = await emailService.fetchFullBody(email.id);
+    setBody(full || "");
+    setBodyLoading(false);
+  }, [email.id]);
+
+  useEffect(() => {
+    setBody("");
+    loadBody();
+  }, [loadBody]);
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -114,13 +138,23 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, ha
           {email.waiting_on && <Badge className="text-xs bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">Waiting On</Badge>}
         </div>
 
-        {/* Snippet (no full body yet) */}
-        <div className="rounded-lg border border-border/50 bg-muted/20 p-4 text-sm text-foreground leading-relaxed">
-          {email.snippet}
-          <p className="mt-4 text-xs text-muted-foreground italic">
-            Full email body not loaded – connect Gmail to see full content.
-          </p>
+        {/* Full body */}
+        <div className="rounded-lg border border-border/50 bg-muted/20 p-4 text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">
+          {bodyLoading && !body ? (
+            <span className="text-muted-foreground italic">Loading full email…</span>
+          ) : (
+            decodeEntities(body || email.snippet)
+          )}
+          {!bodyLoading && !body && (
+            <div className="mt-4 flex items-center gap-2">
+              <p className="text-xs text-muted-foreground italic">Full body not cached yet.</p>
+              <Button variant="outline" size="sm" className="h-6 text-xs" onClick={loadBody}>
+                Load full email
+              </Button>
+            </div>
+          )}
         </div>
+
       </div>
     </div>
   );
