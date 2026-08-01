@@ -25,6 +25,7 @@ interface Props {
 }
 
 export default function EmailDetail({ email, selectedAccount, financeCreated, handledRefreshKey, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
+  const [extractOpen, setExtractOpen] = useState(true);
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
