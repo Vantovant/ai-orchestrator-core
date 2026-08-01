@@ -4,8 +4,9 @@ import type { EmailMessage } from "@/services/emailService";
 import type { SuggestedRoute } from "@/services/emailExtractService";
 import SmartExtractPanel from "@/components/email/SmartExtractPanel";
 import HandledStamp from "@/components/email/HandledStamp";
-import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip } from "lucide-react";
+import { ArrowLeft, Archive, Clock, Reply, Star, CheckSquare, CalendarPlus, Bell, Paperclip, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
+import { useState } from "react";
 
 interface Props {
   email: EmailMessage;
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export default function EmailDetail({ email, selectedAccount, financeCreated, handledRefreshKey, onBack, onArchive, onSnooze, onStar, onCreateTask, onCreateMeeting, onCreateReminder, onCreateExpense, onCreateIncome }: Props) {
+  const [extractOpen, setExtractOpen] = useState(true);
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -62,24 +64,37 @@ export default function EmailDetail({ email, selectedAccount, financeCreated, ha
       </div>
 
       {/* Email content */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 space-y-4">
-        {/* Sticky Handled + Smart Extract panel */}
-        <div className="sticky top-0 z-10 space-y-3 bg-background pb-2">
-          <HandledStamp emailId={email.id} refreshKey={handledRefreshKey} />
-          <SmartExtractPanel
-            emailId={email.id}
-            emailSubject={email.subject}
-            emailSender={email.sender}
-            emailSnippet={email.snippet}
-            selectedAccount={selectedAccount}
-            financeCreated={financeCreated}
-            onCreateExpense={onCreateExpense || (() => {})}
-            onCreateIncome={onCreateIncome}
-            onCreateTask={onCreateTask}
-            onCreateMeeting={onCreateMeeting}
-            onCreateReminder={onCreateReminder}
-          />
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 space-y-4">
+        <HandledStamp emailId={email.id} refreshKey={handledRefreshKey} />
+
+        {/* Smart Extract (collapsible so the email stays reachable) */}
+        <div className="space-y-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-xs px-2"
+            onClick={() => setExtractOpen((v) => !v)}
+          >
+            {extractOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {extractOpen ? "Hide Smart Extract" : "Show Smart Extract"}
+          </Button>
+          {extractOpen && (
+            <SmartExtractPanel
+              emailId={email.id}
+              emailSubject={email.subject}
+              emailSender={email.sender}
+              emailSnippet={email.snippet}
+              selectedAccount={selectedAccount}
+              financeCreated={financeCreated}
+              onCreateExpense={onCreateExpense || (() => {})}
+              onCreateIncome={onCreateIncome}
+              onCreateTask={onCreateTask}
+              onCreateMeeting={onCreateMeeting}
+              onCreateReminder={onCreateReminder}
+            />
+          )}
         </div>
+
 
         <h2 className="text-lg font-semibold text-foreground mb-2">{email.subject}</h2>
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
