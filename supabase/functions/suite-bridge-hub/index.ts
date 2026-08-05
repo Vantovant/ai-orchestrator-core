@@ -58,6 +58,45 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// SECURITY FIX (2026-08-05): admin gate for hub-initiated outbound actions.
+//
+// ping / send / broadcast_directive / health_poll are all called from the
+// VantoOS admin console via supabase.functions.invoke(), which already
+// attaches the logged-in admin's session as an Authorization: Bearer header.
+// Previously these four actions never checked that header at all — anyone
+// who knew the function URL and a registered app_key could get the hub to
+// sign and deliver a directive to a live spoke using the hub's real secret,
+// with no signature check and no auth check of any kind.
+//
+// This mirrors the admin-gate pattern already used correctly by
+// contacts_seed_spoke further down in this same file.
+// ---------------------------------------------------------------------------
+async function requireAdmin(req: Request): Promise<
+  { ok: true; userId: string } | { ok: false; status: number; reason: string }
+> {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!authHeader.toLowerCase().startsWith("bearer ")) {
+    return { ok: false, status: 401, reason: "auth_required" };
+  }
+  const authed = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } },
+  );
+  const { data: userRes } = await authed.auth.getUser();
+  const user = userRes?.user;
+  if (!user) return { ok: false, status: 401, reason: "auth_required" };
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+  const { data: isAdmin } = await admin.rpc("has_role", { _user_id: user.id, _role: "admin" });
+  if (!isAdmin) return { ok: false, status: 403, reason: "admin_only" };
+  return { ok: true, userId: user.id };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -133,6 +172,9 @@ Deno.serve(async (req) => {
 
   // ---------- OUTBOUND: sign & deliver to spoke ----------
   if (action === "ping" || action === "send") {
+    const gate = await requireAdmin(req);
+    if (!gate.ok) return json({ error: gate.reason }, gate.status);
+
     const app_key = payload?.app_key as string;
     const body = payload?.body ?? { kind: action === "ping" ? "ping" : "directive", ts: Date.now() };
     if (!app_key) return json({ error: "missing_app_key" }, 400);
@@ -159,6 +201,9 @@ Deno.serve(async (req) => {
 
   // ---------- STRATEGY ENGINE: broadcast directive to selected spokes ----------
   if (action === "broadcast_directive") {
+    const gate = await requireAdmin(req);
+    if (!gate.ok) return json({ error: gate.reason }, gate.status);
+
     const directive_id = payload?.directive_id as string;
     const app_keys = payload?.app_keys as string[];
     if (!directive_id || !Array.isArray(app_keys) || app_keys.length === 0) {
@@ -206,6 +251,9 @@ Deno.serve(async (req) => {
 
   // ---------- PHASE C: TELEMETRY — poll active spokes, record latency & status ----------
   if (action === "health_poll") {
+    const gate = await requireAdmin(req);
+    if (!gate.ok) return json({ error: gate.reason }, gate.status);
+
     const { data: apps } = await supabase
       .from("vos_suite_apps")
       .select("app_key, name, url, bridge_secret_slot, is_active, role")
