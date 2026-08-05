@@ -114,8 +114,16 @@ const app = express();
 app.use(express.json());
 
 app.post("/mcp", async (req, res) => {
+  // Claude's custom connector UI currently defaults to an OAuth flow and, as
+  // of this writing, doesn't reliably expose a plain Bearer-token/header field
+  // for every account (the "Request headers" option is beta-gated). As a
+  // fallback, also accept the token as a ?token= query param on the /mcp URL
+  // itself, so the connector can authenticate using only the URL field.
   const auth = req.headers["authorization"] || "";
-  if (auth !== `Bearer ${MCP_SERVER_TOKEN}`) {
+  const queryToken = typeof req.query.token === "string" ? req.query.token : "";
+  const authorized =
+    auth === `Bearer ${MCP_SERVER_TOKEN}` || queryToken === MCP_SERVER_TOKEN;
+  if (!authorized) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
