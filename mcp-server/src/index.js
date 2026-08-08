@@ -1,7 +1,8 @@
 // VantoOS MCP Server
-// Exposes hub_contacts tools to Claude via streamable-HTTP MCP transport.
-// Every tool call is forwarded to the mcp-bridge Supabase Edge Function,
-// which holds the actual database logic and the service-role key.
+// Exposes hub_contacts tools, plus Projects/Tasks/Reminders/Meetings/
+// Project Notes/Voice Diary tools, to Claude via streamable-HTTP MCP
+// transport. Every tool call is forwarded to the mcp-bridge Supabase Edge
+// Function, which holds the actual database logic and the service-role key.
 //
 // Required env vars (set these on Railway):
 //   MCP_BRIDGE_URL   - e.g. https://<project-ref>.supabase.co/functions/v1/mcp-bridge
@@ -47,8 +48,11 @@ function toolResult(data) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "vantoos-mcp", version: "1.0.0" });
+  const server = new McpServer({ name: "vantoos-mcp", version: "1.1.0" });
 
+  // ---------------------------------------------------------------
+  // Contacts (unchanged)
+  // ---------------------------------------------------------------
   server.tool(
     "list_contacts",
     "Filter VantoOS hub contacts by contact_type, lead_type, temperature, tag, or free-text search " +
@@ -105,6 +109,106 @@ function buildServer() {
       note: z.string().describe("Note text to append"),
     },
     async (args) => toolResult(await callBridge("add_contact_note", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Projects
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_projects",
+    "List your VantoOS projects (pinned first, then most recently updated). Use this to resolve " +
+      "a project name to its id before attaching a task, reminder, meeting, or note to it. Read-only.",
+    {
+      status: z.string().optional().describe("Filter by project status, e.g. 'active'"),
+      search: z.string().optional().describe("Free-text match on project name"),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_projects", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Tasks
+  // ---------------------------------------------------------------
+  server.tool(
+    "create_task",
+    "Create a new VantoOS task, optionally attached to a project via project_id (get one from " +
+      "list_projects first). Duplicate titles within the same project scope are merged rather " +
+      "than creating a second task.",
+    {
+      title: z.string().describe("Task title — required"),
+      project_id: z.string().optional().describe("Attach this task to a project"),
+      priority: z.enum(["critical", "high", "medium", "low"]).optional(),
+      description: z.string().optional(),
+      due_date: z.string().optional().describe("ISO 8601 date/time"),
+    },
+    async (args) => toolResult(await callBridge("create_task", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Reminders
+  // ---------------------------------------------------------------
+  server.tool(
+    "create_reminder",
+    "Create a new VantoOS reminder, optionally attached to a project via project_id.",
+    {
+      title: z.string().describe("Reminder title — required"),
+      reminder_time: z.string().describe("ISO 8601 date/time — required"),
+      project_id: z.string().optional(),
+      description: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("create_reminder", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Meetings
+  // ---------------------------------------------------------------
+  server.tool(
+    "create_meeting",
+    "Create a new VantoOS meeting, optionally attached to a project via project_id.",
+    {
+      title: z.string().describe("Meeting title — required"),
+      start_time: z.string().describe("ISO 8601 date/time — required"),
+      end_time: z.string().describe("ISO 8601 date/time — required"),
+      project_id: z.string().optional(),
+      description: z.string().optional(),
+      location: z.string().optional(),
+      notes: z.string().optional(),
+      attendees: z.array(z.string()).optional(),
+    },
+    async (args) => toolResult(await callBridge("create_meeting", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Project Notes (date-keyed, per project)
+  // ---------------------------------------------------------------
+  server.tool(
+    "add_project_note",
+    "Add a note to a specific project's daily note (get project_id from list_projects first). " +
+      "If a note already exists for that project on that day, this appends to it rather than " +
+      "overwriting. Defaults to today if note_date is omitted.",
+    {
+      project_id: z.string().describe("projects.id — required"),
+      content: z.string().describe("Note text — required"),
+      note_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+    },
+    async (args) => toolResult(await callBridge("add_project_note", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Voice Diary (personal log, optionally tagged to projects)
+  // ---------------------------------------------------------------
+  server.tool(
+    "add_diary_entry",
+    "Add an entry to your VantoOS Voice Diary. This is a personal log, distinct from project " +
+      "notes — optionally tag it to one or more projects via linked_project_ids (get ids from " +
+      "list_projects).",
+    {
+      content: z.string().describe("Entry text — required"),
+      title: z.string().optional(),
+      mood: z.string().optional(),
+      linked_project_ids: z.array(z.string()).optional().describe("Project ids this entry relates to"),
+    },
+    async (args) => toolResult(await callBridge("add_diary_entry", args)),
   );
 
   return server;

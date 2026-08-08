@@ -1,17 +1,34 @@
 // VantoOS — MCP Bridge
-// Lets Claude (via the standalone mcp-server) read and update hub_contacts.
-// Authenticates via a static x-mcp-token header, compared with a timing-safe
-// check against MCP_BRIDGE_TOKEN. Uses the service-role key to bypass RLS,
-// since hub_contacts is a suite-wide table with no per-row owner column.
+// Lets Claude (via the standalone mcp-server) read and update hub_contacts,
+// AND — as of this update — projects, tasks, reminders, meetings,
+// project_notes, and voice_diary_entries.
 //
-// Fail-closed by design, matching the pattern already verified correct in
-// maytapi-hub-bridge and suite-bridge-hub's signed actions:
+// Auth: static x-mcp-token header, timing-safe compared against
+// MCP_BRIDGE_TOKEN. Uses the service-role key to bypass RLS.
+//
+// hub_contacts is a suite-wide table with no per-row owner column, so those
+// actions need no user resolution. Everything added in this update
+// (projects/tasks/reminders/meetings/project_notes/voice_diary_entries) IS
+// owned per-row via user_id + RLS in the real app, so every write below is
+// stamped with MCP_OWNER_USER_ID — the same "resolve a single owner, bypass
+// RLS deliberately and narrowly" pattern already proven in
+// extension-task-create/index.ts for the browser extension. This bridge acts
+// as you and only you; it does not multiplex across users.
+//
+// Fail-closed by design:
 //   - missing/invalid token -> 401
 //   - unknown action -> 400
+//   - missing MCP_OWNER_USER_ID for an owner-scoped action -> 500
 //   - every write is scoped to explicit, allow-listed fields only
 //
 // supabase/config.toml must set: [functions.mcp-bridge] verify_jwt = false
 // (this function authenticates via x-mcp-token, not a Supabase user JWT).
+//
+// New required secret (set once on Supabase, alongside MCP_BRIDGE_TOKEN):
+//   MCP_OWNER_USER_ID — your Supabase auth.users.id (a UUID).
+//   Find it in Supabase Dashboard -> Authentication -> Users -> copy the UID
+//   next to your account. This never needs to change unless you re-platform
+//   auth.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -35,10 +52,34 @@ function timingSafeEqual(a: string, b: string): boolean {
   return out === 0;
 }
 
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 const CONTACT_FIELDS =
   "id, full_name, first_name, last_name, whatsapp_display_name, phone_e164, email, " +
   "contact_type, lead_type, temperature, tags, consent_whatsapp, consent_email, consent_sms, " +
   "unsubscribed_channels, notes, version, is_deleted, updated_at, source_app";
+
+const PROJECT_FIELDS =
+  "id, name, description, status, solution_type, progress_manual, progress_mode, " +
+  "tags, is_blocked, is_pinned, health, blocked_reason, updated_at";
+
+const TASK_FIELDS =
+  "id, title, description, status, priority, due_date, start_date, project_id, " +
+  "source, last_touched_at, created_at";
+
+const REMINDER_FIELDS =
+  "id, title, description, reminder_time, is_done, task_id, project_id, created_at";
+
+const MEETING_FIELDS =
+  "id, title, description, start_time, end_time, location, attendees, notes, " +
+  "project_id, is_done, created_at";
+
+const PROJECT_NOTE_FIELDS = "id, project_id, note_date, content, structured_json, updated_at";
+
+const DIARY_FIELDS =
+  "id, content, title, source_type, mood, linked_project_ids, is_pinned, created_at";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -67,9 +108,19 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
+  // Resolved lazily — only the owner-scoped actions below need it, and we
+  // want hub_contacts actions to keep working even if this secret is ever
+  // unset, matching the original fail-closed-per-action design.
+  function requireOwner(): string | null {
+    const ownerId = Deno.env.get("MCP_OWNER_USER_ID") ?? "";
+    return ownerId || null;
+  }
+
   try {
     switch (action) {
-      // ---------------------------------------------------------------
+      // =================================================================
+      // Existing: hub_contacts (unchanged)
+      // =================================================================
       case "list_contacts": {
         const search = String(body?.search ?? "").trim();
         const contact_type = body?.contact_type ? String(body.contact_type) : null;
@@ -98,7 +149,6 @@ Deno.serve(async (req) => {
         return json({ ok: true, contacts: data ?? [], count: data?.length ?? 0 });
       }
 
-      // ---------------------------------------------------------------
       case "get_contact": {
         const id = body?.id ? String(body.id) : null;
         const phone = body?.phone ? String(body.phone) : null;
@@ -119,13 +169,10 @@ Deno.serve(async (req) => {
         return json({ ok: true, contact });
       }
 
-      // ---------------------------------------------------------------
       case "update_contact": {
         const id = body?.id ? String(body.id) : null;
         if (!id) return json({ ok: false, error: "id_required" }, 400);
 
-        // Explicit allow-list — only these fields can ever be changed via MCP,
-        // and only when provided. Never blanks a field the caller omitted.
         const patch: Record<string, unknown> = {};
         if (typeof body?.full_name === "string") patch.full_name = body.full_name.trim();
         if (typeof body?.first_name === "string") patch.first_name = body.first_name.trim();
@@ -156,11 +203,6 @@ Deno.serve(async (req) => {
         return json({ ok: true, contact: updated });
       }
 
-      // ---------------------------------------------------------------
-      // Strictly additive — appends a timestamped line to the existing
-      // notes field rather than overwriting it. There is no separate
-      // contact_activities table for hub_contacts in this schema, so the
-      // append happens directly on the notes column.
       case "add_contact_note": {
         const id = body?.id ? String(body.id) : null;
         const note = body?.note ? String(body.note).trim() : "";
@@ -183,6 +225,236 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (error) return json({ ok: false, error: error.message }, 500);
         return json({ ok: true, contact: updated });
+      }
+
+      // =================================================================
+      // New: Projects (read-only — lets Claude resolve a project_id
+      // before attaching a task/note to it)
+      // =================================================================
+      case "list_projects": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const status = body?.status ? String(body.status) : null;
+        const search = String(body?.search ?? "").trim();
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("projects").select(PROJECT_FIELDS)
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .order("is_pinned", { ascending: false })
+          .order("updated_at", { ascending: false })
+          .limit(limit);
+
+        if (status) q = q.eq("status", status);
+        if (search) q = q.ilike("name", `%${search}%`);
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, projects: data ?? [], count: data?.length ?? 0 });
+      }
+
+      // =================================================================
+      // New: Tasks
+      // =================================================================
+      case "create_task": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const priority = ["critical", "high", "medium", "low"].includes(body?.priority)
+          ? body.priority
+          : "medium";
+        const description = typeof body?.description === "string" ? body.description : null;
+        const due_date = typeof body?.due_date === "string" ? body.due_date : null;
+
+        // Same dedupe convention as extension-task-create: same title + same
+        // project scope merges instead of duplicating.
+        const norm = normalizeTitle(title);
+        let dupeQ = supabase.from("tasks").select("id, priority")
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .ilike("title", norm);
+        dupeQ = project_id ? dupeQ.eq("project_id", project_id) : dupeQ.is("project_id", null);
+        const { data: existing } = await dupeQ.maybeSingle();
+
+        if (existing) {
+          const { data: updated, error } = await supabase
+            .from("tasks")
+            .update({ last_touched_at: new Date().toISOString(), priority: priority ?? existing.priority })
+            .eq("id", existing.id)
+            .select(TASK_FIELDS)
+            .maybeSingle();
+          if (error) return json({ ok: false, error: error.message }, 500);
+          return json({ ok: true, action: "merged", task: updated });
+        }
+
+        const now = new Date().toISOString();
+        const { data: inserted, error } = await supabase
+          .from("tasks")
+          .insert({
+            user_id: ownerId,
+            title,
+            description,
+            priority,
+            project_id,
+            due_date,
+            status: "pending",
+            source: "claude-mcp",
+            last_touched_at: now,
+          })
+          .select(TASK_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, action: "created", task: inserted });
+      }
+
+      // =================================================================
+      // New: Reminders
+      // =================================================================
+      case "create_reminder": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const title = body?.title ? String(body.title).trim() : "";
+        const reminder_time = body?.reminder_time ? String(body.reminder_time) : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+        if (!reminder_time) return json({ ok: false, error: "reminder_time_required" }, 400);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const description = typeof body?.description === "string" ? body.description : null;
+
+        const { data: inserted, error } = await supabase
+          .from("reminders")
+          .insert({ user_id: ownerId, title, description, reminder_time, project_id })
+          .select(REMINDER_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, reminder: inserted });
+      }
+
+      // =================================================================
+      // New: Meetings
+      // =================================================================
+      case "create_meeting": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const title = body?.title ? String(body.title).trim() : "";
+        const start_time = body?.start_time ? String(body.start_time) : "";
+        const end_time = body?.end_time ? String(body.end_time) : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+        if (!start_time || !end_time) {
+          return json({ ok: false, error: "start_time_and_end_time_required" }, 400);
+        }
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const description = typeof body?.description === "string" ? body.description : null;
+        const location = typeof body?.location === "string" ? body.location : null;
+        const notes = typeof body?.notes === "string" ? body.notes : null;
+        const attendees = Array.isArray(body?.attendees) ? body.attendees : null;
+
+        const { data: inserted, error } = await supabase
+          .from("meetings")
+          .insert({
+            user_id: ownerId,
+            title,
+            description,
+            start_time,
+            end_time,
+            location,
+            notes,
+            attendees,
+            project_id,
+          })
+          .select(MEETING_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, meeting: inserted });
+      }
+
+      // =================================================================
+      // New: Project Notes (date-keyed, one per project per day — upserts
+      // same-day rather than creating duplicates, matching
+      // projectNotesService.upsert in the app itself)
+      // =================================================================
+      case "add_project_note": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : "";
+        const content = body?.content ? String(body.content) : "";
+        if (!project_id) return json({ ok: false, error: "project_id_required" }, 400);
+        if (!content.trim()) return json({ ok: false, error: "content_required" }, 400);
+
+        const note_date = body?.note_date ? String(body.note_date) : new Date().toISOString().slice(0, 10);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("project_notes")
+          .select("id, content")
+          .eq("project_id", project_id)
+          .eq("note_date", note_date)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+
+        if (existing) {
+          // Append rather than clobber same-day content written elsewhere.
+          const merged = [existing.content, content].filter(Boolean).join("\n\n");
+          const { data: updated, error } = await supabase
+            .from("project_notes")
+            .update({ content: merged })
+            .eq("id", existing.id)
+            .select(PROJECT_NOTE_FIELDS)
+            .maybeSingle();
+          if (error) return json({ ok: false, error: error.message }, 500);
+          return json({ ok: true, action: "appended", note: updated });
+        }
+
+        const { data: inserted, error } = await supabase
+          .from("project_notes")
+          .insert({ project_id, user_id: ownerId, note_date, content })
+          .select(PROJECT_NOTE_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, action: "created", note: inserted });
+      }
+
+      // =================================================================
+      // New: Voice Diary (append-only personal log, optionally tagged to
+      // one or more projects via linked_project_ids — distinct from
+      // project_notes above)
+      // =================================================================
+      case "add_diary_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const content = body?.content ? String(body.content) : "";
+        if (!content.trim()) return json({ ok: false, error: "content_required" }, 400);
+
+        const title = typeof body?.title === "string" ? body.title : null;
+        const mood = typeof body?.mood === "string" ? body.mood : null;
+        const linked_project_ids = Array.isArray(body?.linked_project_ids)
+          ? body.linked_project_ids.map(String)
+          : [];
+
+        const { data: inserted, error } = await supabase
+          .from("voice_diary_entries")
+          .insert({
+            user_id: ownerId,
+            content,
+            title,
+            mood,
+            source_type: "claude-mcp",
+            linked_project_ids,
+          })
+          .select(DIARY_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entry: inserted });
       }
 
       default:
