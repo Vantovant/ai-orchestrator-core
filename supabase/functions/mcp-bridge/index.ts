@@ -1,13 +1,13 @@
 // VantoOS — MCP Bridge
 // Lets Claude (via the standalone mcp-server) read and update hub_contacts,
-// AND — as of this update — projects, tasks, reminders, meetings,
-// project_notes, and voice_diary_entries.
+// projects, tasks, reminders, meetings, project_notes, and
+// voice_diary_entries.
 //
 // Auth: static x-mcp-token header, timing-safe compared against
 // MCP_BRIDGE_TOKEN. Uses the service-role key to bypass RLS.
 //
 // hub_contacts is a suite-wide table with no per-row owner column, so those
-// actions need no user resolution. Everything added in this update
+// actions need no user resolution. Everything else
 // (projects/tasks/reminders/meetings/project_notes/voice_diary_entries) IS
 // owned per-row via user_id + RLS in the real app, so every write below is
 // stamped with MCP_OWNER_USER_ID — the same "resolve a single owner, bypass
@@ -24,11 +24,18 @@
 // supabase/config.toml must set: [functions.mcp-bridge] verify_jwt = false
 // (this function authenticates via x-mcp-token, not a Supabase user JWT).
 //
-// New required secret (set once on Supabase, alongside MCP_BRIDGE_TOKEN):
+// Required secret (already set from the prior capability build — unchanged
+// by this update):
 //   MCP_OWNER_USER_ID — your Supabase auth.users.id (a UUID).
 //   Find it in Supabase Dashboard -> Authentication -> Users -> copy the UID
 //   next to your account. This never needs to change unless you re-platform
 //   auth.
+//
+// THIS UPDATE adds three read-only actions — list_tasks, list_reminders,
+// list_meetings — so Claude can answer "what's on my plate today" without
+// a human relaying it from the app UI. No new secrets or config needed;
+// these reuse the exact same owner-scoping and auth path as the existing
+// create_task/create_reminder/create_meeting actions.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -54,6 +61,13 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 function normalizeTitle(title: string): string {
   return title.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Validates a YYYY-MM-DD string and returns [startOfDayISO, endOfDayISO] in
+// UTC. Used by the new list_* actions for "today" style date filtering.
+function dayBounds(date: string): [string, string] | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return [`${date}T00:00:00.000Z`, `${date}T23:59:59.999Z`];
 }
 
 const CONTACT_FIELDS =
@@ -119,7 +133,7 @@ Deno.serve(async (req) => {
   try {
     switch (action) {
       // =================================================================
-      // Existing: hub_contacts (unchanged)
+      // hub_contacts
       // =================================================================
       case "list_contacts": {
         const search = String(body?.search ?? "").trim();
@@ -228,8 +242,8 @@ Deno.serve(async (req) => {
       }
 
       // =================================================================
-      // New: Projects (read-only — lets Claude resolve a project_id
-      // before attaching a task/note to it)
+      // Projects (read-only — lets Claude resolve a project_id before
+      // attaching a task/note to it)
       // =================================================================
       case "list_projects": {
         const ownerId = requireOwner();
@@ -255,7 +269,7 @@ Deno.serve(async (req) => {
       }
 
       // =================================================================
-      // New: Tasks
+      // Tasks
       // =================================================================
       case "create_task": {
         const ownerId = requireOwner();
@@ -312,8 +326,45 @@ Deno.serve(async (req) => {
         return json({ ok: true, action: "created", task: inserted });
       }
 
+      // NEW: list_tasks — read-only. Powers "what's on my plate" queries
+      // (Dashboard / Plan Hub "Tasks" tab). Supports filtering by project,
+      // status, and a single calendar day (matches on due_date).
+      case "list_tasks": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const status = body?.status ? String(body.status) : null;
+        const dateStr = body?.date ? String(body.date) : null;
+        const include_undated = body?.include_undated === true;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("tasks").select(TASK_FIELDS)
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .order("due_date", { ascending: true, nullsFirst: false })
+          .order("priority", { ascending: true })
+          .limit(limit);
+
+        if (project_id) q = q.eq("project_id", project_id);
+        if (status) q = q.eq("status", status);
+
+        if (dateStr) {
+          const bounds = dayBounds(dateStr);
+          if (!bounds) return json({ ok: false, error: "invalid_date_expected_yyyy_mm_dd" }, 400);
+          const [start, end] = bounds;
+          q = include_undated
+            ? q.or(`and(due_date.gte.${start},due_date.lte.${end}),due_date.is.null`)
+            : q.gte("due_date", start).lte("due_date", end);
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, tasks: data ?? [], count: data?.length ?? 0 });
+      }
+
       // =================================================================
-      // New: Reminders
+      // Reminders
       // =================================================================
       case "create_reminder": {
         const ownerId = requireOwner();
@@ -336,8 +387,38 @@ Deno.serve(async (req) => {
         return json({ ok: true, reminder: inserted });
       }
 
+      // NEW: list_reminders — read-only. Supports filtering by project,
+      // done/not-done, and a single calendar day (matches on reminder_time).
+      case "list_reminders": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const dateStr = body?.date ? String(body.date) : null;
+        const is_done = typeof body?.is_done === "boolean" ? body.is_done : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("reminders").select(REMINDER_FIELDS)
+          .eq("user_id", ownerId)
+          .order("reminder_time", { ascending: true })
+          .limit(limit);
+
+        if (project_id) q = q.eq("project_id", project_id);
+        if (is_done !== null) q = q.eq("is_done", is_done);
+        if (dateStr) {
+          const bounds = dayBounds(dateStr);
+          if (!bounds) return json({ ok: false, error: "invalid_date_expected_yyyy_mm_dd" }, 400);
+          const [start, end] = bounds;
+          q = q.gte("reminder_time", start).lte("reminder_time", end);
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, reminders: data ?? [], count: data?.length ?? 0 });
+      }
+
       // =================================================================
-      // New: Meetings
+      // Meetings
       // =================================================================
       case "create_meeting": {
         const ownerId = requireOwner();
@@ -376,8 +457,38 @@ Deno.serve(async (req) => {
         return json({ ok: true, meeting: inserted });
       }
 
+      // NEW: list_meetings — read-only. Supports filtering by project,
+      // done/not-done, and a single calendar day (matches on start_time).
+      case "list_meetings": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const dateStr = body?.date ? String(body.date) : null;
+        const is_done = typeof body?.is_done === "boolean" ? body.is_done : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("meetings").select(MEETING_FIELDS)
+          .eq("user_id", ownerId)
+          .order("start_time", { ascending: true })
+          .limit(limit);
+
+        if (project_id) q = q.eq("project_id", project_id);
+        if (is_done !== null) q = q.eq("is_done", is_done);
+        if (dateStr) {
+          const bounds = dayBounds(dateStr);
+          if (!bounds) return json({ ok: false, error: "invalid_date_expected_yyyy_mm_dd" }, 400);
+          const [start, end] = bounds;
+          q = q.gte("start_time", start).lte("start_time", end);
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, meetings: data ?? [], count: data?.length ?? 0 });
+      }
+
       // =================================================================
-      // New: Project Notes (date-keyed, one per project per day — upserts
+      // Project Notes (date-keyed, one per project per day — upserts
       // same-day rather than creating duplicates, matching
       // projectNotesService.upsert in the app itself)
       // =================================================================
@@ -424,9 +535,9 @@ Deno.serve(async (req) => {
       }
 
       // =================================================================
-      // New: Voice Diary (append-only personal log, optionally tagged to
-      // one or more projects via linked_project_ids — distinct from
-      // project_notes above)
+      // Voice Diary (append-only personal log, optionally tagged to one or
+      // more projects via linked_project_ids — distinct from project_notes
+      // above)
       // =================================================================
       case "add_diary_entry": {
         const ownerId = requireOwner();
