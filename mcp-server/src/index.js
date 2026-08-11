@@ -1,10 +1,12 @@
 // VantoOS MCP Server
-// Exposes hub_contacts tools, plus Projects/Tasks/Reminders/Meetings/
-// Project Notes/Voice Diary tools, to Claude via streamable-HTTP MCP
-// transport. Every tool call is forwarded to the mcp-bridge Supabase Edge
-// Function, which holds the actual database logic and the service-role key.
+// Exposes hub_contacts tools, Projects/Tasks/Reminders/Meetings/Project
+// Notes/Voice Diary write tools, PLUS (as of this update) list_tasks,
+// list_reminders, and list_meetings read tools, to Claude via
+// streamable-HTTP MCP transport. Every tool call is forwarded to the
+// mcp-bridge Supabase Edge Function, which holds the actual database logic
+// and the service-role key.
 //
-// Required env vars (set these on Railway):
+// Required env vars (set these on Railway — unchanged by this update):
 //   MCP_BRIDGE_URL   - e.g. https://<project-ref>.supabase.co/functions/v1/mcp-bridge
 //   MCP_BRIDGE_TOKEN - same value as MCP_BRIDGE_TOKEN set on the Supabase function's secrets
 //   MCP_SERVER_TOKEN - the API key Claude's connector must present (Authorization: Bearer <token>)
@@ -48,7 +50,7 @@ function toolResult(data) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "vantoos-mcp", version: "1.1.0" });
+  const server = new McpServer({ name: "vantoos-mcp", version: "1.2.0" });
 
   // ---------------------------------------------------------------
   // Contacts (unchanged)
@@ -144,6 +146,22 @@ function buildServer() {
     async (args) => toolResult(await callBridge("create_task", args)),
   );
 
+  server.tool(
+    "list_tasks",
+    "List your VantoOS tasks — powers 'what's on my plate today' style questions (Dashboard / " +
+      "Plan Hub 'Tasks' tab). Filter by project_id, status, and/or a single calendar day via " +
+      "date (YYYY-MM-DD, matches due_date). Set include_undated to also surface tasks with no " +
+      "due date alongside that day's results. Read-only.",
+    {
+      project_id: z.string().optional(),
+      status: z.string().optional().describe("e.g. 'pending', 'done'"),
+      date: z.string().optional().describe("YYYY-MM-DD — filters to tasks due on this day"),
+      include_undated: z.boolean().optional().describe("Also include tasks with no due_date"),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_tasks", args)),
+  );
+
   // ---------------------------------------------------------------
   // Reminders
   // ---------------------------------------------------------------
@@ -157,6 +175,20 @@ function buildServer() {
       description: z.string().optional(),
     },
     async (args) => toolResult(await callBridge("create_reminder", args)),
+  );
+
+  server.tool(
+    "list_reminders",
+    "List your VantoOS reminders — powers 'what's on my plate today' style questions (Dashboard / " +
+      "Plan Hub 'Reminders' tab). Filter by project_id, is_done, and/or a single calendar day via " +
+      "date (YYYY-MM-DD, matches reminder_time). Read-only.",
+    {
+      project_id: z.string().optional(),
+      is_done: z.boolean().optional(),
+      date: z.string().optional().describe("YYYY-MM-DD — filters to reminders on this day"),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_reminders", args)),
   );
 
   // ---------------------------------------------------------------
@@ -176,6 +208,20 @@ function buildServer() {
       attendees: z.array(z.string()).optional(),
     },
     async (args) => toolResult(await callBridge("create_meeting", args)),
+  );
+
+  server.tool(
+    "list_meetings",
+    "List your VantoOS meetings — powers 'what's on my plate today' style questions (Dashboard / " +
+      "Plan Hub 'Meetings' tab). Filter by project_id, is_done, and/or a single calendar day via " +
+      "date (YYYY-MM-DD, matches start_time). Read-only.",
+    {
+      project_id: z.string().optional(),
+      is_done: z.boolean().optional(),
+      date: z.string().optional().describe("YYYY-MM-DD — filters to meetings on this day"),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_meetings", args)),
   );
 
   // ---------------------------------------------------------------
