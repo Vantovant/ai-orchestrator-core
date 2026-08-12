@@ -46,6 +46,7 @@ import PricingPage from "@/pages/marketing/PricingPage";
 import ContactPage from "@/pages/marketing/ContactPage";
 import PrivacyPage from "@/pages/marketing/PrivacyPage";
 import TermsPage from "@/pages/marketing/TermsPage";
+import EmailSignaturePage from "@/pages/marketing/EmailSignaturePage";
 
 const queryClient = new QueryClient();
 
