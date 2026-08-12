@@ -116,6 +116,8 @@ function AppRoutes() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/emailsignature" element={<EmailSignaturePage />} />
+        <Route path="/email-signature" element={<Navigate to="/emailsignature" replace />} />
       </Route>
 
       {/* Auth entry */}
