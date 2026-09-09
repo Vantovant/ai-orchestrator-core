@@ -10,6 +10,14 @@
 //   complete_meeting, delete_meeting
 // Same forwarding pattern as every other tool below — no new env vars.
 //
+// BUDGET MCP UPGRADE (2026-09, v1.4.0): adds 41 tools — full CRUD across
+// Finance (entries/debts/income streams/opportunities/budget items &
+// events), Shopping, and Travel (trips + trip expenses), plus a new
+// shared Trusted Sources list. Same forwarding pattern as every tool
+// below — every one of these just calls callBridge(action, args) and
+// wraps the result; all the actual logic (including the finance_entries
+// mirroring on shopping/trip spend) lives in mcp-bridge. No new env vars.
+//
 // Required env vars (set these on Railway — unchanged by this update):
 //   MCP_BRIDGE_URL   - e.g. https://<project-ref>.supabase.co/functions/v1/mcp-bridge
 //   MCP_BRIDGE_TOKEN - same value as MCP_BRIDGE_TOKEN set on the Supabase function's secrets
@@ -54,7 +62,7 @@ function toolResult(data) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "vantoos-mcp", version: "1.3.0" });
+  const server = new McpServer({ name: "vantoos-mcp", version: "1.4.0" });
 
   // ---------------------------------------------------------------
   // Contacts (unchanged)
@@ -318,6 +326,513 @@ function buildServer() {
       linked_project_ids: z.array(z.string()).optional().describe("Project ids this entry relates to"),
     },
     async (args) => toolResult(await callBridge("add_diary_entry", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Finance — full CRUD (previously had zero tools despite being the
+  // most built-out page in the app).
+  // ---------------------------------------------------------------
+  server.tool(
+    "get_finance_snapshot",
+    "Curated Finance summary: last-30-days income/expense/net, top expense categories, debt " +
+      "summary (count + total outstanding), income streams (target vs actual), and upcoming budget " +
+      "events. The right first call for a budget review. Read-only.",
+    {},
+    async () => toolResult(await callBridge("get_finance_snapshot", {})),
+  );
+
+  server.tool(
+    "list_finance_entries",
+    "List Finance ledger entries (income or expense). Filter by type, category, and/or a date " +
+      "range via from/to (YYYY-MM-DD, matches entry_date). Read-only.",
+    {
+      type: z.enum(["income", "expense"]).optional(),
+      category: z.string().optional(),
+      from: z.string().optional().describe("YYYY-MM-DD"),
+      to: z.string().optional().describe("YYYY-MM-DD"),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_finance_entries", args)),
+  );
+
+  server.tool(
+    "create_finance_entry",
+    "Log a new Finance ledger entry (income or expense).",
+    {
+      type: z.enum(["income", "expense"]).optional().describe("Defaults to 'expense'"),
+      category: z.string().optional().describe("Defaults to 'general'"),
+      amount: z.number().describe("Required"),
+      entry_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      notes: z.string().optional(),
+      source: z.string().optional().describe("Defaults to 'claude-mcp'"),
+    },
+    async (args) => toolResult(await callBridge("create_finance_entry", args)),
+  );
+
+  server.tool(
+    "update_finance_entry",
+    "Edit a Finance ledger entry. Use list_finance_entries first to find the entry id. Only the " +
+      "fields you provide are changed.",
+    {
+      id: z.string().describe("finance_entries.id — required"),
+      type: z.enum(["income", "expense"]).optional(),
+      category: z.string().optional(),
+      amount: z.number().optional(),
+      entry_date: z.string().optional().describe("YYYY-MM-DD"),
+      notes: z.string().optional(),
+      source: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_finance_entry", args)),
+  );
+
+  server.tool(
+    "delete_finance_entry",
+    "Delete a Finance ledger entry. Soft delete — same as the app's own delete button, fully " +
+      "recoverable in the database if needed. Use list_finance_entries first to find the entry id.",
+    {
+      id: z.string().describe("finance_entries.id — required"),
+    },
+    async (args) => toolResult(await callBridge("delete_finance_entry", args)),
+  );
+
+  server.tool(
+    "list_debts",
+    "List debts. Filter by status (e.g. 'active', 'settled'). Read-only.",
+    { status: z.string().optional() },
+    async (args) => toolResult(await callBridge("list_debts", args)),
+  );
+
+  server.tool(
+    "create_debt",
+    "Add a new debt.",
+    {
+      lender_name: z.string().describe("Required"),
+      principal: z.number().describe("Outstanding balance — required"),
+      interest_rate: z.number().optional().describe("Annual %"),
+      repayment_amount: z.number().optional().describe("Monthly"),
+      due_day: z.number().int().min(1).max(31).optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("create_debt", args)),
+  );
+
+  server.tool(
+    "update_debt",
+    "Edit a debt — balance, rate, repayment, due day, status, or notes. Use list_debts first to " +
+      "find the debt id. Only the fields you provide are changed.",
+    {
+      id: z.string().describe("debts.id — required"),
+      lender_name: z.string().optional(),
+      principal: z.number().optional(),
+      interest_rate: z.number().optional(),
+      repayment_amount: z.number().optional(),
+      due_day: z.number().int().min(1).max(31).optional(),
+      status: z.string().optional().describe("e.g. 'active', 'settled'"),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_debt", args)),
+  );
+
+  server.tool(
+    "delete_debt",
+    "Delete a debt. Soft delete. Use list_debts first to find the debt id.",
+    { id: z.string().describe("debts.id — required") },
+    async (args) => toolResult(await callBridge("delete_debt", args)),
+  );
+
+  server.tool(
+    "list_income_streams",
+    "List income streams with monthly target vs actual. Read-only.",
+    {},
+    async () => toolResult(await callBridge("list_income_streams", {})),
+  );
+
+  server.tool(
+    "create_income_stream",
+    "Add a new income stream.",
+    {
+      label: z.string().describe("User-friendly name — required"),
+      stream_type: z.string().optional().describe("e.g. salary, business, network_marketing, side_hustle"),
+      monthly_target: z.number().describe("Required"),
+      current_month_income: z.number().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("create_income_stream", args)),
+  );
+
+  server.tool(
+    "update_income_stream",
+    "Edit an income stream. Use list_income_streams first to find the id. Only the fields you " +
+      "provide are changed.",
+    {
+      id: z.string().describe("income_streams.id — required"),
+      stream_type: z.string().optional(),
+      label: z.string().optional(),
+      monthly_target: z.number().optional(),
+      current_month_income: z.number().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_income_stream", args)),
+  );
+
+  server.tool(
+    "delete_income_stream",
+    "Delete an income stream. Soft delete. Use list_income_streams first to find the id.",
+    { id: z.string().describe("income_streams.id — required") },
+    async (args) => toolResult(await callBridge("delete_income_stream", args)),
+  );
+
+  server.tool(
+    "list_opportunities",
+    "List savings/income/funding/compliance opportunities. Filter by status. Read-only.",
+    { status: z.string().optional().describe("e.g. 'open', 'in_progress', 'done', 'dismissed'") },
+    async (args) => toolResult(await callBridge("list_opportunities", args)),
+  );
+
+  server.tool(
+    "create_opportunity",
+    "Add a new opportunity (a savings idea, income idea, funding lead, or compliance item).",
+    {
+      title: z.string().describe("Required"),
+      type: z.enum(["savings", "income", "funding", "compliance"]).optional(),
+      estimated_value: z.number().optional(),
+      difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("create_opportunity", args)),
+  );
+
+  server.tool(
+    "update_opportunity",
+    "Edit an opportunity. Use list_opportunities first to find the id. Only the fields you " +
+      "provide are changed.",
+    {
+      id: z.string().describe("opportunities.id — required"),
+      title: z.string().optional(),
+      type: z.enum(["savings", "income", "funding", "compliance"]).optional(),
+      estimated_value: z.number().optional(),
+      difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+      status: z.enum(["open", "in_progress", "done", "dismissed"]).optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_opportunity", args)),
+  );
+
+  server.tool(
+    "delete_opportunity",
+    "Delete an opportunity. Soft delete. Use list_opportunities first to find the id.",
+    { id: z.string().describe("opportunities.id — required") },
+    async (args) => toolResult(await callBridge("delete_opportunity", args)),
+  );
+
+  server.tool(
+    "list_budget_items",
+    "List recurring bills/subscriptions. Filter by status. Read-only.",
+    { status: z.string().optional().describe("e.g. 'active', 'paused', 'cancelled'") },
+    async (args) => toolResult(await callBridge("list_budget_items", args)),
+  );
+
+  server.tool(
+    "create_budget_item",
+    "Add a new recurring bill/subscription.",
+    {
+      name: z.string().describe("Required"),
+      amount: z.number().describe("Required"),
+      type: z.string().optional().describe("Defaults to 'subscription'"),
+      description: z.string().optional(),
+      cadence: z.string().optional().describe("Defaults to 'monthly'"),
+      due_day_of_month: z.number().int().min(1).max(31).optional(),
+      due_month_of_year: z.number().int().min(1).max(12).optional(),
+      due_date_custom: z.string().optional().describe("YYYY-MM-DD"),
+      category: z.string().optional(),
+      vendor: z.string().optional(),
+      autopay: z.boolean().optional(),
+    },
+    async (args) => toolResult(await callBridge("create_budget_item", args)),
+  );
+
+  server.tool(
+    "update_budget_item",
+    "Edit a recurring bill/subscription. Use list_budget_items first to find the id. Only the " +
+      "fields you provide are changed.",
+    {
+      id: z.string().describe("finance_budget_items.id — required"),
+      name: z.string().optional(),
+      description: z.string().optional(),
+      type: z.string().optional(),
+      amount: z.number().optional(),
+      cadence: z.string().optional(),
+      due_day_of_month: z.number().int().min(1).max(31).optional(),
+      due_month_of_year: z.number().int().min(1).max(12).optional(),
+      due_date_custom: z.string().optional().describe("YYYY-MM-DD"),
+      category: z.string().optional(),
+      vendor: z.string().optional(),
+      status: z.string().optional(),
+      autopay: z.boolean().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_budget_item", args)),
+  );
+
+  server.tool(
+    "delete_budget_item",
+    "Delete a recurring bill/subscription. Soft delete. Use list_budget_items first to find the id.",
+    { id: z.string().describe("finance_budget_items.id — required") },
+    async (args) => toolResult(await callBridge("delete_budget_item", args)),
+  );
+
+  server.tool(
+    "list_upcoming_budget_events",
+    "List individual bill instances (due dates) in a date range. Defaults to today onward if " +
+      "from is omitted. Read-only.",
+    {
+      from: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      to: z.string().optional().describe("YYYY-MM-DD"),
+    },
+    async (args) => toolResult(await callBridge("list_upcoming_budget_events", args)),
+  );
+
+  server.tool(
+    "mark_budget_event_paid",
+    "Mark a bill instance as paid. Use list_upcoming_budget_events first to find the event id.",
+    { id: z.string().describe("finance_budget_events.id — required") },
+    async (args) => toolResult(await callBridge("mark_budget_event_paid", args)),
+  );
+
+  server.tool(
+    "update_budget_event_status",
+    "Change a bill instance's status directly (e.g. back to 'upcoming', or to 'skipped'). Use " +
+      "list_upcoming_budget_events first to find the event id.",
+    {
+      id: z.string().describe("finance_budget_events.id — required"),
+      status: z.string().describe("Required"),
+    },
+    async (args) => toolResult(await callBridge("update_budget_event_status", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Shopping — full CRUD. Every item carries the buy-decision framework
+  // (need_vs_want + justification) and a spend_type (personal/business/
+  // mixed) up front.
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_shopping_items",
+    "List shopping list items. Filter by category, spend_type, and/or done status. Read-only.",
+    {
+      category: z.string().optional(),
+      spend_type: z.enum(["personal", "business", "mixed"]).optional(),
+      is_done: z.boolean().optional(),
+    },
+    async (args) => toolResult(await callBridge("list_shopping_items", args)),
+  );
+
+  server.tool(
+    "add_shopping_item",
+    "Add a shopping list item. Capture need_vs_want and a short justification up front — that's " +
+      "the buy-decision framework applied at entry, not left for later.",
+    {
+      name: z.string().describe("Required"),
+      quantity: z.number().int().min(1).optional().describe("Defaults to 1"),
+      category: z.enum(["groceries", "household", "personal", "other"]).optional(),
+      spend_type: z.enum(["personal", "business", "mixed"]).optional().describe("Defaults to 'personal'"),
+      need_vs_want: z.enum(["need", "want"]).optional(),
+      justification: z.string().optional().describe("Why it's needed, or how it profits you"),
+      unit_cost_estimate: z.number().optional(),
+      is_recurring: z.boolean().optional(),
+      trusted_source_id: z.string().optional().describe("From list_trusted_sources"),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_shopping_item", args)),
+  );
+
+  server.tool(
+    "update_shopping_item",
+    "Edit a shopping list item. Use list_shopping_items first to find the item id. Only the " +
+      "fields you provide are changed.",
+    {
+      id: z.string().describe("shopping_items.id — required"),
+      name: z.string().optional(),
+      quantity: z.number().int().min(1).optional(),
+      category: z.string().optional(),
+      spend_type: z.enum(["personal", "business", "mixed"]).optional(),
+      need_vs_want: z.enum(["need", "want"]).optional(),
+      justification: z.string().optional(),
+      unit_cost_estimate: z.number().optional(),
+      actual_cost: z.number().optional(),
+      is_recurring: z.boolean().optional(),
+      trusted_source_id: z.string().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_shopping_item", args)),
+  );
+
+  server.tool(
+    "complete_shopping_item",
+    "Mark a shopping item bought. Pass actual_cost if it differs from the original estimate. Set " +
+      "log_to_finance:true to also create the matching Finance expense (category = the item's " +
+      "category, business/personal split from the item's spend_type) — needs either actual_cost " +
+      "here or an existing unit_cost_estimate on the item to have an amount to log.",
+    {
+      id: z.string().describe("shopping_items.id — required"),
+      actual_cost: z.number().optional(),
+      log_to_finance: z.boolean().optional(),
+    },
+    async (args) => toolResult(await callBridge("complete_shopping_item", args)),
+  );
+
+  server.tool(
+    "delete_shopping_item",
+    "Delete a shopping list item. Soft delete. Use list_shopping_items first to find the item id.",
+    { id: z.string().describe("shopping_items.id — required") },
+    async (args) => toolResult(await callBridge("delete_shopping_item", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Travel — full CRUD. Trips carry the buy-decision framework too;
+  // trip expenses always mirror into Finance.
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_trips",
+    "List trips. Filter by status and/or spend_type. Read-only.",
+    {
+      status: z.enum(["upcoming", "in-progress", "completed", "cancelled"]).optional(),
+      spend_type: z.enum(["personal", "business", "mixed"]).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_trips", args)),
+  );
+
+  server.tool(
+    "create_trip",
+    "Add a trip. Capture need_vs_want and a short justification up front (the buy-decision " +
+      "framework applied at entry) — especially worth using here since trips tend to be bigger, " +
+      "less frequent spends than shopping items.",
+    {
+      destination: z.string().describe("Required"),
+      start_date: z.string().describe("YYYY-MM-DD — required"),
+      end_date: z.string().describe("YYYY-MM-DD — required"),
+      spend_type: z.enum(["personal", "business", "mixed"]).optional().describe("Defaults to 'personal'"),
+      need_vs_want: z.enum(["need", "want"]).optional(),
+      justification: z.string().optional().describe("Purpose / expected return on this trip"),
+      budgeted_amount: z.number().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("create_trip", args)),
+  );
+
+  server.tool(
+    "update_trip",
+    "Edit a trip, including its status (upcoming/in-progress/completed/cancelled). Use list_trips " +
+      "first to find the trip id. Only the fields you provide are changed.",
+    {
+      id: z.string().describe("trips.id — required"),
+      destination: z.string().optional(),
+      start_date: z.string().optional().describe("YYYY-MM-DD"),
+      end_date: z.string().optional().describe("YYYY-MM-DD"),
+      status: z.enum(["upcoming", "in-progress", "completed", "cancelled"]).optional(),
+      spend_type: z.enum(["personal", "business", "mixed"]).optional(),
+      need_vs_want: z.enum(["need", "want"]).optional(),
+      justification: z.string().optional(),
+      budgeted_amount: z.number().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_trip", args)),
+  );
+
+  server.tool(
+    "delete_trip",
+    "Delete a trip. Soft delete. Use list_trips first to find the trip id.",
+    { id: z.string().describe("trips.id — required") },
+    async (args) => toolResult(await callBridge("delete_trip", args)),
+  );
+
+  server.tool(
+    "add_trip_expense",
+    "Add an expense to a trip (flights, hotel, fuel...). Always also creates the matching Finance " +
+      "expense (category 'travel', business/personal split from the trip's spend_type) so trip " +
+      "cost never drifts out of sync with Finance. Use list_trips first to get the trip_id.",
+    {
+      trip_id: z.string().describe("trips.id — required"),
+      label: z.string().describe("e.g. 'flights', 'hotel' — required"),
+      amount: z.number().describe("Required"),
+      expense_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      trusted_source_id: z.string().optional().describe("From list_trusted_sources"),
+    },
+    async (args) => toolResult(await callBridge("add_trip_expense", args)),
+  );
+
+  server.tool(
+    "update_trip_expense",
+    "Edit a trip expense. Amount/date/label edits also update the mirrored Finance entry. Use " +
+      "get_trip_budget_status first to find the expense id.",
+    {
+      id: z.string().describe("trip_expenses.id — required"),
+      label: z.string().optional(),
+      amount: z.number().optional(),
+      expense_date: z.string().optional().describe("YYYY-MM-DD"),
+      trusted_source_id: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_trip_expense", args)),
+  );
+
+  server.tool(
+    "delete_trip_expense",
+    "Delete a trip expense. Soft delete — also soft-deletes the mirrored Finance entry, so the " +
+      "two never drift apart. Use get_trip_budget_status first to find the expense id.",
+    { id: z.string().describe("trip_expenses.id — required") },
+    async (args) => toolResult(await callBridge("delete_trip_expense", args)),
+  );
+
+  server.tool(
+    "get_trip_budget_status",
+    "Get one trip plus all its expenses, total spent, and (if budgeted_amount was set) how much " +
+      "budget remains. Read-only.",
+    { trip_id: z.string().describe("trips.id — required") },
+    async (args) => toolResult(await callBridge("get_trip_budget_status", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Trusted Sources — shared vendor/source list referenced by Shopping
+  // and Travel.
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_trusted_sources",
+    "List trusted vendors/sources (places you trust for good value). Filter by category. Read-only.",
+    { category: z.string().optional() },
+    async (args) => toolResult(await callBridge("list_trusted_sources", args)),
+  );
+
+  server.tool(
+    "add_trusted_source",
+    "Add a trusted vendor/source.",
+    {
+      name: z.string().describe("Required"),
+      category: z.string().optional().describe("e.g. groceries, electronics, household, business_supplies, travel, general"),
+      notes: z.string().optional().describe("Why it's trusted — price, quality, reliability"),
+      url: z.string().optional(),
+      is_preferred: z.boolean().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_trusted_source", args)),
+  );
+
+  server.tool(
+    "update_trusted_source",
+    "Edit a trusted vendor/source. Use list_trusted_sources first to find the id. Only the fields " +
+      "you provide are changed.",
+    {
+      id: z.string().describe("trusted_sources.id — required"),
+      name: z.string().optional(),
+      category: z.string().optional(),
+      notes: z.string().optional(),
+      url: z.string().optional(),
+      is_preferred: z.boolean().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_trusted_source", args)),
+  );
+
+  server.tool(
+    "delete_trusted_source",
+    "Delete a trusted vendor/source. Soft delete. Use list_trusted_sources first to find the id.",
+    { id: z.string().describe("trusted_sources.id — required") },
+    async (args) => toolResult(await callBridge("delete_trusted_source", args)),
   );
 
   return server;
