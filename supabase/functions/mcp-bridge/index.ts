@@ -43,6 +43,21 @@
 // All six are owner-scoped (fail closed on missing MCP_OWNER_USER_ID) and
 // verify the row belongs to the configured owner before acting, matching
 // the existing fail-closed-per-action design used throughout this file.
+//
+// BUDGET MCP UPGRADE (2026-09): adds full CRUD across Finance, Shopping,
+// and Travel, plus a new shared Trusted Sources list. New tables
+// (shopping_items, trips, trip_expenses, trusted_sources) were created
+// directly against the live Lovable Cloud Postgres with the same RLS
+// (auth.uid() = user_id) and updated_at-trigger conventions already used
+// by every table below — see trusted_sources/shopping_items/trips/
+// trip_expenses in the live schema for the exact DDL. Every one of these
+// tables has a deleted_at column, so every new delete_* action is a SOFT
+// delete — no riskier than the app's own delete button. shopping_items
+// and trips both carry need_vs_want + justification (the buy-decision
+// framework itself, captured at entry) and a spend_type (personal/
+// business/mixed). complete_shopping_item and add_trip_expense both
+// optionally/always mirror into finance_entries via insertFinanceEntry()
+// so Shopping/Travel spend never drifts out of sync with Finance.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -101,6 +116,75 @@ const PROJECT_NOTE_FIELDS = "id, project_id, note_date, content, structured_json
 
 const DIARY_FIELDS =
   "id, content, title, source_type, mood, linked_project_ids, is_pinned, created_at";
+
+// =====================================================================
+// Budget MCP upgrade — Finance, Shopping, Travel, Trusted Sources.
+// Same owner-scoped, fail-closed, allow-listed-fields pattern as
+// everything above. Every table here has a deleted_at column (confirmed
+// live against the actual schema before writing this), so every delete
+// below is a SOFT delete, matching finance's own UI behavior exactly —
+// none of this is riskier than clicking delete in the app itself.
+// =====================================================================
+
+const FINANCE_ENTRY_FIELDS =
+  "id, type, category, amount, entry_date, notes, source, created_at, updated_at";
+
+const DEBT_FIELDS =
+  "id, lender_name, principal, interest_rate, repayment_amount, due_day, status, notes, created_at, updated_at";
+
+const INCOME_STREAM_FIELDS =
+  "id, stream_type, label, monthly_target, current_month_income, notes, created_at, updated_at";
+
+const OPPORTUNITY_FIELDS =
+  "id, title, type, estimated_value, difficulty, notes, status, ai_generated, created_at, updated_at";
+
+const BUDGET_ITEM_FIELDS =
+  "id, type, name, description, amount, currency, cadence, due_day_of_month, due_month_of_year, " +
+  "due_date_custom, start_date, end_date, autopay, notify_days_before, status, category, vendor, " +
+  "created_at, updated_at";
+
+const BUDGET_EVENT_FIELDS =
+  "id, budget_item_id, due_at, amount, status, paid_at, notes, created_at, updated_at";
+
+const SHOPPING_ITEM_FIELDS =
+  "id, name, quantity, category, spend_type, need_vs_want, justification, unit_cost_estimate, " +
+  "actual_cost, is_recurring, is_done, purchased_at, trusted_source_id, finance_entry_id, notes, " +
+  "created_at, updated_at";
+
+const TRIP_FIELDS =
+  "id, destination, start_date, end_date, status, spend_type, need_vs_want, justification, " +
+  "budgeted_amount, notes, created_at, updated_at";
+
+const TRIP_EXPENSE_FIELDS =
+  "id, trip_id, label, amount, expense_date, trusted_source_id, finance_entry_id, created_at, updated_at";
+
+const TRUSTED_SOURCE_FIELDS =
+  "id, name, category, notes, url, is_preferred, created_at, updated_at";
+
+// Shared helper: create a finance_entries row on behalf of the owner and
+// return its id. Used by complete_shopping_item and add_trip_expense so
+// shopping/trip spend never drifts out of sync with the Finance ledger.
+async function insertFinanceEntry(
+  supabase: any,
+  ownerId: string,
+  fields: { category: string; amount: number; entry_date: string; notes?: string | null; source: string },
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from("finance_entries")
+    .insert({
+      user_id: ownerId,
+      type: "expense",
+      category: fields.category,
+      amount: Math.abs(fields.amount),
+      entry_date: fields.entry_date,
+      notes: fields.notes ?? null,
+      source: fields.source,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -707,6 +791,914 @@ Deno.serve(async (req) => {
           .maybeSingle();
         if (error) return json({ ok: false, error: error.message }, 500);
         return json({ ok: true, entry: inserted });
+      }
+
+      // =================================================================
+      // Finance — full CRUD. finance_entries/debts/income_streams/
+      // opportunities/finance_budget_items/finance_budget_events all
+      // already have a deleted_at column and a soft-delete convention in
+      // the app's own services, so delete_* below mirrors that exactly.
+      // =================================================================
+      case "get_finance_snapshot": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+        const sinceStr = since.toISOString().slice(0, 10);
+
+        const { data: entries, error: entriesErr } = await supabase
+          .from("finance_entries")
+          .select("type, category, amount, entry_date")
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .gte("entry_date", sinceStr);
+        if (entriesErr) return json({ ok: false, error: entriesErr.message }, 500);
+
+        const rows = entries ?? [];
+        const income = rows.filter((r: any) => r.type === "income")
+          .reduce((s: number, r: any) => s + Math.abs(Number(r.amount)), 0);
+        const expense = rows.filter((r: any) => r.type === "expense")
+          .reduce((s: number, r: any) => s + Math.abs(Number(r.amount)), 0);
+        const categoryTotals: Record<string, number> = {};
+        rows.filter((r: any) => r.type === "expense").forEach((r: any) => {
+          categoryTotals[r.category] = (categoryTotals[r.category] ?? 0) + Math.abs(Number(r.amount));
+        });
+        const topExpenseCategories = Object.entries(categoryTotals)
+          .sort((a, b) => (b[1] as number) - (a[1] as number))
+          .slice(0, 5)
+          .map(([category, total]) => ({ category, total }));
+
+        const { data: debts, error: debtsErr } = await supabase
+          .from("debts").select("principal, status")
+          .eq("user_id", ownerId).is("deleted_at", null);
+        if (debtsErr) return json({ ok: false, error: debtsErr.message }, 500);
+        const activeDebts = (debts ?? []).filter((d: any) => d.status === "active");
+        const debtSummary = {
+          count: activeDebts.length,
+          totalOutstanding: activeDebts.reduce((s: number, d: any) => s + Number(d.principal), 0),
+        };
+
+        const { data: streams, error: streamsErr } = await supabase
+          .from("income_streams").select("stream_type, label, monthly_target, current_month_income")
+          .eq("user_id", ownerId).is("deleted_at", null);
+        if (streamsErr) return json({ ok: false, error: streamsErr.message }, 500);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: upcoming, error: upcomingErr } = await supabase
+          .from("finance_budget_events")
+          .select("due_at, amount, status, finance_budget_items(name)")
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .eq("status", "upcoming")
+          .gte("due_at", today)
+          .order("due_at")
+          .limit(10);
+        if (upcomingErr) return json({ ok: false, error: upcomingErr.message }, 500);
+
+        return json({
+          ok: true,
+          generatedAt: new Date().toISOString(),
+          last30Days: { income, expense, net: income - expense },
+          topExpenseCategories,
+          debtSummary,
+          incomeStreams: (streams ?? []).map((s: any) => ({
+            type: s.stream_type, label: s.label, target: Number(s.monthly_target), actual: Number(s.current_month_income),
+          })),
+          upcomingBudgetEvents: (upcoming ?? []).map((e: any) => ({
+            due_at: e.due_at, amount: Number(e.amount), status: e.status,
+            name: (e.finance_budget_items as any)?.name ?? null,
+          })),
+        });
+      }
+
+      case "list_finance_entries": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const type = body?.type ? String(body.type) : null;
+        const category = body?.category ? String(body.category) : null;
+        const from = body?.from ? String(body.from) : null;
+        const to = body?.to ? String(body.to) : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("finance_entries").select(FINANCE_ENTRY_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("entry_date", { ascending: false }).limit(limit);
+        if (type) q = q.eq("type", type);
+        if (category) q = q.eq("category", category);
+        if (from) q = q.gte("entry_date", from);
+        if (to) q = q.lte("entry_date", to);
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entries: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_finance_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const type = ["income", "expense"].includes(body?.type) ? body.type : "expense";
+        const category = body?.category ? String(body.category) : "general";
+        const amount = Number(body?.amount ?? NaN);
+        if (!Number.isFinite(amount)) return json({ ok: false, error: "amount_required" }, 400);
+        const entry_date = body?.entry_date ? String(body.entry_date) : new Date().toISOString().slice(0, 10);
+        const notes = typeof body?.notes === "string" ? body.notes : null;
+        const source = typeof body?.source === "string" ? body.source : "claude-mcp";
+
+        const { data: inserted, error } = await supabase
+          .from("finance_entries")
+          .insert({ user_id: ownerId, type, category, amount, entry_date, notes, source })
+          .select(FINANCE_ENTRY_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entry: inserted });
+      }
+
+      case "update_finance_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (["income", "expense"].includes(body?.type)) patch.type = body.type;
+        if (typeof body?.category === "string") patch.category = body.category;
+        if (body?.amount !== undefined && Number.isFinite(Number(body.amount))) patch.amount = Number(body.amount);
+        if (typeof body?.entry_date === "string") patch.entry_date = body.entry_date;
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (typeof body?.source === "string") patch.source = body.source;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase
+          .from("finance_entries").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(FINANCE_ENTRY_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, entry: updated });
+      }
+
+      case "delete_finance_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_entries").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { error } = await supabase.from("finance_entries")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Debts ----
+      case "list_debts": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("debts").select(DEBT_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("status");
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, debts: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_debt": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const lender_name = body?.lender_name ? String(body.lender_name).trim() : "";
+        if (!lender_name) return json({ ok: false, error: "lender_name_required" }, 400);
+        const principal = Number(body?.principal ?? 0);
+
+        const { data: inserted, error } = await supabase
+          .from("debts")
+          .insert({
+            user_id: ownerId, lender_name, principal,
+            interest_rate: body?.interest_rate ?? null,
+            repayment_amount: body?.repayment_amount ?? null,
+            due_day: body?.due_day ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(DEBT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, debt: inserted });
+      }
+
+      case "update_debt": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.lender_name === "string") patch.lender_name = body.lender_name;
+        if (body?.principal !== undefined) patch.principal = Number(body.principal);
+        if (body?.interest_rate !== undefined) patch.interest_rate = body.interest_rate;
+        if (body?.repayment_amount !== undefined) patch.repayment_amount = body.repayment_amount;
+        if (body?.due_day !== undefined) patch.due_day = body.due_day;
+        if (typeof body?.status === "string") patch.status = body.status;
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("debts").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(DEBT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, debt: updated });
+      }
+
+      case "delete_debt": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("debts").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("debts")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Income Streams ----
+      case "list_income_streams": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.from("income_streams").select(INCOME_STREAM_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false });
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, income_streams: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_income_stream": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const label = body?.label ? String(body.label).trim() : "";
+        if (!label) return json({ ok: false, error: "label_required" }, 400);
+        const stream_type = typeof body?.stream_type === "string" ? body.stream_type : "salary";
+        const monthly_target = Number(body?.monthly_target ?? 0);
+
+        const { data: inserted, error } = await supabase
+          .from("income_streams")
+          .insert({
+            user_id: ownerId, stream_type, label, monthly_target,
+            current_month_income: Number(body?.current_month_income ?? 0),
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(INCOME_STREAM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, income_stream: inserted });
+      }
+
+      case "update_income_stream": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.stream_type === "string") patch.stream_type = body.stream_type;
+        if (typeof body?.label === "string") patch.label = body.label;
+        if (body?.monthly_target !== undefined) patch.monthly_target = Number(body.monthly_target);
+        if (body?.current_month_income !== undefined) patch.current_month_income = Number(body.current_month_income);
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("income_streams").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(INCOME_STREAM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, income_stream: updated });
+      }
+
+      case "delete_income_stream": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("income_streams").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("income_streams")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Opportunities ----
+      case "list_opportunities": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("opportunities").select(OPPORTUNITY_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false });
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, opportunities: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_opportunity": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+        const type = typeof body?.type === "string" ? body.type : "savings";
+
+        const { data: inserted, error } = await supabase
+          .from("opportunities")
+          .insert({
+            user_id: ownerId, title, type,
+            estimated_value: body?.estimated_value ?? null,
+            difficulty: typeof body?.difficulty === "string" ? body.difficulty : "medium",
+            notes: typeof body?.notes === "string" ? body.notes : null,
+            ai_generated: false,
+          })
+          .select(OPPORTUNITY_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, opportunity: inserted });
+      }
+
+      case "update_opportunity": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.title === "string") patch.title = body.title;
+        if (typeof body?.type === "string") patch.type = body.type;
+        if (body?.estimated_value !== undefined) patch.estimated_value = body.estimated_value;
+        if (typeof body?.difficulty === "string") patch.difficulty = body.difficulty;
+        if (typeof body?.status === "string") patch.status = body.status;
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("opportunities").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(OPPORTUNITY_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, opportunity: updated });
+      }
+
+      case "delete_opportunity": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("opportunities").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("opportunities")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Budget Items (recurring bills/subscriptions) ----
+      case "list_budget_items": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("finance_budget_items").select(BUDGET_ITEM_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("name");
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_items: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_budget_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+        const amount = Number(body?.amount ?? 0);
+
+        const { data: inserted, error } = await supabase
+          .from("finance_budget_items")
+          .insert({
+            user_id: ownerId, name, amount,
+            type: typeof body?.type === "string" ? body.type : "subscription",
+            description: typeof body?.description === "string" ? body.description : "",
+            cadence: typeof body?.cadence === "string" ? body.cadence : "monthly",
+            due_day_of_month: body?.due_day_of_month ?? null,
+            due_month_of_year: body?.due_month_of_year ?? null,
+            due_date_custom: body?.due_date_custom ?? null,
+            category: typeof body?.category === "string" ? body.category : null,
+            vendor: typeof body?.vendor === "string" ? body.vendor : null,
+            autopay: body?.autopay === true,
+          })
+          .select(BUDGET_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_item: inserted });
+      }
+
+      case "update_budget_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["name", "description", "type", "cadence", "category", "vendor", "status"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        for (const f of ["amount", "due_day_of_month", "due_month_of_year"]) {
+          if (body?.[f] !== undefined) patch[f] = body[f];
+        }
+        if (typeof body?.due_date_custom === "string") patch.due_date_custom = body.due_date_custom;
+        if (typeof body?.autopay === "boolean") patch.autopay = body.autopay;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("finance_budget_items").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(BUDGET_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, budget_item: updated });
+      }
+
+      case "delete_budget_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_budget_items").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("finance_budget_items")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Budget Events (individual bill instances) ----
+      case "list_upcoming_budget_events": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const from = body?.from ? String(body.from) : new Date().toISOString().slice(0, 10);
+        const to = body?.to ? String(body.to) : null;
+        let q = supabase.from("finance_budget_events")
+          .select(`${BUDGET_EVENT_FIELDS}, finance_budget_items(name, vendor, category)`)
+          .eq("user_id", ownerId).is("deleted_at", null).gte("due_at", from).order("due_at");
+        if (to) q = q.lte("due_at", to);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_events: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "mark_budget_event_paid": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_budget_events").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("finance_budget_events")
+          .update({ status: "paid", paid_at: new Date().toISOString() })
+          .eq("id", id).select(BUDGET_EVENT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_event: updated });
+      }
+
+      case "update_budget_event_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const status = body?.status ? String(body.status) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!status) return json({ ok: false, error: "status_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_budget_events").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("finance_budget_events")
+          .update({ status }).eq("id", id).select(BUDGET_EVENT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_event: updated });
+      }
+
+      // =================================================================
+      // Shopping — full CRUD. shopping_items carries the buy-decision
+      // framework itself (need_vs_want + justification) and an optional
+      // trusted_source_id / finance_entry_id link.
+      // =================================================================
+      case "list_shopping_items": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        const spend_type = body?.spend_type ? String(body.spend_type) : null;
+        const is_done = typeof body?.is_done === "boolean" ? body.is_done : null;
+        let q = supabase.from("shopping_items").select(SHOPPING_ITEM_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false });
+        if (category) q = q.eq("category", category);
+        if (spend_type) q = q.eq("spend_type", spend_type);
+        if (is_done !== null) q = q.eq("is_done", is_done);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, shopping_items: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("shopping_items")
+          .insert({
+            user_id: ownerId, name,
+            quantity: Number(body?.quantity ?? 1),
+            category: typeof body?.category === "string" ? body.category : "other",
+            spend_type: typeof body?.spend_type === "string" ? body.spend_type : "personal",
+            need_vs_want: typeof body?.need_vs_want === "string" ? body.need_vs_want : null,
+            justification: typeof body?.justification === "string" ? body.justification : null,
+            unit_cost_estimate: body?.unit_cost_estimate ?? null,
+            is_recurring: body?.is_recurring === true,
+            trusted_source_id: body?.trusted_source_id ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(SHOPPING_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, shopping_item: inserted });
+      }
+
+      case "update_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["name", "category", "spend_type", "need_vs_want", "justification", "notes"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        if (body?.quantity !== undefined) patch.quantity = Number(body.quantity);
+        if (body?.unit_cost_estimate !== undefined) patch.unit_cost_estimate = body.unit_cost_estimate;
+        if (body?.actual_cost !== undefined) patch.actual_cost = body.actual_cost;
+        if (typeof body?.is_recurring === "boolean") patch.is_recurring = body.is_recurring;
+        if (body?.trusted_source_id !== undefined) patch.trusted_source_id = body.trusted_source_id;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("shopping_items").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(SHOPPING_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, shopping_item: updated });
+      }
+
+      // complete_shopping_item — marks bought; when log_to_finance is true
+      // (and actual_cost / an existing unit_cost_estimate is available)
+      // also writes a finance_entries expense and links it back via
+      // finance_entry_id, so shopping spend rolls into Finance totals.
+      case "complete_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("shopping_items").select("*")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const actualCost = body?.actual_cost !== undefined
+          ? Number(body.actual_cost)
+          : (existing.unit_cost_estimate !== null ? Number(existing.unit_cost_estimate) * Number(existing.quantity) : null);
+
+        const patch: Record<string, unknown> = {
+          is_done: true,
+          purchased_at: new Date().toISOString(),
+        };
+        if (actualCost !== null) patch.actual_cost = actualCost;
+
+        if (body?.log_to_finance === true && actualCost !== null) {
+          const financeEntry = await insertFinanceEntry(supabase, ownerId, {
+            category: existing.category,
+            amount: actualCost,
+            entry_date: new Date().toISOString().slice(0, 10),
+            notes: `Shopping: ${existing.name}`,
+            source: existing.spend_type === "business" ? "business" : "other",
+          });
+          if (financeEntry) patch.finance_entry_id = financeEntry.id;
+        }
+
+        const { data: updated, error } = await supabase.from("shopping_items").update(patch)
+          .eq("id", id).select(SHOPPING_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, shopping_item: updated });
+      }
+
+      case "delete_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("shopping_items").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("shopping_items")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Travel — full CRUD. Trips carry the buy-decision framework too;
+      // trip_expenses always mirror into finance_entries so trip cost
+      // never drifts out of sync with Finance.
+      // =================================================================
+      case "list_trips": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        const spend_type = body?.spend_type ? String(body.spend_type) : null;
+        let q = supabase.from("trips").select(TRIP_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("start_date");
+        if (status) q = q.eq("status", status);
+        if (spend_type) q = q.eq("spend_type", spend_type);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trips: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_trip": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const destination = body?.destination ? String(body.destination).trim() : "";
+        const start_date = body?.start_date ? String(body.start_date) : "";
+        const end_date = body?.end_date ? String(body.end_date) : "";
+        if (!destination) return json({ ok: false, error: "destination_required" }, 400);
+        if (!start_date || !end_date) return json({ ok: false, error: "start_date_and_end_date_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("trips")
+          .insert({
+            user_id: ownerId, destination, start_date, end_date,
+            spend_type: typeof body?.spend_type === "string" ? body.spend_type : "personal",
+            need_vs_want: typeof body?.need_vs_want === "string" ? body.need_vs_want : null,
+            justification: typeof body?.justification === "string" ? body.justification : null,
+            budgeted_amount: body?.budgeted_amount ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(TRIP_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trip: inserted });
+      }
+
+      case "update_trip": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["destination", "start_date", "end_date", "status", "spend_type", "need_vs_want", "justification", "notes"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        if (body?.budgeted_amount !== undefined) patch.budgeted_amount = body.budgeted_amount;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("trips").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(TRIP_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, trip: updated });
+      }
+
+      case "delete_trip": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trips").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("trips")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      case "add_trip_expense": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const trip_id = body?.trip_id ? String(body.trip_id) : "";
+        const label = body?.label ? String(body.label).trim() : "";
+        const amount = Number(body?.amount ?? NaN);
+        if (!trip_id) return json({ ok: false, error: "trip_id_required" }, 400);
+        if (!label) return json({ ok: false, error: "label_required" }, 400);
+        if (!Number.isFinite(amount)) return json({ ok: false, error: "amount_required" }, 400);
+
+        const { data: trip, error: tripErr } = await supabase
+          .from("trips").select("id, destination, spend_type")
+          .eq("id", trip_id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (tripErr) return json({ ok: false, error: tripErr.message }, 500);
+        if (!trip) return json({ ok: false, error: "trip_not_found" }, 404);
+
+        const expense_date = body?.expense_date ? String(body.expense_date) : new Date().toISOString().slice(0, 10);
+
+        // Always mirror into finance_entries — trip spend never tracked in isolation.
+        const financeEntry = await insertFinanceEntry(supabase, ownerId, {
+          category: "travel",
+          amount,
+          entry_date: expense_date,
+          notes: `Travel (${trip.destination}): ${label}`,
+          source: trip.spend_type === "business" ? "business" : "other",
+        });
+
+        const { data: inserted, error } = await supabase
+          .from("trip_expenses")
+          .insert({
+            user_id: ownerId, trip_id, label, amount, expense_date,
+            trusted_source_id: body?.trusted_source_id ?? null,
+            finance_entry_id: financeEntry?.id ?? null,
+          })
+          .select(TRIP_EXPENSE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trip_expense: inserted });
+      }
+
+      case "update_trip_expense": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trip_expenses").select("id, finance_entry_id")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.label === "string") patch.label = body.label;
+        if (body?.amount !== undefined) patch.amount = Number(body.amount);
+        if (typeof body?.expense_date === "string") patch.expense_date = body.expense_date;
+        if (body?.trusted_source_id !== undefined) patch.trusted_source_id = body.trusted_source_id;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        // Keep the mirrored finance_entries row in sync on amount/date/label edits.
+        if (existing.finance_entry_id && (patch.amount !== undefined || patch.expense_date !== undefined || patch.label !== undefined)) {
+          const financePatch: Record<string, unknown> = {};
+          if (patch.amount !== undefined) financePatch.amount = Math.abs(Number(patch.amount));
+          if (patch.expense_date !== undefined) financePatch.entry_date = patch.expense_date;
+          await supabase.from("finance_entries").update(financePatch).eq("id", existing.finance_entry_id);
+        }
+
+        const { data: updated, error } = await supabase.from("trip_expenses").update(patch)
+          .eq("id", id).select(TRIP_EXPENSE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trip_expense: updated });
+      }
+
+      case "delete_trip_expense": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trip_expenses").select("id, finance_entry_id")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        // Keep Finance in sync — removing the trip expense also removes its mirrored entry.
+        if (existing.finance_entry_id) {
+          await supabase.from("finance_entries")
+            .update({ deleted_at: new Date().toISOString() }).eq("id", existing.finance_entry_id);
+        }
+
+        const { error } = await supabase.from("trip_expenses")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      case "get_trip_budget_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const trip_id = body?.trip_id ? String(body.trip_id) : "";
+        if (!trip_id) return json({ ok: false, error: "trip_id_required" }, 400);
+
+        const { data: trip, error: tripErr } = await supabase
+          .from("trips").select(TRIP_FIELDS)
+          .eq("id", trip_id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (tripErr) return json({ ok: false, error: tripErr.message }, 500);
+        if (!trip) return json({ ok: false, error: "not_found" }, 404);
+
+        const { data: expenses, error: expErr } = await supabase
+          .from("trip_expenses").select(TRIP_EXPENSE_FIELDS)
+          .eq("trip_id", trip_id).eq("user_id", ownerId).is("deleted_at", null).order("expense_date");
+        if (expErr) return json({ ok: false, error: expErr.message }, 500);
+
+        const spent = (expenses ?? []).reduce((s: number, e: any) => s + Number(e.amount), 0);
+        return json({
+          ok: true,
+          trip,
+          expenses: expenses ?? [],
+          spent,
+          budgeted: trip.budgeted_amount !== null ? Number(trip.budgeted_amount) : null,
+          remaining: trip.budgeted_amount !== null ? Number(trip.budgeted_amount) - spent : null,
+        });
+      }
+
+      // =================================================================
+      // Trusted Sources — shared vendor/source list referenced by
+      // Shopping and Travel.
+      // =================================================================
+      case "list_trusted_sources": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        let q = supabase.from("trusted_sources").select(TRUSTED_SOURCE_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("is_preferred", { ascending: false }).order("name");
+        if (category) q = q.eq("category", category);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trusted_sources: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_trusted_source": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("trusted_sources")
+          .insert({
+            user_id: ownerId, name,
+            category: typeof body?.category === "string" ? body.category : "general",
+            notes: typeof body?.notes === "string" ? body.notes : null,
+            url: typeof body?.url === "string" ? body.url : null,
+            is_preferred: body?.is_preferred === true,
+          })
+          .select(TRUSTED_SOURCE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trusted_source: inserted });
+      }
+
+      case "update_trusted_source": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["name", "category", "notes", "url"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        if (typeof body?.is_preferred === "boolean") patch.is_preferred = body.is_preferred;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("trusted_sources").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(TRUSTED_SOURCE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, trusted_source: updated });
+      }
+
+      case "delete_trusted_source": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trusted_sources").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("trusted_sources")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
       }
 
       default:
