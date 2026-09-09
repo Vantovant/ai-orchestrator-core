@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -3246,6 +3246,87 @@ export type Database = {
         }
         Relationships: []
       }
+      shopping_items: {
+        Row: {
+          actual_cost: number | null
+          category: string
+          created_at: string
+          deleted_at: string | null
+          finance_entry_id: string | null
+          id: string
+          is_done: boolean
+          is_recurring: boolean
+          justification: string | null
+          name: string
+          need_vs_want: string | null
+          notes: string | null
+          purchased_at: string | null
+          quantity: number
+          spend_type: string
+          trusted_source_id: string | null
+          unit_cost_estimate: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actual_cost?: number | null
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          finance_entry_id?: string | null
+          id?: string
+          is_done?: boolean
+          is_recurring?: boolean
+          justification?: string | null
+          name: string
+          need_vs_want?: string | null
+          notes?: string | null
+          purchased_at?: string | null
+          quantity?: number
+          spend_type?: string
+          trusted_source_id?: string | null
+          unit_cost_estimate?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actual_cost?: number | null
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          finance_entry_id?: string | null
+          id?: string
+          is_done?: boolean
+          is_recurring?: boolean
+          justification?: string | null
+          name?: string
+          need_vs_want?: string | null
+          notes?: string | null
+          purchased_at?: string | null
+          quantity?: number
+          spend_type?: string
+          trusted_source_id?: string | null
+          unit_cost_estimate?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_items_finance_entry_id_fkey"
+            columns: ["finance_entry_id"]
+            isOneToOne: false
+            referencedRelation: "finance_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_items_trusted_source_id_fkey"
+            columns: ["trusted_source_id"]
+            isOneToOne: false
+            referencedRelation: "trusted_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_context: {
         Row: {
           captured_at: string
@@ -3898,6 +3979,160 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trip_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          deleted_at: string | null
+          expense_date: string
+          finance_entry_id: string | null
+          id: string
+          label: string
+          trip_id: string
+          trusted_source_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          deleted_at?: string | null
+          expense_date?: string
+          finance_entry_id?: string | null
+          id?: string
+          label: string
+          trip_id: string
+          trusted_source_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          deleted_at?: string | null
+          expense_date?: string
+          finance_entry_id?: string | null
+          id?: string
+          label?: string
+          trip_id?: string
+          trusted_source_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_expenses_finance_entry_id_fkey"
+            columns: ["finance_entry_id"]
+            isOneToOne: false
+            referencedRelation: "finance_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_expenses_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_expenses_trusted_source_id_fkey"
+            columns: ["trusted_source_id"]
+            isOneToOne: false
+            referencedRelation: "trusted_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trips: {
+        Row: {
+          budgeted_amount: number | null
+          created_at: string
+          deleted_at: string | null
+          destination: string
+          end_date: string
+          id: string
+          justification: string | null
+          need_vs_want: string | null
+          notes: string | null
+          spend_type: string
+          start_date: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          budgeted_amount?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          destination: string
+          end_date: string
+          id?: string
+          justification?: string | null
+          need_vs_want?: string | null
+          notes?: string | null
+          spend_type?: string
+          start_date: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          budgeted_amount?: number | null
+          created_at?: string
+          deleted_at?: string | null
+          destination?: string
+          end_date?: string
+          id?: string
+          justification?: string | null
+          need_vs_want?: string | null
+          notes?: string | null
+          spend_type?: string
+          start_date?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trusted_sources: {
+        Row: {
+          category: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_preferred: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_preferred?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_preferred?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       user_activity: {
         Row: {
@@ -5657,12 +5892,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5686,11 +5921,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5711,11 +5946,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5736,11 +5971,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -5753,11 +5988,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
