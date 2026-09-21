@@ -5755,6 +5755,48 @@ export type Database = {
         }
         Relationships: []
       }
+      wellness_conditions: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          detail: string | null
+          id: string
+          item_type: string
+          name: string
+          notes: string | null
+          started_on: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          detail?: string | null
+          id?: string
+          item_type: string
+          name: string
+          notes?: string | null
+          started_on?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          detail?: string | null
+          id?: string
+          item_type?: string
+          name?: string
+          notes?: string | null
+          started_on?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wellness_documents: {
         Row: {
           category: string
@@ -5764,6 +5806,7 @@ export type Database = {
           facility: string | null
           file_name: string | null
           file_path: string | null
+          follow_up_date: string | null
           id: string
           mime_type: string | null
           notes: string | null
@@ -5781,6 +5824,7 @@ export type Database = {
           facility?: string | null
           file_name?: string | null
           file_path?: string | null
+          follow_up_date?: string | null
           id?: string
           mime_type?: string | null
           notes?: string | null
@@ -5798,11 +5842,60 @@ export type Database = {
           facility?: string | null
           file_name?: string | null
           file_path?: string | null
+          follow_up_date?: string | null
           id?: string
           mime_type?: string | null
           notes?: string | null
           report_date?: string | null
           size_bytes?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wellness_goals: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          domain: string
+          id: string
+          notes: string | null
+          starting_value: number | null
+          status: string
+          target_date: string | null
+          target_metric: string | null
+          target_value: number | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          domain?: string
+          id?: string
+          notes?: string | null
+          starting_value?: number | null
+          status?: string
+          target_date?: string | null
+          target_metric?: string | null
+          target_value?: number | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          domain?: string
+          id?: string
+          notes?: string | null
+          starting_value?: number | null
+          status?: string
+          target_date?: string | null
+          target_metric?: string | null
+          target_value?: number | null
           title?: string
           updated_at?: string
           user_id?: string
@@ -5816,9 +5909,13 @@ export type Database = {
           energy_level: number | null
           entry_date: string
           goal_focus: string | null
+          gratitude: string | null
           id: string
+          meditation_minutes: number | null
           mood: string | null
           notes: string
+          sleep_quality: number | null
+          stress_level: number | null
           updated_at: string
           user_id: string
         }
@@ -5828,9 +5925,13 @@ export type Database = {
           energy_level?: number | null
           entry_date?: string
           goal_focus?: string | null
+          gratitude?: string | null
           id?: string
+          meditation_minutes?: number | null
           mood?: string | null
           notes?: string
+          sleep_quality?: number | null
+          stress_level?: number | null
           updated_at?: string
           user_id: string
         }
@@ -5840,9 +5941,13 @@ export type Database = {
           energy_level?: number | null
           entry_date?: string
           goal_focus?: string | null
+          gratitude?: string | null
           id?: string
+          meditation_minutes?: number | null
           mood?: string | null
           notes?: string
+          sleep_quality?: number | null
+          stress_level?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -5850,6 +5955,7 @@ export type Database = {
       }
       wellness_metrics: {
         Row: {
+          body_fat_pct: number | null
           created_at: string
           deleted_at: string | null
           diastolic_bp: number | null
@@ -5857,13 +5963,17 @@ export type Database = {
           notes: string | null
           recorded_on: string
           resting_hr: number | null
+          sleep_hours: number | null
+          steps: number | null
           systolic_bp: number | null
           updated_at: string
           user_id: string
           waist_cm: number | null
+          water_ml: number | null
           weight_kg: number | null
         }
         Insert: {
+          body_fat_pct?: number | null
           created_at?: string
           deleted_at?: string | null
           diastolic_bp?: number | null
@@ -5871,13 +5981,17 @@ export type Database = {
           notes?: string | null
           recorded_on?: string
           resting_hr?: number | null
+          sleep_hours?: number | null
+          steps?: number | null
           systolic_bp?: number | null
           updated_at?: string
           user_id: string
           waist_cm?: number | null
+          water_ml?: number | null
           weight_kg?: number | null
         }
         Update: {
+          body_fat_pct?: number | null
           created_at?: string
           deleted_at?: string | null
           diastolic_bp?: number | null
@@ -5885,11 +5999,62 @@ export type Database = {
           notes?: string | null
           recorded_on?: string
           resting_hr?: number | null
+          sleep_hours?: number | null
+          steps?: number | null
           systolic_bp?: number | null
           updated_at?: string
           user_id?: string
           waist_cm?: number | null
+          water_ml?: number | null
           weight_kg?: number | null
+        }
+        Relationships: []
+      }
+      wellness_workouts: {
+        Row: {
+          activity: string
+          calories_burned: number | null
+          category: string
+          created_at: string
+          deleted_at: string | null
+          distance_km: number | null
+          duration_minutes: number | null
+          id: string
+          intensity: string | null
+          notes: string | null
+          updated_at: string
+          user_id: string
+          workout_date: string
+        }
+        Insert: {
+          activity: string
+          calories_burned?: number | null
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          distance_km?: number | null
+          duration_minutes?: number | null
+          id?: string
+          intensity?: string | null
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+          workout_date?: string
+        }
+        Update: {
+          activity?: string
+          calories_burned?: number | null
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          distance_km?: number | null
+          duration_minutes?: number | null
+          id?: string
+          intensity?: string | null
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+          workout_date?: string
         }
         Relationships: []
       }
