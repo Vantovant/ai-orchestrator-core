@@ -5755,6 +5755,144 @@ export type Database = {
         }
         Relationships: []
       }
+      wellness_documents: {
+        Row: {
+          category: string
+          created_at: string
+          deleted_at: string | null
+          doctor_name: string | null
+          facility: string | null
+          file_name: string | null
+          file_path: string | null
+          id: string
+          mime_type: string | null
+          notes: string | null
+          report_date: string | null
+          size_bytes: number | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          doctor_name?: string | null
+          facility?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          report_date?: string | null
+          size_bytes?: number | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          doctor_name?: string | null
+          facility?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          report_date?: string | null
+          size_bytes?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wellness_journal: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          energy_level: number | null
+          entry_date: string
+          goal_focus: string | null
+          id: string
+          mood: string | null
+          notes: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          energy_level?: number | null
+          entry_date?: string
+          goal_focus?: string | null
+          id?: string
+          mood?: string | null
+          notes?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          energy_level?: number | null
+          entry_date?: string
+          goal_focus?: string | null
+          id?: string
+          mood?: string | null
+          notes?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wellness_metrics: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          diastolic_bp: number | null
+          id: string
+          notes: string | null
+          recorded_on: string
+          resting_hr: number | null
+          systolic_bp: number | null
+          updated_at: string
+          user_id: string
+          waist_cm: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          diastolic_bp?: number | null
+          id?: string
+          notes?: string | null
+          recorded_on?: string
+          resting_hr?: number | null
+          systolic_bp?: number | null
+          updated_at?: string
+          user_id: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          diastolic_bp?: number | null
+          id?: string
+          notes?: string | null
+          recorded_on?: string
+          resting_hr?: number | null
+          systolic_bp?: number | null
+          updated_at?: string
+          user_id?: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: []
+      }
       whatsapp_action_log: {
         Row: {
           action_type: string
