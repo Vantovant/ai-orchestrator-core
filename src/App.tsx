@@ -28,6 +28,7 @@ import TeamPage from "@/pages/TeamPage";
 import UserManualPage from "@/pages/UserManualPage";
 import OnboardingEmailsPage from "@/pages/OnboardingEmailsPage";
 import VoiceDiaryPage from "@/pages/VoiceDiaryPage";
+import WellnessPage from "@/pages/WellnessPage";
 import VantoOSConsolePage from "@/pages/admin/VantoOSConsolePage";
 import Step5DConsolePage from "@/pages/admin/Step5DConsolePage";
 import MaytapiHubPage from "@/pages/admin/MaytapiHubPage";
@@ -152,6 +153,7 @@ function AppRoutes() {
         <Route path="/manual" element={<UserManualPage />} />
         <Route path="/onboarding-emails" element={<OnboardingEmailsPage />} />
         <Route path="/voice-diary" element={<VoiceDiaryPage />} />
+        <Route path="/wellness" element={<WellnessPage />} />
         <Route path="/contacts" element={<ContactsPage />} />
       </Route>
 
