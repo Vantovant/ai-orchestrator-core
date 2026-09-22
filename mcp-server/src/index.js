@@ -18,6 +18,13 @@
 // wraps the result; all the actual logic (including the finance_entries
 // mirroring on shopping/trip spend) lives in mcp-bridge. No new env vars.
 //
+// WELLNESS MCP UPGRADE (2026-09, v1.5.0): adds 20 tools — full CRUD
+// across Vitals, Exercise, Doctor's Reports, Health Profile, Journal,
+// and Goals (the Wellness & Health module). Same forwarding pattern as
+// every tool below. add_wellness_document is metadata-only — attaching
+// the actual file still requires the web UI's storage upload flow, not
+// this bridge. No new env vars.
+//
 // Required env vars (set these on Railway — unchanged by this update):
 //   MCP_BRIDGE_URL   - e.g. https://<project-ref>.supabase.co/functions/v1/mcp-bridge
 //   MCP_BRIDGE_TOKEN - same value as MCP_BRIDGE_TOKEN set on the Supabase function's secrets
@@ -62,7 +69,7 @@ function toolResult(data) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "vantoos-mcp", version: "1.4.0" });
+  const server = new McpServer({ name: "vantoos-mcp", version: "1.5.0" });
 
   // ---------------------------------------------------------------
   // Contacts (unchanged)
@@ -833,6 +840,242 @@ function buildServer() {
     "Delete a trusted vendor/source. Soft delete. Use list_trusted_sources first to find the id.",
     { id: z.string().describe("trusted_sources.id — required") },
     async (args) => toolResult(await callBridge("delete_trusted_source", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Wellness — Vitals (weight, body composition, blood pressure, HR,
+  // steps, sleep, water — one row per day).
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_wellness_metrics",
+    "List Wellness vitals entries (weight, body fat %, waist, blood pressure, resting HR, steps, " +
+      "sleep hours, water intake). Read-only.",
+    { limit: z.number().int().min(1).max(200).optional().describe("Defaults to 90") },
+    async (args) => toolResult(await callBridge("list_wellness_metrics", args)),
+  );
+
+  server.tool(
+    "add_wellness_metric",
+    "Log a Wellness vitals entry for a given day. Every field is optional except the date (which " +
+      "defaults to today) — log just the ones you have.",
+    {
+      recorded_on: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      weight_kg: z.number().optional(),
+      waist_cm: z.number().optional(),
+      body_fat_pct: z.number().optional(),
+      systolic_bp: z.number().int().optional(),
+      diastolic_bp: z.number().int().optional(),
+      resting_hr: z.number().int().optional(),
+      steps: z.number().int().optional(),
+      sleep_hours: z.number().optional(),
+      water_ml: z.number().int().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_wellness_metric", args)),
+  );
+
+  server.tool(
+    "delete_wellness_metric",
+    "Delete a Wellness vitals entry. Soft delete. Use list_wellness_metrics first to find the id.",
+    { id: z.string().describe("wellness_metrics.id — required") },
+    async (args) => toolResult(await callBridge("delete_wellness_metric", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Wellness — Exercise (workout log)
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_wellness_workouts",
+    "List logged workouts. Filter by category. Read-only.",
+    {
+      category: z.enum(["cardio", "strength", "flexibility", "sports", "mind_body", "other"]).optional(),
+      limit: z.number().int().min(1).max(200).optional().describe("Defaults to 100"),
+    },
+    async (args) => toolResult(await callBridge("list_wellness_workouts", args)),
+  );
+
+  server.tool(
+    "add_wellness_workout",
+    "Log a workout — a run, a lift, a yoga class, anything.",
+    {
+      activity: z.string().describe("e.g. 'Morning run', 'Leg day' — required"),
+      workout_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      category: z.enum(["cardio", "strength", "flexibility", "sports", "mind_body", "other"]).optional(),
+      duration_minutes: z.number().int().optional(),
+      intensity: z.enum(["low", "moderate", "high"]).optional(),
+      distance_km: z.number().optional(),
+      calories_burned: z.number().int().optional(),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_wellness_workout", args)),
+  );
+
+  server.tool(
+    "delete_wellness_workout",
+    "Delete a logged workout. Soft delete. Use list_wellness_workouts first to find the id.",
+    { id: z.string().describe("wellness_workouts.id — required") },
+    async (args) => toolResult(await callBridge("delete_wellness_workout", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Wellness — Doctor's Reports (metadata only; file attachment stays
+  // a web-UI-only action, not available through this bridge)
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_wellness_documents",
+    "List doctor's reports (lab results, consultations, imaging, prescriptions). Metadata only — " +
+      "does not include any attached file content. Filter by category. Read-only.",
+    {
+      category: z.enum(["lab_results", "consultation", "imaging", "prescription", "other"]).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_wellness_documents", args)),
+  );
+
+  server.tool(
+    "add_wellness_document",
+    "Add a doctor's report — metadata only (title, category, doctor, dates, notes). This tool " +
+      "cannot attach a file; use the Wellness page in the app to upload the actual PDF/image.",
+    {
+      title: z.string().describe("e.g. 'Annual bloodwork' — required"),
+      category: z.enum(["lab_results", "consultation", "imaging", "prescription", "other"]).optional(),
+      doctor_name: z.string().optional(),
+      facility: z.string().optional(),
+      report_date: z.string().optional().describe("YYYY-MM-DD"),
+      follow_up_date: z.string().optional().describe("YYYY-MM-DD"),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_wellness_document", args)),
+  );
+
+  server.tool(
+    "delete_wellness_document",
+    "Delete a doctor's report. Soft delete. Use list_wellness_documents first to find the id.",
+    { id: z.string().describe("wellness_documents.id — required") },
+    async (args) => toolResult(await callBridge("delete_wellness_document", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Wellness — Health Profile (standing record: conditions, allergies,
+  // medications, immunizations)
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_wellness_conditions",
+    "List Health Profile entries — ongoing conditions, allergies, medications, and " +
+      "immunizations. Filter by item_type. Read-only.",
+    {
+      item_type: z.enum(["condition", "allergy", "medication", "immunization"]).optional(),
+    },
+    async (args) => toolResult(await callBridge("list_wellness_conditions", args)),
+  );
+
+  server.tool(
+    "add_wellness_condition",
+    "Add an entry to the Health Profile — a condition, allergy, medication, or immunization.",
+    {
+      item_type: z.enum(["condition", "allergy", "medication", "immunization"]).describe("Required"),
+      name: z.string().describe("e.g. 'Penicillin', 'Hypertension', 'Metformin 500mg' — required"),
+      detail: z.string().optional().describe("Dosage, frequency, or severity"),
+      status: z.enum(["active", "ongoing", "resolved"]).optional().describe("Defaults to 'active'"),
+      started_on: z.string().optional().describe("YYYY-MM-DD"),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_wellness_condition", args)),
+  );
+
+  server.tool(
+    "update_wellness_condition_status",
+    "Change a Health Profile entry's status (e.g. mark a condition resolved). Use " +
+      "list_wellness_conditions first to find the id.",
+    {
+      id: z.string().describe("wellness_conditions.id — required"),
+      status: z.enum(["active", "ongoing", "resolved"]).describe("Required"),
+    },
+    async (args) => toolResult(await callBridge("update_wellness_condition_status", args)),
+  );
+
+  server.tool(
+    "delete_wellness_condition",
+    "Delete a Health Profile entry. Soft delete. Use list_wellness_conditions first to find the id.",
+    { id: z.string().describe("wellness_conditions.id — required") },
+    async (args) => toolResult(await callBridge("delete_wellness_condition", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Wellness — Journal (mood, energy, stress, sleep quality, meditation,
+  // gratitude, and a free-text entry)
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_wellness_journal",
+    "List Wellness journal entries. Read-only.",
+    { limit: z.number().int().min(1).max(200).optional().describe("Defaults to 100") },
+    async (args) => toolResult(await callBridge("list_wellness_journal", args)),
+  );
+
+  server.tool(
+    "add_wellness_journal_entry",
+    "Add a Wellness journal entry — how you're feeling, energy, sleep, progress toward goals.",
+    {
+      notes: z.string().describe("Entry text — required"),
+      entry_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      mood: z.string().optional(),
+      energy_level: z.number().int().min(1).max(5).optional(),
+      stress_level: z.number().int().min(1).max(5).optional(),
+      sleep_quality: z.number().int().min(1).max(5).optional(),
+      meditation_minutes: z.number().int().optional(),
+      gratitude: z.string().optional(),
+      goal_focus: z.enum(["weight_loss", "strength", "mental_health", "general_wellness", "recovery"]).optional(),
+    },
+    async (args) => toolResult(await callBridge("add_wellness_journal_entry", args)),
+  );
+
+  server.tool(
+    "delete_wellness_journal_entry",
+    "Delete a Wellness journal entry. Soft delete. Use list_wellness_journal first to find the id.",
+    { id: z.string().describe("wellness_journal.id — required") },
+    async (args) => toolResult(await callBridge("delete_wellness_journal_entry", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Wellness — Goals (body / mind / health targets)
+  // ---------------------------------------------------------------
+  server.tool(
+    "list_wellness_goals",
+    "List Wellness goals across Body, Mind, and Health domains. Filter by status. Read-only.",
+    { status: z.enum(["active", "achieved", "abandoned"]).optional() },
+    async (args) => toolResult(await callBridge("list_wellness_goals", args)),
+  );
+
+  server.tool(
+    "add_wellness_goal",
+    "Set a new Wellness goal. If target_metric is 'weight_kg' with both starting_value and " +
+      "target_value set, the app computes a live progress bar from logged vitals.",
+    {
+      title: z.string().describe("e.g. 'Get to 80kg', 'Meditate daily' — required"),
+      domain: z.enum(["body", "mind", "health"]).optional().describe("Defaults to 'body'"),
+      target_metric: z.string().optional().describe("e.g. 'weight_kg' — only 'weight_kg' drives a progress bar today"),
+      target_value: z.number().optional(),
+      starting_value: z.number().optional(),
+      target_date: z.string().optional().describe("YYYY-MM-DD"),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_wellness_goal", args)),
+  );
+
+  server.tool(
+    "update_wellness_goal_status",
+    "Mark a Wellness goal achieved or abandoned. Use list_wellness_goals first to find the id.",
+    {
+      id: z.string().describe("wellness_goals.id — required"),
+      status: z.enum(["active", "achieved", "abandoned"]).describe("Required"),
+    },
+    async (args) => toolResult(await callBridge("update_wellness_goal_status", args)),
+  );
+
+  server.tool(
+    "delete_wellness_goal",
+    "Delete a Wellness goal. Soft delete. Use list_wellness_goals first to find the id.",
+    { id: z.string().describe("wellness_goals.id — required") },
+    async (args) => toolResult(await callBridge("delete_wellness_goal", args)),
   );
 
   return server;
