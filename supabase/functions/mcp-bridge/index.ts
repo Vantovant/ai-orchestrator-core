@@ -58,6 +58,21 @@
 // business/mixed). complete_shopping_item and add_trip_expense both
 // optionally/always mirror into finance_entries via insertFinanceEntry()
 // so Shopping/Travel spend never drifts out of sync with Finance.
+//
+// WELLNESS MCP UPGRADE (2026-09): adds full CRUD across the Wellness &
+// Health module — Vitals (wellness_metrics), Exercise (wellness_workouts),
+// Doctor's Reports (wellness_documents), Health Profile
+// (wellness_conditions), Journal (wellness_journal), and Goals
+// (wellness_goals). All six tables already existed (created directly
+// against the live Postgres for the Wellness page build) with the same
+// RLS (auth.uid() = user_id), deleted_at, and updated_at-trigger
+// conventions as everything above, so every delete_* below is a SOFT
+// delete. Deliberately excluded: file upload on wellness_documents —
+// add_wellness_document only writes metadata (title, category, doctor,
+// dates, notes); attaching the actual PDF/image still requires the web
+// UI's storage upload flow, which doesn't fit this JSON action/body
+// bridge. Same "narrow the first version on purpose" caution as the
+// original contacts build.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -160,6 +175,36 @@ const TRIP_EXPENSE_FIELDS =
 
 const TRUSTED_SOURCE_FIELDS =
   "id, name, category, notes, url, is_preferred, created_at, updated_at";
+
+// =====================================================================
+// Wellness MCP upgrade — Vitals, Exercise, Doctor's Reports, Health
+// Profile, Journal, Goals. Same owner-scoped, fail-closed, allow-listed-
+// fields pattern as everything above. Every table here has a deleted_at
+// column, so every delete_* below is a SOFT delete.
+// =====================================================================
+
+const WELLNESS_METRIC_FIELDS =
+  "id, recorded_on, weight_kg, waist_cm, body_fat_pct, systolic_bp, diastolic_bp, resting_hr, " +
+  "steps, sleep_hours, water_ml, notes, created_at, updated_at";
+
+const WELLNESS_WORKOUT_FIELDS =
+  "id, workout_date, activity, category, duration_minutes, intensity, distance_km, " +
+  "calories_burned, notes, created_at, updated_at";
+
+const WELLNESS_DOCUMENT_FIELDS =
+  "id, title, category, doctor_name, facility, report_date, follow_up_date, notes, " +
+  "file_path, file_name, mime_type, size_bytes, created_at, updated_at";
+
+const WELLNESS_CONDITION_FIELDS =
+  "id, item_type, name, detail, status, started_on, notes, created_at, updated_at";
+
+const WELLNESS_JOURNAL_FIELDS =
+  "id, entry_date, mood, energy_level, stress_level, sleep_quality, meditation_minutes, " +
+  "gratitude, goal_focus, notes, created_at, updated_at";
+
+const WELLNESS_GOAL_FIELDS =
+  "id, title, domain, target_metric, target_value, starting_value, target_date, status, " +
+  "notes, created_at, updated_at";
 
 // Shared helper: create a finance_entries row on behalf of the owner and
 // return its id. Used by complete_shopping_item and add_trip_expense so
@@ -1696,6 +1741,370 @@ Deno.serve(async (req) => {
         if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
         if (!existing) return json({ ok: false, error: "not_found" }, 404);
         const { error } = await supabase.from("trusted_sources")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Vitals (wellness_metrics)
+      // =================================================================
+      case "list_wellness_metrics": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const limit = Math.min(Math.max(Number(body?.limit ?? 90), 1), 200);
+        const { data, error } = await supabase.from("wellness_metrics").select(WELLNESS_METRIC_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("recorded_on", { ascending: false }).limit(limit);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, metrics: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_metric": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const recorded_on = body?.recorded_on ? String(body.recorded_on) : new Date().toISOString().slice(0, 10);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_metrics")
+          .insert({
+            user_id: ownerId, recorded_on,
+            weight_kg: body?.weight_kg ?? null,
+            waist_cm: body?.waist_cm ?? null,
+            body_fat_pct: body?.body_fat_pct ?? null,
+            systolic_bp: body?.systolic_bp ?? null,
+            diastolic_bp: body?.diastolic_bp ?? null,
+            resting_hr: body?.resting_hr ?? null,
+            steps: body?.steps ?? null,
+            sleep_hours: body?.sleep_hours ?? null,
+            water_ml: body?.water_ml ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_METRIC_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, metric: inserted });
+      }
+
+      case "delete_wellness_metric": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_metrics").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_metrics")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Exercise (wellness_workouts)
+      // =================================================================
+      case "list_wellness_workouts": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 100), 1), 200);
+        let q = supabase.from("wellness_workouts").select(WELLNESS_WORKOUT_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("workout_date", { ascending: false }).limit(limit);
+        if (category) q = q.eq("category", category);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, workouts: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_workout": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const activity = body?.activity ? String(body.activity).trim() : "";
+        if (!activity) return json({ ok: false, error: "activity_required" }, 400);
+        const workout_date = body?.workout_date ? String(body.workout_date) : new Date().toISOString().slice(0, 10);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_workouts")
+          .insert({
+            user_id: ownerId, activity, workout_date,
+            category: typeof body?.category === "string" ? body.category : "other",
+            duration_minutes: body?.duration_minutes ?? null,
+            intensity: typeof body?.intensity === "string" ? body.intensity : null,
+            distance_km: body?.distance_km ?? null,
+            calories_burned: body?.calories_burned ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_WORKOUT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, workout: inserted });
+      }
+
+      case "delete_wellness_workout": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_workouts").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_workouts")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Doctor's Reports (wellness_documents). Metadata only —
+      // file attachment stays a web-UI-only action (see header comment).
+      // =================================================================
+      case "list_wellness_documents": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        let q = supabase.from("wellness_documents").select(WELLNESS_DOCUMENT_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("report_date", { ascending: false, nullsFirst: false });
+        if (category) q = q.eq("category", category);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, documents: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_document": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_documents")
+          .insert({
+            user_id: ownerId, title,
+            category: typeof body?.category === "string" ? body.category : "other",
+            doctor_name: typeof body?.doctor_name === "string" ? body.doctor_name : null,
+            facility: typeof body?.facility === "string" ? body.facility : null,
+            report_date: body?.report_date ?? null,
+            follow_up_date: body?.follow_up_date ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_DOCUMENT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, document: inserted });
+      }
+
+      case "delete_wellness_document": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_documents").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_documents")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Health Profile (wellness_conditions): conditions,
+      // allergies, medications, immunizations.
+      // =================================================================
+      case "list_wellness_conditions": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const item_type = body?.item_type ? String(body.item_type) : null;
+        let q = supabase.from("wellness_conditions").select(WELLNESS_CONDITION_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("item_type").order("name");
+        if (item_type) q = q.eq("item_type", item_type);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, conditions: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_condition": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const item_type = body?.item_type ? String(body.item_type) : "";
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!["condition", "allergy", "medication", "immunization"].includes(item_type)) {
+          return json({ ok: false, error: "item_type_required" }, 400);
+        }
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_conditions")
+          .insert({
+            user_id: ownerId, item_type, name,
+            detail: typeof body?.detail === "string" ? body.detail : null,
+            status: typeof body?.status === "string" ? body.status : "active",
+            started_on: body?.started_on ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_CONDITION_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, condition: inserted });
+      }
+
+      case "update_wellness_condition_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const status = body?.status ? String(body.status) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!["active", "ongoing", "resolved"].includes(status)) {
+          return json({ ok: false, error: "valid_status_required" }, 400);
+        }
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_conditions").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("wellness_conditions")
+          .update({ status }).eq("id", id).select(WELLNESS_CONDITION_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, condition: updated });
+      }
+
+      case "delete_wellness_condition": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_conditions").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_conditions")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Journal (wellness_journal)
+      // =================================================================
+      case "list_wellness_journal": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const limit = Math.min(Math.max(Number(body?.limit ?? 100), 1), 200);
+        const { data, error } = await supabase.from("wellness_journal").select(WELLNESS_JOURNAL_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("entry_date", { ascending: false }).limit(limit);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entries: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_journal_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const notes = body?.notes ? String(body.notes).trim() : "";
+        if (!notes) return json({ ok: false, error: "notes_required" }, 400);
+        const entry_date = body?.entry_date ? String(body.entry_date) : new Date().toISOString().slice(0, 10);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_journal")
+          .insert({
+            user_id: ownerId, notes, entry_date,
+            mood: typeof body?.mood === "string" ? body.mood : null,
+            energy_level: body?.energy_level ?? null,
+            stress_level: body?.stress_level ?? null,
+            sleep_quality: body?.sleep_quality ?? null,
+            meditation_minutes: body?.meditation_minutes ?? null,
+            gratitude: typeof body?.gratitude === "string" ? body.gratitude : null,
+            goal_focus: typeof body?.goal_focus === "string" ? body.goal_focus : null,
+          })
+          .select(WELLNESS_JOURNAL_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entry: inserted });
+      }
+
+      case "delete_wellness_journal_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_journal").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_journal")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Goals (wellness_goals)
+      // =================================================================
+      case "list_wellness_goals": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("wellness_goals").select(WELLNESS_GOAL_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("status").order("target_date", { ascending: true, nullsFirst: false });
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, goals: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_goal": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_goals")
+          .insert({
+            user_id: ownerId, title,
+            domain: typeof body?.domain === "string" ? body.domain : "body",
+            target_metric: typeof body?.target_metric === "string" ? body.target_metric : null,
+            target_value: body?.target_value ?? null,
+            starting_value: body?.starting_value ?? null,
+            target_date: body?.target_date ?? null,
+            status: "active",
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_GOAL_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, goal: inserted });
+      }
+
+      case "update_wellness_goal_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const status = body?.status ? String(body.status) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!["active", "achieved", "abandoned"].includes(status)) {
+          return json({ ok: false, error: "valid_status_required" }, 400);
+        }
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_goals").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("wellness_goals")
+          .update({ status }).eq("id", id).select(WELLNESS_GOAL_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, goal: updated });
+      }
+
+      case "delete_wellness_goal": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_goals").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_goals")
           .update({ deleted_at: new Date().toISOString() }).eq("id", id);
         if (error) return json({ ok: false, error: error.message }, 500);
         return json({ ok: true, deleted_id: id });
