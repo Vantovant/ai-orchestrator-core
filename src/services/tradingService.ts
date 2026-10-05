@@ -55,6 +55,35 @@ export const settingsService = {
   },
 };
 
+// Trade open/close, plan saves, lesson progress and stats go through shared
+// DB functions also used by the Claude connector, so the maths never drifts.
+export const tradingRpc = {
+  async open(t: { symbol: string; tradingview_symbol: string; direction: "long" | "short"; entry: number; stop: number; target: number; timeframe: string; setup_name: string; reason: string; calendar_checked: boolean }) {
+    const user_id = await uid();
+    const { data, error } = await (db as any).rpc("open_paper_trade", {
+      p_user_id: user_id, p_symbol: t.symbol, p_tradingview_symbol: t.tradingview_symbol, p_direction: t.direction,
+      p_entry: t.entry, p_stop: t.stop, p_target: t.target, p_timeframe: t.timeframe, p_setup_name: t.setup_name,
+      p_reason: t.reason, p_calendar_checked: t.calendar_checked,
+    });
+    if (error) throw error;
+    return data;
+  },
+  async close(trade_id: string, exit_price: number, exit_date: string, rule_followed: boolean, lesson: string) {
+    const user_id = await uid();
+    const { data, error } = await (db as any).rpc("close_paper_trade", {
+      p_user_id: user_id, p_trade_id: trade_id, p_exit_price: exit_price, p_exit_date: exit_date, p_rule_followed: rule_followed, p_lesson: lesson,
+    });
+    if (error) throw error;
+    return data;
+  },
+  async stats(): Promise<ReturnType<typeof tradeStats>> {
+    const user_id = await uid();
+    const { data, error } = await (db as any).rpc("trading_stats", { p_user_id: user_id });
+    if (error) throw error;
+    return data;
+  },
+};
+
 export const ruleTradeService = {
   async list(): Promise<RuleTrade[]> {
     const user_id = await uid();
@@ -90,20 +119,11 @@ export const planService = {
     if (error) throw error;
     return data;
   },
-  async save(current: TradingPlan | null, values: Partial<TradingPlan>) {
+  async save(_current: TradingPlan | null, values: Partial<TradingPlan>) {
     const user_id = await uid();
-    const clean: any = {};
-    PLAN_FIELDS.forEach((f) => (clean[f] = values[f] ?? null));
-    if (!current) {
-      const { error } = await db.from("trading_plans").insert({ user_id, ...clean });
-      if (error) throw error;
-      return;
-    }
-    const snap: any = { updated_at: current.updated_at };
-    PLAN_FIELDS.forEach((f) => (snap[f] = current[f]));
-    const v = await db.from("trading_plan_versions").insert({ plan_id: current.id, user_id, snapshot: snap });
-    if (v.error) throw v.error;
-    const { error } = await db.from("trading_plans").update({ ...clean, updated_at: new Date().toISOString() }).eq("id", current.id);
+    const patch: any = {};
+    PLAN_FIELDS.forEach((f) => (patch[f] = values[f] ?? null));
+    const { error } = await (db as any).rpc("save_trading_plan", { p_user_id: user_id, p_patch: patch });
     if (error) throw error;
   },
   async versions(planId: string): Promise<PlanVersion[]> {
@@ -122,8 +142,9 @@ export const courseService = {
   },
   async upsert(lesson_no: number, patch: Partial<CourseProgress>) {
     const user_id = await uid();
-    const { error } = await db.from("trading_course_progress")
-      .upsert({ user_id, lesson_no, ...patch, updated_at: new Date().toISOString() }, { onConflict: "user_id,lesson_no" });
+    const { error } = await (db as any).rpc("set_lesson_progress", {
+      p_user_id: user_id, p_lesson_no: lesson_no, p_status: patch.status ?? "not_started", p_notes: patch.notes ?? null,
+    });
     if (error) throw error;
   },
 };

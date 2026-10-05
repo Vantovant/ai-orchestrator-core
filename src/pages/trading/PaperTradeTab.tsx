@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
-  ruleTradeService, settingsService, calcTicket, validateTicket, rMultiple, tradeStats, tradesToCsv,
+  ruleTradeService, settingsService, tradingRpc, calcTicket, validateTicket, rMultiple, tradeStats, tradesToCsv,
   defaultTvSymbol, tvChartUrl, type RuleTrade, type TradingSettings,
 } from "@/services/tradingService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,18 +34,22 @@ export default function PaperTradeTab({ trades, settings, refresh }: { trades: R
   const calc = calcTicket(balance, risk, entry || 0, stop || 0, target || 0);
   const err = f.entry && f.stop && f.target ? validateTicket(f.direction, entry, stop, target) : null;
   const riskBlocked = settings.learning_mode && risk > 1;
-  const stats = useMemo(() => tradeStats(trades), [trades]);
+  const localStats = useMemo(() => tradeStats(trades), [trades]);
+  const dbStats = useQuery({ queryKey: ["trading_stats", trades.length, trades.filter((t) => t.status === "closed").length], queryFn: tradingRpc.stats });
+  const stats = dbStats.data ?? localStats;
   const unlocked = stats.count >= 30 && settings.mentor_reviewed;
 
   const missing = !f.symbol || !f.tv || !f.entry || !f.stop || !f.target || !f.timeframe || !f.setup || !f.reason.trim() || !f.calendar;
 
   const save = useMutation({
-    mutationFn: () => ruleTradeService.create({
-      symbol: f.symbol.toUpperCase(), tradingview_symbol: f.tv.toUpperCase(), direction: f.direction,
-      entry_price: entry, stop_loss: stop, target_price: target, timeframe: f.timeframe, setup_name: f.setup,
-      reason: f.reason, calendar_checked: f.calendar, risk_percent: risk, risk_amount_zar: calc.riskAmount,
-      position_size: calc.size, asset_type: f.symbol.includes("BTC") || f.symbol.includes("ETH") ? "crypto" : "fx",
-    }),
+    mutationFn: async () => {
+      // Risk % on the ticket is a human setting; save it first so the DB sizes the trade with it.
+      if (risk !== Number(settings.risk_percent)) await settingsService.update({ risk_percent: risk });
+      return tradingRpc.open({
+        symbol: f.symbol.toUpperCase(), tradingview_symbol: f.tv.toUpperCase(), direction: f.direction,
+        entry, stop, target, timeframe: f.timeframe, setup_name: f.setup, reason: f.reason, calendar_checked: f.calendar,
+      });
+    },
     onSuccess: () => { toast.success("Paper trade logged"); setF(EMPTY); refresh(); },
     onError: (e: any) => toast.error(e.message),
   });
@@ -249,8 +253,7 @@ function CloseDialog({ trade, balance, onDone }: { trade: RuleTrade | null; bala
   const save = async () => {
     if (!(ex > 0) || !rule || !lesson.trim()) return toast.error("Exit price, rule followed and lesson are required.");
     try {
-      await ruleTradeService.update(trade.id, { status: "closed", exit_price: ex, exit_date: date, rule_followed: rule === "y", lesson, r_multiple: r, pnl_zar: pnl });
-      await settingsService.update({ paper_account_balance_zar: balance + (pnl ?? 0) });
+      await tradingRpc.close(trade.id, ex, date, rule === "y", lesson);
       toast.success("Trade closed"); setExit(""); setRule(""); setLesson(""); onDone();
     } catch (e: any) { toast.error(e.message); }
   };
