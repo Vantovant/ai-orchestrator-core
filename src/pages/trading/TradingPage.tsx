@@ -41,7 +41,7 @@ export default function TradingPage() {
   const refreshTrading = () => { settings.refetch(); trades.refetch(); course.refetch(); };
 
   return (
-    <div className="space-y-4 pb-6">
+    <div className="space-y-4 pb-6 w-full max-w-full min-w-0 overflow-x-hidden">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2"><CandlestickChart className="h-6 w-6 text-primary" /> Trading</h1>
@@ -53,8 +53,8 @@ export default function TradingPage() {
       </div>
       <Badge variant="outline" className="gap-1"><Shield className="h-3 w-3" /> Paper trading — learning mode</Badge>
 
-      <Tabs value={tab} onValueChange={setTab} className="w-full">
-        <TabsList className="flex w-full overflow-x-auto no-scrollbar justify-start">
+      <Tabs value={tab} onValueChange={setTab} className="w-full min-w-0">
+        <TabsList className="flex w-full max-w-full overflow-x-auto no-scrollbar justify-start">
           {[["overview", "Overview"], ["course", "Course"], ["plan", "Trading Plan"], ["paper", "Paper Trade"], ["watchlist", "Watchlist"], ["portfolio", "Portfolio"], ["alerts", "Alerts"], ["mentor", "AI Mentor"]].map(([v, l]) => (
             <TabsTrigger key={v} value={v} className="shrink-0 px-3 text-xs sm:text-sm">{l}</TabsTrigger>
           ))}
