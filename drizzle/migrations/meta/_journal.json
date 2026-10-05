@@ -8,6 +8,13 @@
       "when": 1791231467662,
       "tag": "0000_trading_course_module",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791233513525,
+      "tag": "0001_trading_safety_locks",
+      "breakpoints": true
     }
   ]
 }
