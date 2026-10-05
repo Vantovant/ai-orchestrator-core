@@ -40,21 +40,19 @@ serve(async (req) => {
     // Build snapshot
     const [pricesRes, newsRes, holdingsRes, alertsRes] = await Promise.all([
       db.from("market_prices_cache").select("symbol,asset_type,price,change_1d,currency").limit(20),
-      db.from("market_news_cache").select("title,summary,tags").order("published_at", { ascending: false }).limit(5),
+      Promise.resolve({ data: [] as any[] }),
       db.from("invest_manual_holdings").select("symbol,asset_type,qty,avg_cost,currency").eq("user_id", user.id).is("deleted_at", null).limit(10),
       db.from("invest_alerts").select("symbol,rule_type,enabled").eq("user_id", user.id).is("deleted_at", null).limit(10),
     ]);
 
     const snapshot = {
-      prices: (pricesRes.data ?? []).map(p => `${p.symbol}: ${p.price} ${p.currency} (1d: ${p.change_1d}%)`).join("\n"),
-      headlines: (newsRes.data ?? []).map(n => `- ${n.title}: ${n.summary}`).join("\n"),
+      prices: (pricesRes.data ?? []).map(p => `${p.symbol}: ${p.price} ${p.currency} (1d: ${p.change_1d === null ? "n/a" : p.change_1d + "%"})`).join("\n"),
       holdings: (holdingsRes.data ?? []).map(h => `${h.symbol} (${h.asset_type}): ${h.qty} @ ${h.avg_cost ?? '?'} ${h.currency}`).join("\n") || "No holdings yet",
       alerts: (alertsRes.data ?? []).length + " active alerts",
     };
 
     const snapshotText = [
       "=== MARKET PRICES ===", snapshot.prices,
-      "=== HEADLINES ===", snapshot.headlines,
       "=== USER HOLDINGS ===", snapshot.holdings,
       "=== ALERTS ===", snapshot.alerts,
     ].join("\n").slice(0, 3000);
@@ -65,7 +63,7 @@ serve(async (req) => {
       nextstep: "Based on the user's portfolio and market conditions, suggest 3-5 safe next steps. Focus on learning, watchlisting, paper trading, or setting alerts. Never recommend buying/selling real assets. Explain each suggestion.",
     };
 
-    const systemPrompt = `You are an investment coach for a South African executive who is NEW to investing. You teach, explain, and guide — you NEVER tell them to buy or sell. You always speak in plain language. Rand (ZAR) is their home currency.\n\nRules:\n- No financial advice or "buy now" directives\n- Explain every term\n- Suggest safe actions only (watchlist, learn, paper trade, alerts)\n- Be neutral and educational\n\nCurrent market snapshot:\n${snapshotText}`;
+    const systemPrompt = `You are an investment coach for a South African executive who is NEW to investing. You teach, explain, and guide — you NEVER tell them to buy or sell. You always speak in plain language. Rand (ZAR) is their home currency.\n\nRules:\n- No financial advice or "buy now" directives\n- Explain every term\n- Suggest safe actions only (watchlist, learn, paper trade, alerts)\n- Be neutral and educational\n- You have NO news feed. Never describe news, events or headlines as if they happened. Only discuss the prices given; say "n/a" changes are unknown. Tell the user to check the economic calendar for events.\n- Always end with: Educational only — not financial advice. You make every decision.\n\nCurrent market snapshot:\n${snapshotText}`;
 
     const messages = [
       { role: "system", content: systemPrompt },
