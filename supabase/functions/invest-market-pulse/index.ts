@@ -6,148 +6,131 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Simple market data using free APIs
-async function fetchFXRates(): Promise<Record<string, number>> {
+type Price = {
+  symbol: string; asset_type: string; price: number;
+  change_1d: number | null; change_7d: number | null; currency: string; asof: string;
+};
+
+// ECB reference rates (via Frankfurter) — gives today's AND previous business day's real rate.
+const ECB_CCYS = ["ZAR", "EUR", "GBP", "JPY", "CNY"];
+async function fetchEcbSeries(): Promise<{ latest: Record<string, number>; prev: Record<string, number>; date: string } | null> {
   try {
-    const resp = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(8000) });
-    if (!resp.ok) return {};
+    const start = new Date(Date.now() - 10 * 86400_000).toISOString().slice(0, 10);
+    const resp = await fetch(`https://api.frankfurter.dev/v1/${start}..?base=USD&symbols=${ECB_CCYS.join(",")}`, { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) return null;
     const json = await resp.json();
-    return json.rates ?? {};
-  } catch { return {}; }
+    const dates = Object.keys(json.rates ?? {}).sort();
+    if (dates.length === 0) return null;
+    const last = dates[dates.length - 1];
+    const prev = dates.length > 1 ? dates[dates.length - 2] : null;
+    return { latest: json.rates[last], prev: prev ? json.rates[prev] : {}, date: last };
+  } catch { return null; }
 }
 
-async function fetchCryptoRates(): Promise<any[]> {
+// Fallback / extra currencies (NGN, XAU) — today's rate only.
+async function fetchErRates(): Promise<{ rates: Record<string, number>; asof: string | null }> {
+  try {
+    const resp = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) return { rates: {}, asof: null };
+    const json = await resp.json();
+    const asof = json.time_last_update_unix ? new Date(json.time_last_update_unix * 1000).toISOString() : null;
+    return { rates: json.rates ?? {}, asof };
+  } catch { return { rates: {}, asof: null }; }
+}
+
+async function fetchCrypto(now: string): Promise<Price[]> {
   try {
     const resp = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true&include_7d_change=true",
-      { signal: AbortSignal.timeout(8000) }
+      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true&include_last_updated_at=true",
+      { signal: AbortSignal.timeout(8000) },
     );
     if (!resp.ok) return [];
     const json = await resp.json();
-    const results = [];
-    if (json.bitcoin) {
-      results.push({
-        symbol: "BTC/USD", asset_type: "crypto", price: json.bitcoin.usd ?? 0,
-        change_1d: json.bitcoin.usd_24h_change ?? 0, change_7d: 0, currency: "USD",
+    const out: Price[] = [];
+    const add = (key: string, symbol: string) => {
+      const c = json[key];
+      if (!c?.usd) return;
+      out.push({
+        symbol, asset_type: "crypto", price: c.usd,
+        change_1d: typeof c.usd_24h_change === "number" ? c.usd_24h_change : null,
+        change_7d: null, currency: "USD",
+        asof: c.last_updated_at ? new Date(c.last_updated_at * 1000).toISOString() : now,
       });
-    }
-    if (json.ethereum) {
-      results.push({
-        symbol: "ETH/USD", asset_type: "crypto", price: json.ethereum.usd ?? 0,
-        change_1d: json.ethereum.usd_24h_change ?? 0, change_7d: 0, currency: "USD",
-      });
-    }
-    return results;
+    };
+    add("bitcoin", "BTC/USD");
+    add("ethereum", "ETH/USD");
+    return out;
   } catch { return []; }
 }
 
-// Generate macro headlines using AI
-async function generateHeadlines(apiKey: string, prices: any[]): Promise<any[]> {
-  try {
-    const pricesSummary = prices.map(p => `${p.symbol}: ${p.price} (1d: ${(p.change_1d ?? 0).toFixed(2)}%)`).join(", ");
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
-        messages: [
-          { role: "system", content: "You are a neutral financial news summarizer. Return ONLY a JSON array of 5 objects with keys: title, summary, tags (array of strings like 'fx','crypto','commodities','rates','geopolitics'). Cover today's key macro events affecting markets. Be factual, beginner-friendly, no hype. Current prices: " + pricesSummary },
-          { role: "user", content: "Generate 5 market headlines for today, " + new Date().toISOString().slice(0, 10) }
-        ],
-      }),
-    });
-    if (!resp.ok) return [];
-    const json = await resp.json();
-    const content = json.choices?.[0]?.message?.content ?? "";
-    // Try to extract JSON array
-    const match = content.match(/\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-    return [];
-  } catch { return []; }
-}
+const pct = (cur: number, prev: number | undefined | null) =>
+  prev && prev > 0 ? ((cur - prev) / prev) * 100 : null;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const apiKey = Deno.env.get("LOVABLE_API_KEY") ?? "";
-    const db = createClient(supabaseUrl, serviceKey);
-
-    // Fetch market data in parallel
-    const [fxRates, cryptoData] = await Promise.all([fetchFXRates(), fetchCryptoRates()]);
-
+    const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const now = new Date().toISOString();
-    const prices: any[] = [];
+    const today = now.slice(0, 10);
 
-    // FX pairs (USD base)
-    const fxPairs = ["ZAR", "EUR", "GBP", "JPY", "CNY", "NGN"];
-    for (const ccy of fxPairs) {
-      if (fxRates[ccy]) {
-        prices.push({
-          symbol: `USD/${ccy}`, asset_type: "fx", price: fxRates[ccy],
-          change_1d: 0, change_7d: 0, currency: "USD", asof: now,
-        });
-      }
-    }
+    const [ecb, er, crypto] = await Promise.all([fetchEcbSeries(), fetchErRates(), fetchCrypto(now)]);
+    const prices: Price[] = [];
 
-    // Add ZAR base pairs
-    if (fxRates["ZAR"]) {
-      const zarRate = fxRates["ZAR"];
+    // Previous-day snapshots as fallback for change_1d
+    const { data: snaps } = await db
+      .from("market_price_snapshots")
+      .select("symbol, price, snapshot_date")
+      .lt("snapshot_date", today)
+      .order("snapshot_date", { ascending: false })
+      .limit(200);
+    const prevSnap = (sym: string) => snaps?.find((s) => s.symbol === sym)?.price as number | undefined;
+
+    const fxAsof = ecb ? new Date(`${ecb.date}T16:00:00Z`).toISOString() : (er.asof ?? now);
+
+    const pushFx = (ccy: string) => {
+      const sym = `USD/${ccy}`;
+      const ecbPrice = ecb?.latest?.[ccy];
+      const price = ecbPrice ?? er.rates[ccy];
+      if (!price) return;
+      const change = ecbPrice ? (pct(ecbPrice, ecb?.prev?.[ccy]) ?? pct(price, prevSnap(sym))) : pct(price, prevSnap(sym));
+      prices.push({ symbol: sym, asset_type: "fx", price, change_1d: change, change_7d: null, currency: ccy, asof: ecbPrice ? fxAsof : (er.asof ?? now) });
+    };
+    [...ECB_CCYS, "NGN"].forEach(pushFx);
+
+    const usdZar = prices.find((p) => p.symbol === "USD/ZAR");
+    if (usdZar) {
       prices.push({
-        symbol: "ZAR/USD", asset_type: "fx", price: 1 / zarRate,
-        change_1d: 0, change_7d: 0, currency: "ZAR", asof: now,
+        symbol: "ZAR/USD", asset_type: "fx", price: 1 / usdZar.price,
+        change_1d: usdZar.change_1d === null ? null : ((1 / (1 + usdZar.change_1d / 100)) - 1) * 100,
+        change_7d: null, currency: "USD", asof: usdZar.asof,
       });
     }
 
-    // Crypto
-    for (const c of cryptoData) {
-      prices.push({ ...c, asof: now });
+    if (er.rates["XAU"]) {
+      const price = 1 / er.rates["XAU"];
+      prices.push({ symbol: "XAU/USD", asset_type: "commodity", price, change_1d: pct(price, prevSnap("XAU/USD")), change_7d: null, currency: "USD", asof: er.asof ?? now });
     }
 
-    // Commodities placeholders (gold/oil via simple estimate)
-    // Using XAU and approximation
-    if (fxRates["XAU"]) {
-      prices.push({
-        symbol: "XAU/USD", asset_type: "commodity", price: 1 / fxRates["XAU"],
-        change_1d: 0, change_7d: 0, currency: "USD", asof: now,
-      });
-    }
+    prices.push(...crypto);
 
-    // Upsert prices into cache
     for (const p of prices) {
       await db.from("market_prices_cache").upsert(
         { symbol: p.symbol, asset_type: p.asset_type, price: p.price, change_1d: p.change_1d, change_7d: p.change_7d, currency: p.currency, asof: p.asof },
-        { onConflict: "symbol,asset_type" }
+        { onConflict: "symbol,asset_type" },
+      );
+      await db.from("market_price_snapshots").upsert(
+        { symbol: p.symbol, price: p.price, currency: p.currency, snapshot_date: today },
+        { onConflict: "symbol,snapshot_date" },
       );
     }
 
-    // Generate and cache headlines
-    let headlines: any[] = [];
-    if (apiKey) {
-      headlines = await generateHeadlines(apiKey, prices);
-      if (headlines.length > 0) {
-        // Clear old news and insert new
-        await db.from("market_news_cache").delete().lt("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
-        for (const h of headlines) {
-          await db.from("market_news_cache").insert({
-            title: h.title ?? "Market Update",
-            summary: h.summary ?? "",
-            source: "AI Summary",
-            published_at: now,
-            tags: h.tags ?? [],
-          });
-        }
-      }
-    }
+    const zarChange = usdZar?.change_1d ?? null;
+    const risk_mood = zarChange === null ? "Unknown" : zarChange > 0.5 ? "Risk-Off" : zarChange < -0.5 ? "Risk-On" : "Neutral";
 
-    return new Response(JSON.stringify({
-      prices,
-      headlines,
-      refreshedAt: now,
-      status: "ok",
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ prices, risk_mood, refreshedAt: now, status: "ok" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e.message, status: "error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
