@@ -47,8 +47,8 @@ export interface MarketPrice {
   symbol: string;
   asset_type: string;
   price: number;
-  change_1d: number;
-  change_7d: number;
+  change_1d: number | null;
+  change_7d: number | null;
   currency: string;
   asof: string;
 }
