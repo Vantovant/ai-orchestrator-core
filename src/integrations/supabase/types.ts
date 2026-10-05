@@ -1782,44 +1782,104 @@ export type Database = {
       invest_paper_trades: {
         Row: {
           asset_type: string
+          calendar_checked: boolean
           created_at: string
           currency: string
           deleted_at: string | null
+          direction: string | null
+          entry_price: number | null
+          exit_date: string | null
+          exit_price: number | null
           id: string
+          is_legacy: boolean
+          lesson: string | null
           notes: string | null
           occurred_at: string
+          pnl_zar: number | null
+          position_size: number | null
           price_at_time: number
           qty: number
+          r_multiple: number | null
+          reason: string | null
+          risk_amount_zar: number | null
+          risk_percent: number | null
+          rule_followed: boolean | null
+          setup_name: string | null
           side: string
+          status: string
+          stop_loss: number | null
           symbol: string
+          target_price: number | null
+          timeframe: string | null
+          tradingview_symbol: string | null
           user_id: string
         }
         Insert: {
           asset_type?: string
+          calendar_checked?: boolean
           created_at?: string
           currency?: string
           deleted_at?: string | null
+          direction?: string | null
+          entry_price?: number | null
+          exit_date?: string | null
+          exit_price?: number | null
           id?: string
+          is_legacy?: boolean
+          lesson?: string | null
           notes?: string | null
           occurred_at?: string
+          pnl_zar?: number | null
+          position_size?: number | null
           price_at_time?: number
           qty?: number
+          r_multiple?: number | null
+          reason?: string | null
+          risk_amount_zar?: number | null
+          risk_percent?: number | null
+          rule_followed?: boolean | null
+          setup_name?: string | null
           side?: string
+          status?: string
+          stop_loss?: number | null
           symbol: string
+          target_price?: number | null
+          timeframe?: string | null
+          tradingview_symbol?: string | null
           user_id: string
         }
         Update: {
           asset_type?: string
+          calendar_checked?: boolean
           created_at?: string
           currency?: string
           deleted_at?: string | null
+          direction?: string | null
+          entry_price?: number | null
+          exit_date?: string | null
+          exit_price?: number | null
           id?: string
+          is_legacy?: boolean
+          lesson?: string | null
           notes?: string | null
           occurred_at?: string
+          pnl_zar?: number | null
+          position_size?: number | null
           price_at_time?: number
           qty?: number
+          r_multiple?: number | null
+          reason?: string | null
+          risk_amount_zar?: number | null
+          risk_percent?: number | null
+          rule_followed?: boolean | null
+          setup_name?: string | null
           side?: string
+          status?: string
+          stop_loss?: number | null
           symbol?: string
+          target_price?: number | null
+          timeframe?: string | null
+          tradingview_symbol?: string | null
           user_id?: string
         }
         Relationships: []
@@ -1831,6 +1891,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           symbol: string
+          tradingview_symbol: string | null
           user_id: string
           watchlist_id: string
         }
@@ -1840,6 +1901,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           symbol: string
+          tradingview_symbol?: string | null
           user_id: string
           watchlist_id: string
         }
@@ -1849,6 +1911,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           symbol?: string
+          tradingview_symbol?: string | null
           user_id?: string
           watchlist_id?: string
         }
@@ -2298,6 +2361,33 @@ export type Database = {
           summary?: string | null
           tags?: Json | null
           title?: string
+        }
+        Relationships: []
+      }
+      market_price_snapshots: {
+        Row: {
+          created_at: string
+          currency: string | null
+          id: string
+          price: number
+          snapshot_date: string
+          symbol: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string | null
+          id?: string
+          price: number
+          snapshot_date?: string
+          symbol: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string | null
+          id?: string
+          price?: number
+          snapshot_date?: string
+          symbol?: string
         }
         Relationships: []
       }
@@ -3979,6 +4069,202 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      trading_course_progress: {
+        Row: {
+          id: string
+          lesson_no: number
+          notes: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          lesson_no: number
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          lesson_no?: number
+          notes?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_key_levels: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          level_type: string
+          note: string | null
+          source: string
+          timeframe: string | null
+          user_id: string
+          verified: boolean
+          watchlist_item_id: string
+          zone_high: number
+          zone_low: number
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          level_type: string
+          note?: string | null
+          source?: string
+          timeframe?: string | null
+          user_id: string
+          verified?: boolean
+          watchlist_item_id: string
+          zone_high: number
+          zone_low: number
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          level_type?: string
+          note?: string | null
+          source?: string
+          timeframe?: string | null
+          user_id?: string
+          verified?: boolean
+          watchlist_item_id?: string
+          zone_high?: number
+          zone_low?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_key_levels_watchlist_item_id_fkey"
+            columns: ["watchlist_item_id"]
+            isOneToOne: false
+            referencedRelation: "invest_watchlist_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_plan_versions: {
+        Row: {
+          created_at: string
+          id: string
+          plan_id: string
+          snapshot: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          plan_id: string
+          snapshot: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          plan_id?: string
+          snapshot?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trading_plan_versions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "trading_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trading_plans: {
+        Row: {
+          created_at: string
+          daily_routine: string | null
+          deleted_at: string | null
+          entry_rules: string | null
+          id: string
+          markets: string | null
+          no_trade_rules: string | null
+          risk_rules: string | null
+          stop_rules: string | null
+          target_rules: string | null
+          timeframes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          daily_routine?: string | null
+          deleted_at?: string | null
+          entry_rules?: string | null
+          id?: string
+          markets?: string | null
+          no_trade_rules?: string | null
+          risk_rules?: string | null
+          stop_rules?: string | null
+          target_rules?: string | null
+          timeframes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          daily_routine?: string | null
+          deleted_at?: string | null
+          entry_rules?: string | null
+          id?: string
+          markets?: string | null
+          no_trade_rules?: string | null
+          risk_rules?: string | null
+          stop_rules?: string | null
+          target_rules?: string | null
+          timeframes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trading_settings: {
+        Row: {
+          course_video_url: string | null
+          created_at: string
+          id: string
+          learning_mode: boolean
+          mentor_reviewed: boolean
+          paper_account_balance_zar: number
+          risk_percent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_video_url?: string | null
+          created_at?: string
+          id?: string
+          learning_mode?: boolean
+          mentor_reviewed?: boolean
+          paper_account_balance_zar?: number
+          risk_percent?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_video_url?: string | null
+          created_at?: string
+          id?: string
+          learning_mode?: boolean
+          mentor_reviewed?: boolean
+          paper_account_balance_zar?: number
+          risk_percent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       trip_expenses: {
         Row: {

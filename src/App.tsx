@@ -14,6 +14,13 @@ import DashboardPage from "@/pages/DashboardPage";
 import PlanPage from "@/pages/PlanPage";
 import EmailPage from "@/pages/EmailPage";
 import FinancePage from "@/pages/FinancePage";
+import TradingPage from "@/pages/trading/TradingPage";
+import { useSearchParams } from "react-router-dom";
+function FinanceRoute() {
+  const [params] = useSearchParams();
+  if (params.get("tab") === "invest") return <Navigate to="/trading" replace />;
+  return <FinancePage />;
+}
 import TravelPage from "@/pages/TravelPage";
 import ShoppingPage from "@/pages/ShoppingPage";
 import ProjectsPage from "@/pages/ProjectsPage";
@@ -136,7 +143,9 @@ function AppRoutes() {
         <Route path="/meetings" element={<Navigate to="/plan?tab=meetings" replace />} />
         <Route path="/calendar" element={<Navigate to="/plan?tab=calendar" replace />} />
         <Route path="/email" element={<EmailPage />} />
-        <Route path="/finance" element={<FinancePage />} />
+        <Route path="/finance" element={<FinanceRoute />} />
+        <Route path="/trading" element={<TradingPage />} />
+        <Route path="/invest" element={<Navigate to="/trading" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/travel" element={<TravelPage />} />
         <Route path="/shopping" element={<ShoppingPage />} />

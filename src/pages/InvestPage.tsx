@@ -508,7 +508,7 @@ function WatchlistTab({ watchlists, prices, onRefresh }: { watchlists: Watchlist
                       {price ? (
                         <div className="text-right">
                           <p className="font-medium text-sm">{fmt(price.price, price.asset_type === "fx" ? 4 : 2)}</p>
-                          {pctBadge(price.change_1d)}
+                          {price.change_1d !== null && pctBadge(price.change_1d)}
                         </div>
                       ) : <span className="text-xs text-muted-foreground">No data</span>}
                       <Button variant="ghost" size="icon" onClick={() => removeItem.mutate(item.id)}>
@@ -541,7 +541,7 @@ function WatchlistTab({ watchlists, prices, onRefresh }: { watchlists: Watchlist
 // ══════════════════════════════════════════════════
 // PORTFOLIO TAB
 // ══════════════════════════════════════════════════
-function PortfolioTab({ holdings, prices, onRefresh }: { holdings: ManualHolding[]; prices: MarketPrice[]; onRefresh: () => void }) {
+export function PortfolioTab({ holdings, prices, onRefresh }: { holdings: ManualHolding[]; prices: MarketPrice[]; onRefresh: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [symbol, setSymbol] = useState("");
   const [assetType, setAssetType] = useState("stock");
@@ -617,7 +617,7 @@ function PortfolioTab({ holdings, prices, onRefresh }: { holdings: ManualHolding
                 <div className="flex items-center gap-3">
                   <div className="text-right">
                     <p className="font-medium text-sm">{h.currency === "ZAR" ? fmtR(currentVal) : `$${fmt(currentVal)}`}</p>
-                    {price && <div className="mt-0.5">{pctBadge(price.change_1d)}</div>}
+                    {price && <div className="mt-0.5">{price.change_1d !== null && pctBadge(price.change_1d)}</div>}
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => removeHolding.mutate(h.id)}>
                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -760,7 +760,7 @@ function PaperTradeTab({ trades, prices, onRefresh }: { trades: PaperTrade[]; pr
 // ══════════════════════════════════════════════════
 // ALERTS TAB
 // ══════════════════════════════════════════════════
-function AlertsTab({ alerts, onRefresh }: { alerts: InvestAlert[]; onRefresh: () => void }) {
+export function AlertsTab({ alerts, onRefresh }: { alerts: InvestAlert[]; onRefresh: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [symbol, setSymbol] = useState("USD/ZAR");
   const [assetType, setAssetType] = useState("fx");
@@ -846,7 +846,7 @@ function AlertsTab({ alerts, onRefresh }: { alerts: InvestAlert[]; onRefresh: ()
 // ══════════════════════════════════════════════════
 // AI MENTOR TAB
 // ══════════════════════════════════════════════════
-function AIMentorTab() {
+export function AIMentorTab() {
   const [mode, setMode] = useState("briefing");
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<any>(null);

@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard, ClipboardList, Mail,
-  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, HeartPulse, BookHeart, ShieldAlert, Home, Contact, MessageCircle
+  DollarSign, Plane, ShoppingCart, Settings, LogOut, Menu, FolderKanban, Brain, FileText, BookOpen, Users, BookMarked, HeartPulse, BookHeart, ShieldAlert, Home, Contact, MessageCircle, CandlestickChart
 } from "lucide-react";
 import vantoosLogo from "@/assets/vantoos-logo.png";
 import { useState, useEffect } from "react";
@@ -19,6 +19,7 @@ const navItems = [
   { to: "/contacts", label: "Contacts", icon: Contact },
   { to: "/email", label: "Email", icon: Mail },
   { to: "/finance", label: "Finance", icon: DollarSign },
+  { to: "/trading", label: "Trading", icon: CandlestickChart },
   { to: "/projects", label: "Projects", icon: FolderKanban },
   { to: "/dashboard/partner", label: "Partner", icon: Brain },
   { to: "/voice-diary", label: "Voice Diary", icon: BookHeart },
