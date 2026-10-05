@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ruleTradeService, settingsService, tradingRpc, calcTicket, validateTicket, rMultiple, tradeStats, tradesToCsv,
   defaultTvSymbol, tvChartUrl, type RuleTrade, type TradingSettings,
@@ -160,7 +160,7 @@ export default function PaperTradeTab({ trades, settings, refresh }: { trades: R
         {trades.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No trades yet.</p>}
       </div>
 
-      <CloseDialog trade={closing} balance={balance} onDone={() => { setClosing(null); refresh(); }} />
+      <CloseDialog trade={closing} onDone={() => { setClosing(null); refresh(); }} />
       <StopDialog trade={editingStop} onDone={() => { setEditingStop(null); refresh(); }} />
     </div>
   );
@@ -241,7 +241,7 @@ function StopDialog({ trade, onDone }: { trade: RuleTrade | null; onDone: () => 
   );
 }
 
-function CloseDialog({ trade, balance, onDone }: { trade: RuleTrade | null; balance: number; onDone: () => void }) {
+function CloseDialog({ trade, onDone }: { trade: RuleTrade | null; onDone: () => void }) {
   const [exit, setExit] = useState("");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [rule, setRule] = useState<"" | "y" | "n">("");
