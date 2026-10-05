@@ -1,0 +1,3 @@
+- Trading module lives in `src/pages/trading/*` with logic in `src/services/tradingService.ts`; Portfolio/Alerts/AI Mentor tabs are reused from `InvestPage.tsx` exports — why: one source per tab, no parallel copies.
+- Paper-trade rules (risk ≤1% in learning mode, stop may never move further from entry) are enforced by DB triggers as well as the UI — why: the UI alone can be bypassed.
+- Market price 1-day changes must be real (ECB via Frankfurter, else previous `market_price_snapshots` row) or NULL — why: never show invented 0% moves.
