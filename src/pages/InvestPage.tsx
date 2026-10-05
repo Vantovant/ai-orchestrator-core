@@ -541,7 +541,7 @@ function WatchlistTab({ watchlists, prices, onRefresh }: { watchlists: Watchlist
 // ══════════════════════════════════════════════════
 // PORTFOLIO TAB
 // ══════════════════════════════════════════════════
-function PortfolioTab({ holdings, prices, onRefresh }: { holdings: ManualHolding[]; prices: MarketPrice[]; onRefresh: () => void }) {
+export function PortfolioTab({ holdings, prices, onRefresh }: { holdings: ManualHolding[]; prices: MarketPrice[]; onRefresh: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [symbol, setSymbol] = useState("");
   const [assetType, setAssetType] = useState("stock");
@@ -760,7 +760,7 @@ function PaperTradeTab({ trades, prices, onRefresh }: { trades: PaperTrade[]; pr
 // ══════════════════════════════════════════════════
 // ALERTS TAB
 // ══════════════════════════════════════════════════
-function AlertsTab({ alerts, onRefresh }: { alerts: InvestAlert[]; onRefresh: () => void }) {
+export function AlertsTab({ alerts, onRefresh }: { alerts: InvestAlert[]; onRefresh: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [symbol, setSymbol] = useState("USD/ZAR");
   const [assetType, setAssetType] = useState("fx");
@@ -846,7 +846,7 @@ function AlertsTab({ alerts, onRefresh }: { alerts: InvestAlert[]; onRefresh: ()
 // ══════════════════════════════════════════════════
 // AI MENTOR TAB
 // ══════════════════════════════════════════════════
-function AIMentorTab() {
+export function AIMentorTab() {
   const [mode, setMode] = useState("briefing");
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState<any>(null);

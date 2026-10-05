@@ -28,7 +28,6 @@ import BudgetTab from "@/components/finance/BudgetTab";
 import FinanceNotesPanel from "@/components/finance/FinanceNotesPanel";
 import VoiceInput from "@/components/voice/VoiceInput";
 import { parseVoiceCommand } from "@/lib/voiceCommandParser";
-const InvestPage = lazy(() => import("@/pages/InvestPage"));
 
 // ── Formatters ──
 const fmt = (n: number) => `R ${n.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -347,7 +346,6 @@ export default function FinancePage() {
           <TabsTrigger value="import" className="shrink-0 px-3 text-xs sm:text-sm">Import</TabsTrigger>
           <TabsTrigger value="mentor" className="shrink-0 px-3 text-xs sm:text-sm">AI Mentor</TabsTrigger>
           <TabsTrigger value="budget" className="shrink-0 px-3 text-xs sm:text-sm">Budget</TabsTrigger>
-          <TabsTrigger value="invest" className="shrink-0 px-3 text-xs sm:text-sm">Invest & Trade</TabsTrigger>
         </TabsList>
 
         {/* ── OVERVIEW TAB ── */}
@@ -656,12 +654,6 @@ export default function FinancePage() {
         {/* ── BUDGET TAB ── */}
         <TabsContent value="budget" className="space-y-4">
           <BudgetTab />
-        </TabsContent>
-        {/* ── INVEST & TRADE TAB ── */}
-        <TabsContent value="invest" className="space-y-4">
-          <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-            <InvestPage />
-          </Suspense>
         </TabsContent>
       </Tabs>
     </div>
