@@ -231,6 +231,28 @@ async function insertFinanceEntry(
   return data;
 }
 
+// ---- Trading module constants ----
+const TRADE_FIELDS =
+  "id,symbol,tradingview_symbol,direction,entry_price,stop_loss,target_price,timeframe,setup_name,reason," +
+  "calendar_checked,risk_percent,risk_amount_zar,position_size,status,exit_price,exit_date,rule_followed," +
+  "lesson,r_multiple,pnl_zar,is_legacy,occurred_at";
+const PLAN_SECTIONS = ["markets", "timeframes", "entry_rules", "stop_rules", "target_rules", "no_trade_rules", "risk_rules", "daily_routine"] as const;
+const LESSON_TITLES = [
+  "What AI trading is & what AI can and can't do",
+  "Connect Claude to TradingView (MCP setup)",
+  "Prompting Claude with a live chart",
+  "Market structure (swing highs/lows, BOS, CHoCH)",
+  "Support & resistance zones",
+  "Indicators (SMA, MACD, RSI) & confluence",
+  "Multi-timeframe analysis",
+  "Building a rules-based strategy",
+  "Backtesting",
+  "Risk management & position sizing",
+  "Paper trading phase",
+  "Live trading with small size + daily routine + using AI safely",
+];
+
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
@@ -2108,6 +2130,253 @@ Deno.serve(async (req) => {
           .update({ deleted_at: new Date().toISOString() }).eq("id", id);
         if (error) return json({ ok: false, error: error.message }, 500);
         return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // TRADING (paper trading course module)
+      // Human-only in the app, deliberately NOT exposed here: risk_percent,
+      // learning_mode, mentor_reviewed, paper balance (changes only via
+      // close_paper_trade), verifying key levels, deleting trades / levels /
+      // plans, and anything touching real money or a broker.
+      // Writes go through the shared DB functions (open_paper_trade,
+      // close_paper_trade, save_trading_plan, set_lesson_progress,
+      // trading_stats) that the Trading page also calls, so calculations
+      // can never drift. DB trigger/function messages are returned as-is.
+      // =================================================================
+      case "get_trading_overview": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const [s, prog, closed, open] = await Promise.all([
+          supabase.from("trading_settings").select("paper_account_balance_zar,risk_percent,learning_mode,mentor_reviewed,course_video_url,updated_at").eq("user_id", ownerId).maybeSingle(),
+          supabase.from("trading_course_progress").select("lesson_no,status").eq("user_id", ownerId),
+          supabase.from("invest_paper_trades").select("id", { count: "exact", head: true }).eq("user_id", ownerId).eq("is_legacy", false).eq("status", "closed").is("deleted_at", null),
+          supabase.from("invest_paper_trades").select(TRADE_FIELDS).eq("user_id", ownerId).eq("is_legacy", false).eq("status", "open").is("deleted_at", null).order("occurred_at", { ascending: false }),
+        ]);
+        const err = s.error || prog.error || closed.error || open.error;
+        if (err) return json({ ok: false, error: err.message }, 500);
+        const done = new Set((prog.data ?? []).filter((p: any) => p.status === "completed").map((p: any) => p.lesson_no));
+        let current = 13;
+        for (let i = 1; i <= 12; i++) if (!done.has(i)) { current = i; break; }
+        const closedCount = closed.count ?? 0;
+        return json({
+          ok: true,
+          settings: s.data ?? { paper_account_balance_zar: 10000, risk_percent: 1, learning_mode: true, mentor_reviewed: false, course_video_url: null, note: "defaults — no settings row yet" },
+          current_lesson: current <= 12 ? { lesson_no: current, title: LESSON_TITLES[current - 1] } : { lesson_no: null, title: "All 12 lessons completed" },
+          closed_trades: closedCount, closed_target: 30,
+          live_trading_unlocked: closedCount >= 30 && !!s.data?.mentor_reviewed,
+          open_trades: open.data ?? [], open_count: open.data?.length ?? 0,
+        });
+      }
+
+      case "get_trading_stats": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("trading_stats", {
+          p_user_id: ownerId, p_from: body?.from ? String(body.from) : null, p_to: body?.to ? String(body.to) : null,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, stats: data });
+      }
+
+      case "list_paper_trades": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+        let q = supabase.from("invest_paper_trades").select(TRADE_FIELDS).eq("user_id", ownerId).is("deleted_at", null)
+          .order("occurred_at", { ascending: false }).limit(limit);
+        if (body?.include_legacy !== true) q = q.eq("is_legacy", false);
+        if (body?.status === "open" || body?.status === "closed") q = q.eq("status", body.status);
+        if (body?.symbol) q = q.ilike("symbol", String(body.symbol));
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trades: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "get_trading_plan": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data: plan, error } = await supabase.from("trading_plans").select("*").eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        let versions: unknown[] | undefined;
+        if (body?.include_versions === true && plan) {
+          const v = await supabase.from("trading_plan_versions").select("id,snapshot,created_at").eq("plan_id", plan.id).eq("user_id", ownerId).order("created_at", { ascending: false }).limit(50);
+          if (v.error) return json({ ok: false, error: v.error.message }, 500);
+          versions = v.data ?? [];
+        }
+        return json({ ok: true, plan, last_updated: plan?.updated_at ?? null, ...(versions ? { versions } : {}) });
+      }
+
+      case "list_course_progress": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.from("trading_course_progress").select("lesson_no,status,notes,updated_at").eq("user_id", ownerId);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        const by = new Map((data ?? []).map((p: any) => [p.lesson_no, p]));
+        const lessons = LESSON_TITLES.map((title, i) => {
+          const no = i + 1; const p: any = by.get(no);
+          const prevDone = no === 1 || (by.get(no - 1) as any)?.status === "completed";
+          return { lesson_no: no, title, status: p?.status ?? "not_started", notes: p?.notes ?? null, locked: !prevDone, updated_at: p?.updated_at ?? null };
+        });
+        return json({ ok: true, lessons, count: 12 });
+      }
+
+      case "list_watchlist": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const [w, it] = await Promise.all([
+          supabase.from("invest_watchlists").select("id,name,created_at").eq("user_id", ownerId).is("deleted_at", null).order("created_at"),
+          supabase.from("invest_watchlist_items").select("id,watchlist_id,symbol,asset_type,tradingview_symbol,created_at").eq("user_id", ownerId).is("deleted_at", null).order("created_at"),
+        ]);
+        if (w.error || it.error) return json({ ok: false, error: (w.error || it.error)!.message }, 500);
+        const watchlists = (w.data ?? []).map((l: any) => ({ ...l, items: (it.data ?? []).filter((x: any) => x.watchlist_id === l.id) }));
+        return json({ ok: true, watchlists, count: watchlists.length });
+      }
+
+      case "list_key_levels": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        let itemIds: string[] = [];
+        if (body?.watchlist_item_id) itemIds = [String(body.watchlist_item_id)];
+        else if (body?.symbol) {
+          const { data, error } = await supabase.from("invest_watchlist_items").select("id").eq("user_id", ownerId).is("deleted_at", null).ilike("symbol", String(body.symbol));
+          if (error) return json({ ok: false, error: error.message }, 500);
+          itemIds = (data ?? []).map((r: any) => r.id);
+          if (!itemIds.length) return json({ ok: true, levels: [], count: 0 });
+        }
+        let q = supabase.from("trading_key_levels").select("id,watchlist_item_id,zone_low,zone_high,level_type,timeframe,note,source,verified,created_at")
+          .eq("user_id", ownerId).is("deleted_at", null).order("zone_low", { ascending: false }).limit(200);
+        if (itemIds.length) q = q.in("watchlist_item_id", itemIds);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        const levels = (data ?? []).map((l: any) => ({ ...l, badge: l.verified ? "verified" : "draft — verify" }));
+        return json({ ok: true, levels, count: levels.length });
+      }
+
+      case "get_market_pulse": {
+        const { data, error } = await supabase.from("market_prices_cache").select("symbol,asset_type,price,change_1d,currency,asof").order("symbol");
+        if (error) return json({ ok: false, error: error.message }, 500);
+        const zar = (data ?? []).find((r: any) => r.symbol === "USD/ZAR");
+        const zarChange = zar?.change_1d === null || zar?.change_1d === undefined ? null : Number(zar.change_1d);
+        const risk_mood = zarChange === null ? "Unknown" : zarChange > 0.5 ? "Risk-Off" : zarChange < -0.5 ? "Risk-On" : "Neutral";
+        return json({
+          ok: true, prices: data ?? [], risk_mood,
+          note: "Currency prices update about once a day — use TradingView for live charts. change_1d null means no real figure is available.",
+        });
+      }
+
+      case "log_paper_trade": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("open_paper_trade", {
+          p_user_id: ownerId, p_symbol: String(body?.symbol ?? ""), p_tradingview_symbol: body?.tradingview_symbol ? String(body.tradingview_symbol) : null,
+          p_direction: String(body?.direction ?? ""), p_entry: Number(body?.entry_price), p_stop: Number(body?.stop_loss),
+          p_target: Number(body?.target_price), p_timeframe: body?.timeframe ? String(body.timeframe) : null,
+          p_setup_name: body?.setup_name ? String(body.setup_name) : null, p_reason: body?.reason ? String(body.reason) : null,
+          p_calendar_checked: body?.calendar_checked === true,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, trade: data });
+      }
+
+      case "move_stop_loss": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const stop = Number(body?.stop_loss);
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!(stop > 0)) return json({ ok: false, error: "stop_loss_must_be_positive" }, 400);
+        const { data: t, error: fe } = await supabase.from("invest_paper_trades").select("id,status,is_legacy")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fe) return json({ ok: false, error: fe.message }, 500);
+        if (!t || t.is_legacy) return json({ ok: false, error: "not_found" }, 404);
+        if (t.status !== "open") return json({ ok: false, error: "trade_not_open" }, 400);
+        const { data, error } = await supabase.from("invest_paper_trades").update({ stop_loss: stop }).eq("id", id).select(TRADE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, trade: data });
+      }
+
+      case "close_paper_trade": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("close_paper_trade", {
+          p_user_id: ownerId, p_trade_id: String(body?.id ?? ""), p_exit_price: Number(body?.exit_price),
+          p_exit_date: body?.exit_date ? String(body.exit_date) : null,
+          p_rule_followed: typeof body?.rule_followed === "boolean" ? body.rule_followed : null,
+          p_lesson: body?.lesson ? String(body.lesson) : null,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, trade: data });
+      }
+
+      case "update_trading_plan": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const patch: Record<string, string | null> = {};
+        for (const f of PLAN_SECTIONS) if (f in (body ?? {})) patch[f] = body[f] === null ? null : String(body[f]);
+        if (!Object.keys(patch).length) return json({ ok: false, error: "no_sections_given" }, 400);
+        const { data, error } = await supabase.rpc("save_trading_plan", { p_user_id: ownerId, p_patch: patch });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, plan: data, updated_sections: Object.keys(patch) });
+      }
+
+      case "update_lesson_progress": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("set_lesson_progress", {
+          p_user_id: ownerId, p_lesson_no: Number(body?.lesson_no), p_status: String(body?.status ?? ""),
+          p_notes: typeof body?.notes === "string" ? body.notes : null,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, lesson: data });
+      }
+
+      case "add_key_level": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const zl = Number(body?.zone_low), zh = Number(body?.zone_high);
+        if (!(zl > 0 && zh > 0)) return json({ ok: false, error: "zone_low_and_zone_high_required" }, 400);
+        if (zh < zl) return json({ ok: false, error: "zone_high_must_be_at_least_zone_low" }, 400);
+        const type = String(body?.level_type ?? "");
+        if (!["support", "resistance"].includes(type)) return json({ ok: false, error: "level_type_must_be_support_or_resistance" }, 400);
+        let itemId: string | null = null;
+        if (body?.watchlist_item_id) {
+          const { data } = await supabase.from("invest_watchlist_items").select("id").eq("id", String(body.watchlist_item_id)).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+          itemId = data?.id ?? null;
+        } else if (body?.symbol) {
+          const { data } = await supabase.from("invest_watchlist_items").select("id").eq("user_id", ownerId).is("deleted_at", null).ilike("symbol", String(body.symbol)).order("created_at").limit(1);
+          itemId = data?.[0]?.id ?? null;
+        }
+        if (!itemId) return json({ ok: false, error: "watchlist_item_not_found — add the symbol to a watchlist first" }, 404);
+        const { data, error } = await supabase.from("trading_key_levels").insert({
+          user_id: ownerId, watchlist_item_id: itemId, zone_low: zl, zone_high: zh, level_type: type,
+          timeframe: body?.timeframe ? String(body.timeframe) : null, note: body?.note ? String(body.note) : null,
+          source: "claude", verified: false,
+        }).select("*").maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, level: data });
+      }
+
+      case "add_watchlist_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const symbol = String(body?.symbol ?? "").trim().toUpperCase();
+        if (!symbol) return json({ ok: false, error: "symbol_required" }, 400);
+        let q = supabase.from("invest_watchlists").select("id,name").eq("user_id", ownerId).is("deleted_at", null);
+        if (body?.watchlist_id) q = q.eq("id", String(body.watchlist_id));
+        else if (body?.watchlist_name) q = q.ilike("name", String(body.watchlist_name));
+        else return json({ ok: false, error: "watchlist_id_or_watchlist_name_required" }, 400);
+        const { data: lists, error: le } = await q.limit(1);
+        if (le) return json({ ok: false, error: le.message }, 500);
+        const list = lists?.[0];
+        if (!list) return json({ ok: false, error: "watchlist_not_found" }, 404);
+        const { data: dup } = await supabase.from("invest_watchlist_items").select("id").eq("user_id", ownerId).eq("watchlist_id", list.id).is("deleted_at", null).ilike("symbol", symbol).limit(1);
+        if (dup?.length) return json({ ok: false, error: "already_on_watchlist" }, 409);
+        const { data, error } = await supabase.from("invest_watchlist_items").insert({
+          user_id: ownerId, watchlist_id: list.id, symbol, asset_type: body?.asset_type ? String(body.asset_type) : "fx",
+          tradingview_symbol: body?.tradingview_symbol ? String(body.tradingview_symbol) : null,
+        }).select("id,watchlist_id,symbol,asset_type,tradingview_symbol,created_at").maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, item: data, watchlist: list });
       }
 
       default:
