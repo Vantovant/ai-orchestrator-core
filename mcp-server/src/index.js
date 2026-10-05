@@ -1,4 +1,8 @@
 // VantoOS MCP Server
+//
+// TRADING MCP UPGRADE (2026-10, v1.6.0): adds 16 Trading tools. See the
+// Trading section near the end for what is deliberately NOT exposed.
+//
 // Exposes hub_contacts tools, Projects/Tasks/Reminders/Meetings/Project
 // Notes/Voice Diary tools to Claude via streamable-HTTP MCP transport.
 // Every tool call is forwarded to the mcp-bridge Supabase Edge Function,
@@ -69,7 +73,7 @@ function toolResult(data) {
 }
 
 function buildServer() {
-  const server = new McpServer({ name: "vantoos-mcp", version: "1.5.0" });
+  const server = new McpServer({ name: "vantoos-mcp", version: "1.6.0" });
 
   // ---------------------------------------------------------------
   // Contacts (unchanged)
@@ -1076,6 +1080,185 @@ function buildServer() {
     "Delete a Wellness goal. Soft delete. Use list_wellness_goals first to find the id.",
     { id: z.string().describe("wellness_goals.id — required") },
     async (args) => toolResult(await callBridge("delete_wellness_goal", args)),
+  );
+
+  // ---------------------------------------------------------------
+  // Trading (paper trading course module, v1.6.0)
+  //
+  // DELIBERATELY NOT EXPOSED VIA MCP — human-only in the VantoOS app:
+  //   - changing risk_percent, learning_mode, mentor_reviewed or the
+  //     paper account balance (balance changes only via close_paper_trade)
+  //   - marking key levels as verified (Claude levels are always drafts)
+  //   - deleting paper trades, key levels or trading plans
+  //   - anything that touches real money or a broker
+  // Do not add tools for these. Writes go through the same database
+  // functions the Trading page uses; trigger messages come back unchanged.
+  // ---------------------------------------------------------------
+  server.tool(
+    "get_trading_overview",
+    "Trading overview: paper balance, risk %, learning mode, mentor review, course video, current lesson, " +
+      "closed non-legacy paper trades toward the 30 needed, and open trades. Read-only.",
+    {},
+    async (args) => toolResult(await callBridge("get_trading_overview", args)),
+  );
+
+  server.tool(
+    "get_trading_stats",
+    "Paper trading stats (same as the app's stats card): closed count, win rate, total R, avg R, avg win/loss in R, " +
+      "% rules followed, largest losing streak. Read-only.",
+    {
+      from: z.string().optional().describe("YYYY-MM-DD, filters on exit date"),
+      to: z.string().optional().describe("YYYY-MM-DD, filters on exit date"),
+    },
+    async (args) => toolResult(await callBridge("get_trading_stats", args)),
+  );
+
+  server.tool(
+    "list_paper_trades",
+    "List paper trades. Read-only.",
+    {
+      status: z.enum(["open", "closed"]).optional(),
+      symbol: z.string().optional(),
+      include_legacy: z.boolean().optional().describe("Defaults to false"),
+      limit: z.number().int().min(1).max(100).optional().describe("Defaults to 50"),
+    },
+    async (args) => toolResult(await callBridge("list_paper_trades", args)),
+  );
+
+  server.tool(
+    "get_trading_plan",
+    "Get the written Trading Plan (8 sections) and when it was last updated. Read-only.",
+    { include_versions: z.boolean().optional().describe("Include up to 50 previous versions") },
+    async (args) => toolResult(await callBridge("get_trading_plan", args)),
+  );
+
+  server.tool(
+    "list_course_progress",
+    "List the 12 trading course lessons with status, notes and whether each is locked. Read-only.",
+    {},
+    async (args) => toolResult(await callBridge("list_course_progress", args)),
+  );
+
+  server.tool(
+    "list_watchlist",
+    "List watchlists and their items, including TradingView symbols. Read-only.",
+    {},
+    async (args) => toolResult(await callBridge("list_watchlist", args)),
+  );
+
+  server.tool(
+    "list_key_levels",
+    "List support/resistance key levels for a symbol or watchlist item, with the verified flag. Read-only.",
+    {
+      symbol: z.string().optional(),
+      watchlist_item_id: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("list_key_levels", args)),
+  );
+
+  server.tool(
+    "get_market_pulse",
+    "Cached market prices with as-of time and real 1-day change (null when unknown — never invented), " +
+      "plus the risk mood computed the same way as the app. Prices update about once a day. Read-only.",
+    {},
+    async (args) => toolResult(await callBridge("get_market_pulse", args)),
+  );
+
+  server.tool(
+    "log_paper_trade",
+    "Log a new PAPER trade (no real money). Risk % comes from the user's settings and cannot be set here; " +
+      "risk amount and position size are calculated by the database exactly as in the app.",
+    {
+      symbol: z.string().min(1),
+      tradingview_symbol: z.string().min(1).describe("e.g. FX:USDZAR"),
+      direction: z.enum(["long", "short"]),
+      entry_price: z.number().positive(),
+      stop_loss: z.number().positive(),
+      target_price: z.number().positive(),
+      timeframe: z.string().min(1),
+      setup_name: z.string().min(1),
+      reason: z.string().min(1),
+      calendar_checked: z.literal(true).describe("Must be true — the economic calendar was checked"),
+    },
+    async (args) => toolResult(await callBridge("log_paper_trade", args)),
+  );
+
+  server.tool(
+    "move_stop_loss",
+    "Move the stop loss on an open paper trade. Moving it further from entry is refused.",
+    {
+      id: z.string().describe("invest_paper_trades.id"),
+      stop_loss: z.number().positive(),
+    },
+    async (args) => toolResult(await callBridge("move_stop_loss", args)),
+  );
+
+  server.tool(
+    "close_paper_trade",
+    "Close an open paper trade. R-multiple, P/L and the paper balance are calculated by the database exactly as in the app.",
+    {
+      id: z.string().describe("invest_paper_trades.id"),
+      exit_price: z.number().positive(),
+      exit_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      rule_followed: z.boolean(),
+      lesson: z.string().min(1),
+    },
+    async (args) => toolResult(await callBridge("close_paper_trade", args)),
+  );
+
+  server.tool(
+    "update_trading_plan",
+    "Update named Trading Plan sections only; sections not passed stay unchanged. The previous version is kept in history.",
+    {
+      markets: z.string().optional(),
+      timeframes: z.string().optional(),
+      entry_rules: z.string().optional(),
+      stop_rules: z.string().optional(),
+      target_rules: z.string().optional(),
+      no_trade_rules: z.string().optional(),
+      risk_rules: z.string().optional(),
+      daily_routine: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_trading_plan", args)),
+  );
+
+  server.tool(
+    "update_lesson_progress",
+    "Set a course lesson's status and notes. Lesson N can only be started or completed after lesson N-1 is completed.",
+    {
+      lesson_no: z.number().int().min(1).max(12),
+      status: z.enum(["not_started", "in_progress", "completed"]),
+      notes: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("update_lesson_progress", args)),
+  );
+
+  server.tool(
+    "add_key_level",
+    "Add a support/resistance zone to a watchlist symbol. Always saved as a Claude draft (unverified) — the user verifies it on the chart.",
+    {
+      watchlist_item_id: z.string().optional(),
+      symbol: z.string().optional().describe("Used when watchlist_item_id is not given"),
+      zone_low: z.number().positive(),
+      zone_high: z.number().positive(),
+      level_type: z.enum(["support", "resistance"]),
+      timeframe: z.string().optional(),
+      note: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_key_level", args)),
+  );
+
+  server.tool(
+    "add_watchlist_item",
+    "Add a symbol to an existing watchlist (by id or name).",
+    {
+      watchlist_id: z.string().optional(),
+      watchlist_name: z.string().optional(),
+      symbol: z.string().min(1),
+      asset_type: z.string().optional().describe("e.g. fx, crypto, commodity, index, stock. Defaults to fx"),
+      tradingview_symbol: z.string().optional(),
+    },
+    async (args) => toolResult(await callBridge("add_watchlist_item", args)),
   );
 
   return server;

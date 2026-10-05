@@ -6385,6 +6385,56 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      close_paper_trade: {
+        Args: {
+          p_exit_date: string
+          p_exit_price: number
+          p_lesson: string
+          p_rule_followed: boolean
+          p_trade_id: string
+          p_user_id: string
+        }
+        Returns: {
+          asset_type: string
+          calendar_checked: boolean
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          direction: string | null
+          entry_price: number | null
+          exit_date: string | null
+          exit_price: number | null
+          id: string
+          is_legacy: boolean
+          lesson: string | null
+          notes: string | null
+          occurred_at: string
+          pnl_zar: number | null
+          position_size: number | null
+          price_at_time: number
+          qty: number
+          r_multiple: number | null
+          reason: string | null
+          risk_amount_zar: number | null
+          risk_percent: number | null
+          rule_followed: boolean | null
+          setup_name: string | null
+          side: string
+          status: string
+          stop_loss: number | null
+          symbol: string
+          target_price: number | null
+          timeframe: string | null
+          tradingview_symbol: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invest_paper_trades"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_tasks_by_priority: {
         Args: { p_limit?: number; p_project_id?: string; p_user_id: string }
         Returns: {
@@ -6416,6 +6466,61 @@ export type Database = {
         Args: { duplicate_ids: string[]; primary_id: string }
         Returns: Json
       }
+      open_paper_trade: {
+        Args: {
+          p_calendar_checked: boolean
+          p_direction: string
+          p_entry: number
+          p_reason: string
+          p_setup_name: string
+          p_stop: number
+          p_symbol: string
+          p_target: number
+          p_timeframe: string
+          p_tradingview_symbol: string
+          p_user_id: string
+        }
+        Returns: {
+          asset_type: string
+          calendar_checked: boolean
+          created_at: string
+          currency: string
+          deleted_at: string | null
+          direction: string | null
+          entry_price: number | null
+          exit_date: string | null
+          exit_price: number | null
+          id: string
+          is_legacy: boolean
+          lesson: string | null
+          notes: string | null
+          occurred_at: string
+          pnl_zar: number | null
+          position_size: number | null
+          price_at_time: number
+          qty: number
+          r_multiple: number | null
+          reason: string | null
+          risk_amount_zar: number | null
+          risk_percent: number | null
+          rule_followed: boolean | null
+          setup_name: string | null
+          side: string
+          status: string
+          stop_loss: number | null
+          symbol: string
+          target_price: number | null
+          timeframe: string | null
+          tradingview_symbol: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invest_paper_trades"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       priority_rank: { Args: { p: string }; Returns: number }
       revoke_user_role: {
         Args: {
@@ -6424,6 +6529,57 @@ export type Database = {
           _target_user_id: string
         }
         Returns: string
+      }
+      save_trading_plan: {
+        Args: { p_patch: Json; p_user_id: string }
+        Returns: {
+          created_at: string
+          daily_routine: string | null
+          deleted_at: string | null
+          entry_rules: string | null
+          id: string
+          markets: string | null
+          no_trade_rules: string | null
+          risk_rules: string | null
+          stop_rules: string | null
+          target_rules: string | null
+          timeframes: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trading_plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_lesson_progress: {
+        Args: {
+          p_lesson_no: number
+          p_notes?: string
+          p_status: string
+          p_user_id: string
+        }
+        Returns: {
+          id: string
+          lesson_no: number
+          notes: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "trading_course_progress"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      trading_assert_caller: { Args: { p_user_id: string }; Returns: undefined }
+      trading_stats: {
+        Args: { p_from?: string; p_to?: string; p_user_id: string }
+        Returns: Json
       }
       vos_compute_source_chain_hash: {
         Args: { approval_id: string }

@@ -1,3 +1,5 @@
 - Trading module lives in `src/pages/trading/*` with logic in `src/services/tradingService.ts`; Portfolio/Alerts/AI Mentor tabs are reused from `InvestPage.tsx` exports — why: one source per tab, no parallel copies.
 - Paper-trade rules (risk ≤1% in learning mode, stop may never move further from entry) are enforced by DB triggers as well as the UI — why: the UI alone can be bypassed.
 - Market price 1-day changes must be real (ECB via Frankfurter, else previous `market_price_snapshots` row) or NULL — why: never show invented 0% moves.
+- Paper-trade open/close, trading plan saves, lesson progress and trading stats go through shared Postgres functions (open_paper_trade, close_paper_trade, save_trading_plan, set_lesson_progress, trading_stats) called by both the Trading page and mcp-bridge — why: the app and Claude must never compute sizing, R or balance differently.
+- Claude's VantoOS connector = mcp-server/ (Railway, tool definitions) forwarding to supabase/functions/mcp-bridge (DB logic, owner-scoped via MCP_OWNER_USER_ID) — why: single MCP mechanism; risk/learning-mode/mentor/balance/verification/deletes stay human-only.
