@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -87,6 +88,14 @@ export default function PaperTradeTab({ trades, settings, refresh }: { trades: R
             <Stat label="Avg win / loss (R)" value={`${n(stats.avgWin)} / ${n(stats.avgLoss)}`} />
             <Stat label="Rules followed" value={`${n(stats.rulesPct, 0)}%`} />
             <Stat label="Longest losing streak" value={String(stats.maxLosingStreak)} />
+          </div>
+          <div className={`flex items-start justify-between gap-3 rounded-md border border-border p-3 ${unlocked ? "" : "opacity-60"}`}>
+            <div>
+              <p className="text-sm font-medium">Learning mode</p>
+              {!unlocked && <p className="text-xs text-muted-foreground">Learning mode stays on until 30 paper trades are closed and reviewed with your mentor.</p>}
+            </div>
+            <Switch checked={settings.learning_mode} disabled={!unlocked}
+              onCheckedChange={async (v) => { try { await settingsService.update({ learning_mode: v }); refresh(); } catch (e: any) { toast.error(e.message); } }} />
           </div>
           <label className="flex items-center gap-2 text-sm min-h-[40px]">
             <Checkbox checked={settings.mentor_reviewed} disabled={stats.count < 30}
