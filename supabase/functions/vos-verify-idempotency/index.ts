@@ -1,7 +1,7 @@
 // Vanto OS — Idempotency Verifier (verify-only, admin-gated)
 // Phase 1 Step 4A — hardened. Read-only DB lookup. NO insert. NO dispatch.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
