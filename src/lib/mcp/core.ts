@@ -1,0 +1,2269 @@
+// @ts-nocheck
+// AUTO-PORTED from supabase/functions/mcp-bridge/index.ts (logic identical).
+// Differences: runs with the CALLER's OAuth token under RLS (no service-role
+// key, no MCP_OWNER_USER_ID). ownerId always comes from the verified token.
+// Human-only (never exposed here): risk_percent, learning_mode,
+// mentor_reviewed, paper balance, verifying key levels, deleting trades /
+// levels / plans, anything touching real money or a broker.
+function json(body: unknown, status = 200) { return { status, body }; }
+function normalizeTitle(title: string): string {
+  return title.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+// Validates a YYYY-MM-DD string and returns [startOfDayISO, endOfDayISO] in
+// UTC. Used by the list_* actions for "today" style date filtering.
+function dayBounds(date: string): [string, string] | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return [`${date}T00:00:00.000Z`, `${date}T23:59:59.999Z`];
+}
+
+const CONTACT_FIELDS =
+  "id, full_name, first_name, last_name, whatsapp_display_name, phone_e164, email, " +
+  "contact_type, lead_type, temperature, tags, consent_whatsapp, consent_email, consent_sms, " +
+  "unsubscribed_channels, notes, version, is_deleted, updated_at, source_app";
+
+const PROJECT_FIELDS =
+  "id, name, description, status, solution_type, progress_manual, progress_mode, " +
+  "tags, is_blocked, is_pinned, health, blocked_reason, updated_at";
+
+const TASK_FIELDS =
+  "id, title, description, status, priority, due_date, start_date, project_id, " +
+  "source, last_touched_at, created_at";
+
+const REMINDER_FIELDS =
+  "id, title, description, reminder_time, is_done, task_id, project_id, created_at";
+
+const MEETING_FIELDS =
+  "id, title, description, start_time, end_time, location, attendees, notes, " +
+  "project_id, is_done, created_at";
+
+const PROJECT_NOTE_FIELDS = "id, project_id, note_date, content, structured_json, updated_at";
+
+const DIARY_FIELDS =
+  "id, content, title, source_type, mood, linked_project_ids, is_pinned, created_at";
+
+// =====================================================================
+// Budget MCP upgrade — Finance, Shopping, Travel, Trusted Sources.
+// Same owner-scoped, fail-closed, allow-listed-fields pattern as
+// everything above. Every table here has a deleted_at column (confirmed
+// live against the actual schema before writing this), so every delete
+// below is a SOFT delete, matching finance's own UI behavior exactly —
+// none of this is riskier than clicking delete in the app itself.
+// =====================================================================
+
+const FINANCE_ENTRY_FIELDS =
+  "id, type, category, amount, entry_date, notes, source, created_at, updated_at";
+
+const DEBT_FIELDS =
+  "id, lender_name, principal, interest_rate, repayment_amount, due_day, status, notes, created_at, updated_at";
+
+const INCOME_STREAM_FIELDS =
+  "id, stream_type, label, monthly_target, current_month_income, notes, created_at, updated_at";
+
+const OPPORTUNITY_FIELDS =
+  "id, title, type, estimated_value, difficulty, notes, status, ai_generated, created_at, updated_at";
+
+const BUDGET_ITEM_FIELDS =
+  "id, type, name, description, amount, currency, cadence, due_day_of_month, due_month_of_year, " +
+  "due_date_custom, start_date, end_date, autopay, notify_days_before, status, category, vendor, " +
+  "created_at, updated_at";
+
+const BUDGET_EVENT_FIELDS =
+  "id, budget_item_id, due_at, amount, status, paid_at, notes, created_at, updated_at";
+
+const SHOPPING_ITEM_FIELDS =
+  "id, name, quantity, category, spend_type, need_vs_want, justification, unit_cost_estimate, " +
+  "actual_cost, is_recurring, is_done, purchased_at, trusted_source_id, finance_entry_id, notes, " +
+  "created_at, updated_at";
+
+const TRIP_FIELDS =
+  "id, destination, start_date, end_date, status, spend_type, need_vs_want, justification, " +
+  "budgeted_amount, notes, created_at, updated_at";
+
+const TRIP_EXPENSE_FIELDS =
+  "id, trip_id, label, amount, expense_date, trusted_source_id, finance_entry_id, created_at, updated_at";
+
+const TRUSTED_SOURCE_FIELDS =
+  "id, name, category, notes, url, is_preferred, created_at, updated_at";
+
+// =====================================================================
+// Wellness MCP upgrade — Vitals, Exercise, Doctor's Reports, Health
+// Profile, Journal, Goals. Same owner-scoped, fail-closed, allow-listed-
+// fields pattern as everything above. Every table here has a deleted_at
+// column, so every delete_* below is a SOFT delete.
+// =====================================================================
+
+const WELLNESS_METRIC_FIELDS =
+  "id, recorded_on, weight_kg, waist_cm, body_fat_pct, systolic_bp, diastolic_bp, resting_hr, " +
+  "steps, sleep_hours, water_ml, notes, created_at, updated_at";
+
+const WELLNESS_WORKOUT_FIELDS =
+  "id, workout_date, activity, category, duration_minutes, intensity, distance_km, " +
+  "calories_burned, notes, created_at, updated_at";
+
+const WELLNESS_DOCUMENT_FIELDS =
+  "id, title, category, doctor_name, facility, report_date, follow_up_date, notes, " +
+  "file_path, file_name, mime_type, size_bytes, created_at, updated_at";
+
+const WELLNESS_CONDITION_FIELDS =
+  "id, item_type, name, detail, status, started_on, notes, created_at, updated_at";
+
+const WELLNESS_JOURNAL_FIELDS =
+  "id, entry_date, mood, energy_level, stress_level, sleep_quality, meditation_minutes, " +
+  "gratitude, goal_focus, notes, created_at, updated_at";
+
+const WELLNESS_GOAL_FIELDS =
+  "id, title, domain, target_metric, target_value, starting_value, target_date, status, " +
+  "notes, created_at, updated_at";
+
+// Shared helper: create a finance_entries row on behalf of the owner and
+// return its id. Used by complete_shopping_item and add_trip_expense so
+// shopping/trip spend never drifts out of sync with the Finance ledger.
+async function insertFinanceEntry(
+  supabase: any,
+  ownerId: string,
+  fields: { category: string; amount: number; entry_date: string; notes?: string | null; source: string },
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from("finance_entries")
+    .insert({
+      user_id: ownerId,
+      type: "expense",
+      category: fields.category,
+      amount: Math.abs(fields.amount),
+      entry_date: fields.entry_date,
+      notes: fields.notes ?? null,
+      source: fields.source,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// ---- Trading module constants ----
+const TRADE_FIELDS =
+  "id,symbol,tradingview_symbol,direction,entry_price,stop_loss,target_price,timeframe,setup_name,reason," +
+  "calendar_checked,risk_percent,risk_amount_zar,position_size,status,exit_price,exit_date,rule_followed," +
+  "lesson,r_multiple,pnl_zar,is_legacy,occurred_at";
+const PLAN_SECTIONS = ["markets", "timeframes", "entry_rules", "stop_rules", "target_rules", "no_trade_rules", "risk_rules", "daily_routine"] as const;
+const LESSON_TITLES = [
+  "What AI trading is & what AI can and can't do",
+  "Connect Claude to TradingView (MCP setup)",
+  "Prompting Claude with a live chart",
+  "Market structure (swing highs/lows, BOS, CHoCH)",
+  "Support & resistance zones",
+  "Indicators (SMA, MACD, RSI) & confluence",
+  "Multi-timeframe analysis",
+  "Building a rules-based strategy",
+  "Backtesting",
+  "Risk management & position sizing",
+  "Paper trading phase",
+  "Live trading with small size + daily routine + using AI safely",
+];
+
+
+
+export async function runAction(supabase: any, userId: string, action: string, body: any): Promise<{ status: number; body: any }> {
+  function requireOwner(): string | null { return userId || null; }
+  try {
+    switch (action) {
+      // =================================================================
+      // hub_contacts
+      // =================================================================
+      case "list_contacts": {
+        const search = String(body?.search ?? "").trim();
+        const contact_type = body?.contact_type ? String(body.contact_type) : null;
+        const lead_type = body?.lead_type ? String(body.lead_type) : null;
+        const temperature = body?.temperature ? String(body.temperature) : null;
+        const tag = body?.tag ? String(body.tag) : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("hub_contacts").select(CONTACT_FIELDS)
+          .eq("is_deleted", false)
+          .order("updated_at", { ascending: false })
+          .limit(limit);
+
+        if (contact_type) q = q.eq("contact_type", contact_type);
+        if (lead_type) q = q.eq("lead_type", lead_type);
+        if (temperature) q = q.eq("temperature", temperature);
+        if (tag) q = q.contains("tags", [tag]);
+        if (search) {
+          q = q.or(
+            `full_name.ilike.%${search}%,email.ilike.%${search}%,phone_e164.ilike.%${search}%`,
+          );
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, contacts: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "get_contact": {
+        const id = body?.id ? String(body.id) : null;
+        const phone = body?.phone ? String(body.phone) : null;
+        const email = body?.email ? String(body.email).toLowerCase() : null;
+        if (!id && !phone && !email) {
+          return json({ ok: false, error: "id_phone_or_email_required" }, 400);
+        }
+
+        let q = supabase.from("hub_contacts").select(CONTACT_FIELDS).eq("is_deleted", false);
+        if (id) q = q.eq("id", id);
+        else if (phone) q = q.eq("phone_e164", phone);
+        else q = q.eq("email", email);
+
+        const { data: contact, error } = await q.maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!contact) return json({ ok: false, error: "not_found" }, 404);
+
+        return json({ ok: true, contact });
+      }
+
+      case "update_contact": {
+        const id = body?.id ? String(body.id) : null;
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.full_name === "string") patch.full_name = body.full_name.trim();
+        if (typeof body?.first_name === "string") patch.first_name = body.first_name.trim();
+        if (typeof body?.last_name === "string") patch.last_name = body.last_name.trim();
+        if (typeof body?.email === "string") patch.email = body.email.trim().toLowerCase();
+        if (typeof body?.lead_type === "string") patch.lead_type = body.lead_type;
+        if (typeof body?.temperature === "string") patch.temperature = body.temperature;
+        if (Array.isArray(body?.tags)) patch.tags = body.tags;
+        if (typeof body?.consent_whatsapp === "boolean") patch.consent_whatsapp = body.consent_whatsapp;
+        if (typeof body?.consent_email === "boolean") patch.consent_email = body.consent_email;
+        if (typeof body?.consent_sms === "boolean") patch.consent_sms = body.consent_sms;
+        if (Array.isArray(body?.unsubscribed_channels)) patch.unsubscribed_channels = body.unsubscribed_channels;
+
+        if (Object.keys(patch).length === 0) {
+          return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+        }
+        patch.updated_at = new Date().toISOString();
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("hub_contacts").select("version").eq("id", id).eq("is_deleted", false).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        patch.version = (existing.version ?? 1) + 1;
+
+        const { data: updated, error } = await supabase
+          .from("hub_contacts").update(patch).eq("id", id).select(CONTACT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, contact: updated });
+      }
+
+      case "add_contact_note": {
+        const id = body?.id ? String(body.id) : null;
+        const note = body?.note ? String(body.note).trim() : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!note) return json({ ok: false, error: "note_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("hub_contacts").select("notes, version").eq("id", id).eq("is_deleted", false).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const stamp = new Date().toISOString();
+        const appended = [existing.notes, `[${stamp}] ${note}`].filter(Boolean).join("\n");
+
+        const { data: updated, error } = await supabase
+          .from("hub_contacts")
+          .update({ notes: appended, version: (existing.version ?? 1) + 1, updated_at: stamp })
+          .eq("id", id)
+          .select(CONTACT_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, contact: updated });
+      }
+
+      // =================================================================
+      // Projects (read-only — lets Claude resolve a project_id before
+      // attaching a task/note to it)
+      // =================================================================
+      case "list_projects": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const status = body?.status ? String(body.status) : null;
+        const search = String(body?.search ?? "").trim();
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("projects").select(PROJECT_FIELDS)
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .order("is_pinned", { ascending: false })
+          .order("updated_at", { ascending: false })
+          .limit(limit);
+
+        if (status) q = q.eq("status", status);
+        if (search) q = q.ilike("name", `%${search}%`);
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, projects: data ?? [], count: data?.length ?? 0 });
+      }
+
+      // =================================================================
+      // Tasks
+      // =================================================================
+      case "create_task": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const priority = ["critical", "high", "medium", "low"].includes(body?.priority)
+          ? body.priority
+          : "medium";
+        const description = typeof body?.description === "string" ? body.description : null;
+        const due_date = typeof body?.due_date === "string" ? body.due_date : null;
+
+        // Same dedupe convention as extension-task-create: same title + same
+        // project scope merges instead of duplicating.
+        const norm = normalizeTitle(title);
+        let dupeQ = supabase.from("tasks").select("id, priority")
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .ilike("title", norm);
+        dupeQ = project_id ? dupeQ.eq("project_id", project_id) : dupeQ.is("project_id", null);
+        const { data: existing } = await dupeQ.maybeSingle();
+
+        if (existing) {
+          const { data: updated, error } = await supabase
+            .from("tasks")
+            .update({ last_touched_at: new Date().toISOString(), priority: priority ?? existing.priority })
+            .eq("id", existing.id)
+            .select(TASK_FIELDS)
+            .maybeSingle();
+          if (error) return json({ ok: false, error: error.message }, 500);
+          return json({ ok: true, action: "merged", task: updated });
+        }
+
+        const now = new Date().toISOString();
+        const { data: inserted, error } = await supabase
+          .from("tasks")
+          .insert({
+            user_id: ownerId,
+            title,
+            description,
+            priority,
+            project_id,
+            due_date,
+            status: "pending",
+            source: "claude-mcp",
+            last_touched_at: now,
+          })
+          .select(TASK_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, action: "created", task: inserted });
+      }
+
+      // list_tasks — read-only. Powers "what's on my plate" queries
+      // (Dashboard / Plan Hub "Tasks" tab). Supports filtering by project,
+      // status, and a single calendar day (matches on due_date).
+      case "list_tasks": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const status = body?.status ? String(body.status) : null;
+        const dateStr = body?.date ? String(body.date) : null;
+        const include_undated = body?.include_undated === true;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("tasks").select(TASK_FIELDS)
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .order("due_date", { ascending: true, nullsFirst: false })
+          .order("priority", { ascending: true })
+          .limit(limit);
+
+        if (project_id) q = q.eq("project_id", project_id);
+        if (status) q = q.eq("status", status);
+
+        if (dateStr) {
+          const bounds = dayBounds(dateStr);
+          if (!bounds) return json({ ok: false, error: "invalid_date_expected_yyyy_mm_dd" }, 400);
+          const [start, end] = bounds;
+          q = include_undated
+            ? q.or(`and(due_date.gte.${start},due_date.lte.${end}),due_date.is.null`)
+            : q.gte("due_date", start).lte("due_date", end);
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, tasks: data ?? [], count: data?.length ?? 0 });
+      }
+
+      // NEW: complete_task — sets status to 'done' and refreshes
+      // last_touched_at. Verifies the task belongs to the configured owner
+      // before writing.
+      case "complete_task": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("tasks").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { data: updated, error } = await supabase
+          .from("tasks")
+          .update({ status: "done", last_touched_at: new Date().toISOString() })
+          .eq("id", id)
+          .select(TASK_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, task: updated });
+      }
+
+      // NEW: delete_task — SOFT delete (tasks has a deleted_at column,
+      // already relied on by create_task's dedupe/list_tasks filters), so
+      // this matches the existing convention rather than a hard DELETE.
+      case "delete_task": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("tasks").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { error } = await supabase
+          .from("tasks")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Reminders
+      // =================================================================
+      case "create_reminder": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const title = body?.title ? String(body.title).trim() : "";
+        const reminder_time = body?.reminder_time ? String(body.reminder_time) : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+        if (!reminder_time) return json({ ok: false, error: "reminder_time_required" }, 400);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const description = typeof body?.description === "string" ? body.description : null;
+
+        const { data: inserted, error } = await supabase
+          .from("reminders")
+          .insert({ user_id: ownerId, title, description, reminder_time, project_id })
+          .select(REMINDER_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, reminder: inserted });
+      }
+
+      // list_reminders — read-only. Supports filtering by project,
+      // done/not-done, and a single calendar day (matches on reminder_time).
+      case "list_reminders": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const dateStr = body?.date ? String(body.date) : null;
+        const is_done = typeof body?.is_done === "boolean" ? body.is_done : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("reminders").select(REMINDER_FIELDS)
+          .eq("user_id", ownerId)
+          .order("reminder_time", { ascending: true })
+          .limit(limit);
+
+        if (project_id) q = q.eq("project_id", project_id);
+        if (is_done !== null) q = q.eq("is_done", is_done);
+        if (dateStr) {
+          const bounds = dayBounds(dateStr);
+          if (!bounds) return json({ ok: false, error: "invalid_date_expected_yyyy_mm_dd" }, 400);
+          const [start, end] = bounds;
+          q = q.gte("reminder_time", start).lte("reminder_time", end);
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, reminders: data ?? [], count: data?.length ?? 0 });
+      }
+
+      // NEW: complete_reminder — sets is_done = true.
+      case "complete_reminder": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("reminders").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { data: updated, error } = await supabase
+          .from("reminders")
+          .update({ is_done: true })
+          .eq("id", id)
+          .select(REMINDER_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, reminder: updated });
+      }
+
+      // NEW: delete_reminder — HARD delete. The reminders table has no
+      // deleted_at column (unlike tasks/projects), so there is no soft-
+      // delete convention to follow here.
+      case "delete_reminder": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("reminders").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { error } = await supabase.from("reminders").delete().eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Meetings
+      // =================================================================
+      case "create_meeting": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const title = body?.title ? String(body.title).trim() : "";
+        const start_time = body?.start_time ? String(body.start_time) : "";
+        const end_time = body?.end_time ? String(body.end_time) : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+        if (!start_time || !end_time) {
+          return json({ ok: false, error: "start_time_and_end_time_required" }, 400);
+        }
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const description = typeof body?.description === "string" ? body.description : null;
+        const location = typeof body?.location === "string" ? body.location : null;
+        const notes = typeof body?.notes === "string" ? body.notes : null;
+        const attendees = Array.isArray(body?.attendees) ? body.attendees : null;
+
+        const { data: inserted, error } = await supabase
+          .from("meetings")
+          .insert({
+            user_id: ownerId,
+            title,
+            description,
+            start_time,
+            end_time,
+            location,
+            notes,
+            attendees,
+            project_id,
+          })
+          .select(MEETING_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, meeting: inserted });
+      }
+
+      // list_meetings — read-only. Supports filtering by project,
+      // done/not-done, and a single calendar day (matches on start_time).
+      case "list_meetings": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : null;
+        const dateStr = body?.date ? String(body.date) : null;
+        const is_done = typeof body?.is_done === "boolean" ? body.is_done : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("meetings").select(MEETING_FIELDS)
+          .eq("user_id", ownerId)
+          .order("start_time", { ascending: true })
+          .limit(limit);
+
+        if (project_id) q = q.eq("project_id", project_id);
+        if (is_done !== null) q = q.eq("is_done", is_done);
+        if (dateStr) {
+          const bounds = dayBounds(dateStr);
+          if (!bounds) return json({ ok: false, error: "invalid_date_expected_yyyy_mm_dd" }, 400);
+          const [start, end] = bounds;
+          q = q.gte("start_time", start).lte("start_time", end);
+        }
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, meetings: data ?? [], count: data?.length ?? 0 });
+      }
+
+      // NEW: complete_meeting — sets is_done = true.
+      case "complete_meeting": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("meetings").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { data: updated, error } = await supabase
+          .from("meetings")
+          .update({ is_done: true })
+          .eq("id", id)
+          .select(MEETING_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, meeting: updated });
+      }
+
+      // NEW: delete_meeting — HARD delete. The meetings table has no
+      // deleted_at column either, so there is no soft-delete convention to
+      // follow here.
+      case "delete_meeting": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("meetings").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { error } = await supabase.from("meetings").delete().eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Project Notes (date-keyed, one per project per day — upserts
+      // same-day rather than creating duplicates, matching
+      // projectNotesService.upsert in the app itself)
+      // =================================================================
+      case "add_project_note": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const project_id = body?.project_id ? String(body.project_id) : "";
+        const content = body?.content ? String(body.content) : "";
+        if (!project_id) return json({ ok: false, error: "project_id_required" }, 400);
+        if (!content.trim()) return json({ ok: false, error: "content_required" }, 400);
+
+        const note_date = body?.note_date ? String(body.note_date) : new Date().toISOString().slice(0, 10);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("project_notes")
+          .select("id, content")
+          .eq("project_id", project_id)
+          .eq("note_date", note_date)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+
+        if (existing) {
+          // Append rather than clobber same-day content written elsewhere.
+          const merged = [existing.content, content].filter(Boolean).join("\n\n");
+          const { data: updated, error } = await supabase
+            .from("project_notes")
+            .update({ content: merged })
+            .eq("id", existing.id)
+            .select(PROJECT_NOTE_FIELDS)
+            .maybeSingle();
+          if (error) return json({ ok: false, error: error.message }, 500);
+          return json({ ok: true, action: "appended", note: updated });
+        }
+
+        const { data: inserted, error } = await supabase
+          .from("project_notes")
+          .insert({ project_id, user_id: ownerId, note_date, content })
+          .select(PROJECT_NOTE_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, action: "created", note: inserted });
+      }
+
+      // =================================================================
+      // Voice Diary (append-only personal log, optionally tagged to one or
+      // more projects via linked_project_ids — distinct from project_notes
+      // above)
+      // =================================================================
+      case "add_diary_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const content = body?.content ? String(body.content) : "";
+        if (!content.trim()) return json({ ok: false, error: "content_required" }, 400);
+
+        const title = typeof body?.title === "string" ? body.title : null;
+        const mood = typeof body?.mood === "string" ? body.mood : null;
+        const linked_project_ids = Array.isArray(body?.linked_project_ids)
+          ? body.linked_project_ids.map(String)
+          : [];
+
+        const { data: inserted, error } = await supabase
+          .from("voice_diary_entries")
+          .insert({
+            user_id: ownerId,
+            content,
+            title,
+            mood,
+            source_type: "claude-mcp",
+            linked_project_ids,
+          })
+          .select(DIARY_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entry: inserted });
+      }
+
+      // =================================================================
+      // Finance — full CRUD. finance_entries/debts/income_streams/
+      // opportunities/finance_budget_items/finance_budget_events all
+      // already have a deleted_at column and a soft-delete convention in
+      // the app's own services, so delete_* below mirrors that exactly.
+      // =================================================================
+      case "get_finance_snapshot": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+        const sinceStr = since.toISOString().slice(0, 10);
+
+        const { data: entries, error: entriesErr } = await supabase
+          .from("finance_entries")
+          .select("type, category, amount, entry_date")
+          .eq("user_id", ownerId)
+          .is("deleted_at", null)
+          .gte("entry_date", sinceStr);
+        if (entriesErr) return json({ ok: false, error: entriesErr.message }, 500);
+
+        const rows = entries ?? [];
+        const income = rows.filter((r: any) => r.type === "income")
+          .reduce((s: number, r: any) => s + Math.abs(Number(r.amount)), 0);
+        const expense = rows.filter((r: any) => r.type === "expense")
+          .reduce((s: number, r: any) => s + Math.abs(Number(r.amount)), 0);
+        const categoryTotals: Record<string, number> = {};
+        rows.filter((r: any) => r.type === "expense").forEach((r: any) => {
+          categoryTotals[r.category] = (categoryTotals[r.category] ?? 0) + Math.abs(Number(r.amount));
+        });
+        const topExpenseCategories = Object.entries(categoryTotals)
+          .sort((a, b) => (b[1] as number) - (a[1] as number))
+          .slice(0, 5)
+          .map(([category, total]) => ({ category, total }));
+
+        const { data: debts, error: debtsErr } = await supabase
+          .from("debts").select("principal, status")
+          .eq("user_id", ownerId).is("deleted_at", null);
+        if (debtsErr) return json({ ok: false, error: debtsErr.message }, 500);
+        const activeDebts = (debts ?? []).filter((d: any) => d.status === "active");
+        const debtSummary = {
+          count: activeDebts.length,
+          totalOutstanding: activeDebts.reduce((s: number, d: any) => s + Number(d.principal), 0),
+        };
+
+        const { data: streams, error: streamsErr } = await supabase
+          .from("income_streams").select("stream_type, label, monthly_target, current_month_income")
+          .eq("user_id", ownerId).is("deleted_at", null);
+        if (streamsErr) return json({ ok: false, error: streamsErr.message }, 500);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: upcoming, error: upcomingErr } = await supabase
+          .from("finance_budget_events")
+          .select("due_at, amount, status, finance_budget_items(name)")
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .eq("status", "upcoming")
+          .gte("due_at", today)
+          .order("due_at")
+          .limit(10);
+        if (upcomingErr) return json({ ok: false, error: upcomingErr.message }, 500);
+
+        return json({
+          ok: true,
+          generatedAt: new Date().toISOString(),
+          last30Days: { income, expense, net: income - expense },
+          topExpenseCategories,
+          debtSummary,
+          incomeStreams: (streams ?? []).map((s: any) => ({
+            type: s.stream_type, label: s.label, target: Number(s.monthly_target), actual: Number(s.current_month_income),
+          })),
+          upcomingBudgetEvents: (upcoming ?? []).map((e: any) => ({
+            due_at: e.due_at, amount: Number(e.amount), status: e.status,
+            name: (e.finance_budget_items as any)?.name ?? null,
+          })),
+        });
+      }
+
+      case "list_finance_entries": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const type = body?.type ? String(body.type) : null;
+        const category = body?.category ? String(body.category) : null;
+        const from = body?.from ? String(body.from) : null;
+        const to = body?.to ? String(body.to) : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+
+        let q = supabase.from("finance_entries").select(FINANCE_ENTRY_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("entry_date", { ascending: false }).limit(limit);
+        if (type) q = q.eq("type", type);
+        if (category) q = q.eq("category", category);
+        if (from) q = q.gte("entry_date", from);
+        if (to) q = q.lte("entry_date", to);
+
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entries: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_finance_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const type = ["income", "expense"].includes(body?.type) ? body.type : "expense";
+        const category = body?.category ? String(body.category) : "general";
+        const amount = Number(body?.amount ?? NaN);
+        if (!Number.isFinite(amount)) return json({ ok: false, error: "amount_required" }, 400);
+        const entry_date = body?.entry_date ? String(body.entry_date) : new Date().toISOString().slice(0, 10);
+        const notes = typeof body?.notes === "string" ? body.notes : null;
+        const source = typeof body?.source === "string" ? body.source : "claude-mcp";
+
+        const { data: inserted, error } = await supabase
+          .from("finance_entries")
+          .insert({ user_id: ownerId, type, category, amount, entry_date, notes, source })
+          .select(FINANCE_ENTRY_FIELDS)
+          .maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entry: inserted });
+      }
+
+      case "update_finance_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (["income", "expense"].includes(body?.type)) patch.type = body.type;
+        if (typeof body?.category === "string") patch.category = body.category;
+        if (body?.amount !== undefined && Number.isFinite(Number(body.amount))) patch.amount = Number(body.amount);
+        if (typeof body?.entry_date === "string") patch.entry_date = body.entry_date;
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (typeof body?.source === "string") patch.source = body.source;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase
+          .from("finance_entries").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(FINANCE_ENTRY_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, entry: updated });
+      }
+
+      case "delete_finance_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_entries").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const { error } = await supabase.from("finance_entries")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Debts ----
+      case "list_debts": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("debts").select(DEBT_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("status");
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, debts: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_debt": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const lender_name = body?.lender_name ? String(body.lender_name).trim() : "";
+        if (!lender_name) return json({ ok: false, error: "lender_name_required" }, 400);
+        const principal = Number(body?.principal ?? 0);
+
+        const { data: inserted, error } = await supabase
+          .from("debts")
+          .insert({
+            user_id: ownerId, lender_name, principal,
+            interest_rate: body?.interest_rate ?? null,
+            repayment_amount: body?.repayment_amount ?? null,
+            due_day: body?.due_day ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(DEBT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, debt: inserted });
+      }
+
+      case "update_debt": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.lender_name === "string") patch.lender_name = body.lender_name;
+        if (body?.principal !== undefined) patch.principal = Number(body.principal);
+        if (body?.interest_rate !== undefined) patch.interest_rate = body.interest_rate;
+        if (body?.repayment_amount !== undefined) patch.repayment_amount = body.repayment_amount;
+        if (body?.due_day !== undefined) patch.due_day = body.due_day;
+        if (typeof body?.status === "string") patch.status = body.status;
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("debts").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(DEBT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, debt: updated });
+      }
+
+      case "delete_debt": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("debts").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("debts")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Income Streams ----
+      case "list_income_streams": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.from("income_streams").select(INCOME_STREAM_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false });
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, income_streams: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_income_stream": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const label = body?.label ? String(body.label).trim() : "";
+        if (!label) return json({ ok: false, error: "label_required" }, 400);
+        const stream_type = typeof body?.stream_type === "string" ? body.stream_type : "salary";
+        const monthly_target = Number(body?.monthly_target ?? 0);
+
+        const { data: inserted, error } = await supabase
+          .from("income_streams")
+          .insert({
+            user_id: ownerId, stream_type, label, monthly_target,
+            current_month_income: Number(body?.current_month_income ?? 0),
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(INCOME_STREAM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, income_stream: inserted });
+      }
+
+      case "update_income_stream": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.stream_type === "string") patch.stream_type = body.stream_type;
+        if (typeof body?.label === "string") patch.label = body.label;
+        if (body?.monthly_target !== undefined) patch.monthly_target = Number(body.monthly_target);
+        if (body?.current_month_income !== undefined) patch.current_month_income = Number(body.current_month_income);
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("income_streams").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(INCOME_STREAM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, income_stream: updated });
+      }
+
+      case "delete_income_stream": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("income_streams").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("income_streams")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Opportunities ----
+      case "list_opportunities": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("opportunities").select(OPPORTUNITY_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false });
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, opportunities: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_opportunity": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+        const type = typeof body?.type === "string" ? body.type : "savings";
+
+        const { data: inserted, error } = await supabase
+          .from("opportunities")
+          .insert({
+            user_id: ownerId, title, type,
+            estimated_value: body?.estimated_value ?? null,
+            difficulty: typeof body?.difficulty === "string" ? body.difficulty : "medium",
+            notes: typeof body?.notes === "string" ? body.notes : null,
+            ai_generated: false,
+          })
+          .select(OPPORTUNITY_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, opportunity: inserted });
+      }
+
+      case "update_opportunity": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.title === "string") patch.title = body.title;
+        if (typeof body?.type === "string") patch.type = body.type;
+        if (body?.estimated_value !== undefined) patch.estimated_value = body.estimated_value;
+        if (typeof body?.difficulty === "string") patch.difficulty = body.difficulty;
+        if (typeof body?.status === "string") patch.status = body.status;
+        if (typeof body?.notes === "string") patch.notes = body.notes;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("opportunities").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(OPPORTUNITY_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, opportunity: updated });
+      }
+
+      case "delete_opportunity": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("opportunities").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("opportunities")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Budget Items (recurring bills/subscriptions) ----
+      case "list_budget_items": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("finance_budget_items").select(BUDGET_ITEM_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("name");
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_items: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_budget_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+        const amount = Number(body?.amount ?? 0);
+
+        const { data: inserted, error } = await supabase
+          .from("finance_budget_items")
+          .insert({
+            user_id: ownerId, name, amount,
+            type: typeof body?.type === "string" ? body.type : "subscription",
+            description: typeof body?.description === "string" ? body.description : "",
+            cadence: typeof body?.cadence === "string" ? body.cadence : "monthly",
+            due_day_of_month: body?.due_day_of_month ?? null,
+            due_month_of_year: body?.due_month_of_year ?? null,
+            due_date_custom: body?.due_date_custom ?? null,
+            category: typeof body?.category === "string" ? body.category : null,
+            vendor: typeof body?.vendor === "string" ? body.vendor : null,
+            autopay: body?.autopay === true,
+          })
+          .select(BUDGET_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_item: inserted });
+      }
+
+      case "update_budget_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["name", "description", "type", "cadence", "category", "vendor", "status"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        for (const f of ["amount", "due_day_of_month", "due_month_of_year"]) {
+          if (body?.[f] !== undefined) patch[f] = body[f];
+        }
+        if (typeof body?.due_date_custom === "string") patch.due_date_custom = body.due_date_custom;
+        if (typeof body?.autopay === "boolean") patch.autopay = body.autopay;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("finance_budget_items").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(BUDGET_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, budget_item: updated });
+      }
+
+      case "delete_budget_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_budget_items").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("finance_budget_items")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // ---- Budget Events (individual bill instances) ----
+      case "list_upcoming_budget_events": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const from = body?.from ? String(body.from) : new Date().toISOString().slice(0, 10);
+        const to = body?.to ? String(body.to) : null;
+        let q = supabase.from("finance_budget_events")
+          .select(`${BUDGET_EVENT_FIELDS}, finance_budget_items(name, vendor, category)`)
+          .eq("user_id", ownerId).is("deleted_at", null).gte("due_at", from).order("due_at");
+        if (to) q = q.lte("due_at", to);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_events: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "mark_budget_event_paid": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_budget_events").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("finance_budget_events")
+          .update({ status: "paid", paid_at: new Date().toISOString() })
+          .eq("id", id).select(BUDGET_EVENT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_event: updated });
+      }
+
+      case "update_budget_event_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const status = body?.status ? String(body.status) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!status) return json({ ok: false, error: "status_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("finance_budget_events").select("id").eq("id", id).eq("user_id", ownerId).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("finance_budget_events")
+          .update({ status }).eq("id", id).select(BUDGET_EVENT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, budget_event: updated });
+      }
+
+      // =================================================================
+      // Shopping — full CRUD. shopping_items carries the buy-decision
+      // framework itself (need_vs_want + justification) and an optional
+      // trusted_source_id / finance_entry_id link.
+      // =================================================================
+      case "list_shopping_items": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        const spend_type = body?.spend_type ? String(body.spend_type) : null;
+        const is_done = typeof body?.is_done === "boolean" ? body.is_done : null;
+        let q = supabase.from("shopping_items").select(SHOPPING_ITEM_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("created_at", { ascending: false });
+        if (category) q = q.eq("category", category);
+        if (spend_type) q = q.eq("spend_type", spend_type);
+        if (is_done !== null) q = q.eq("is_done", is_done);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, shopping_items: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("shopping_items")
+          .insert({
+            user_id: ownerId, name,
+            quantity: Number(body?.quantity ?? 1),
+            category: typeof body?.category === "string" ? body.category : "other",
+            spend_type: typeof body?.spend_type === "string" ? body.spend_type : "personal",
+            need_vs_want: typeof body?.need_vs_want === "string" ? body.need_vs_want : null,
+            justification: typeof body?.justification === "string" ? body.justification : null,
+            unit_cost_estimate: body?.unit_cost_estimate ?? null,
+            is_recurring: body?.is_recurring === true,
+            trusted_source_id: body?.trusted_source_id ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(SHOPPING_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, shopping_item: inserted });
+      }
+
+      case "update_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["name", "category", "spend_type", "need_vs_want", "justification", "notes"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        if (body?.quantity !== undefined) patch.quantity = Number(body.quantity);
+        if (body?.unit_cost_estimate !== undefined) patch.unit_cost_estimate = body.unit_cost_estimate;
+        if (body?.actual_cost !== undefined) patch.actual_cost = body.actual_cost;
+        if (typeof body?.is_recurring === "boolean") patch.is_recurring = body.is_recurring;
+        if (body?.trusted_source_id !== undefined) patch.trusted_source_id = body.trusted_source_id;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("shopping_items").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(SHOPPING_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, shopping_item: updated });
+      }
+
+      // complete_shopping_item — marks bought; when log_to_finance is true
+      // (and actual_cost / an existing unit_cost_estimate is available)
+      // also writes a finance_entries expense and links it back via
+      // finance_entry_id, so shopping spend rolls into Finance totals.
+      case "complete_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("shopping_items").select("*")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const actualCost = body?.actual_cost !== undefined
+          ? Number(body.actual_cost)
+          : (existing.unit_cost_estimate !== null ? Number(existing.unit_cost_estimate) * Number(existing.quantity) : null);
+
+        const patch: Record<string, unknown> = {
+          is_done: true,
+          purchased_at: new Date().toISOString(),
+        };
+        if (actualCost !== null) patch.actual_cost = actualCost;
+
+        if (body?.log_to_finance === true && actualCost !== null) {
+          const financeEntry = await insertFinanceEntry(supabase, ownerId, {
+            category: existing.category,
+            amount: actualCost,
+            entry_date: new Date().toISOString().slice(0, 10),
+            notes: `Shopping: ${existing.name}`,
+            source: existing.spend_type === "business" ? "business" : "other",
+          });
+          if (financeEntry) patch.finance_entry_id = financeEntry.id;
+        }
+
+        const { data: updated, error } = await supabase.from("shopping_items").update(patch)
+          .eq("id", id).select(SHOPPING_ITEM_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, shopping_item: updated });
+      }
+
+      case "delete_shopping_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("shopping_items").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("shopping_items")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Travel — full CRUD. Trips carry the buy-decision framework too;
+      // trip_expenses always mirror into finance_entries so trip cost
+      // never drifts out of sync with Finance.
+      // =================================================================
+      case "list_trips": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        const spend_type = body?.spend_type ? String(body.spend_type) : null;
+        let q = supabase.from("trips").select(TRIP_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null).order("start_date");
+        if (status) q = q.eq("status", status);
+        if (spend_type) q = q.eq("spend_type", spend_type);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trips: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "create_trip": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const destination = body?.destination ? String(body.destination).trim() : "";
+        const start_date = body?.start_date ? String(body.start_date) : "";
+        const end_date = body?.end_date ? String(body.end_date) : "";
+        if (!destination) return json({ ok: false, error: "destination_required" }, 400);
+        if (!start_date || !end_date) return json({ ok: false, error: "start_date_and_end_date_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("trips")
+          .insert({
+            user_id: ownerId, destination, start_date, end_date,
+            spend_type: typeof body?.spend_type === "string" ? body.spend_type : "personal",
+            need_vs_want: typeof body?.need_vs_want === "string" ? body.need_vs_want : null,
+            justification: typeof body?.justification === "string" ? body.justification : null,
+            budgeted_amount: body?.budgeted_amount ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(TRIP_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trip: inserted });
+      }
+
+      case "update_trip": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["destination", "start_date", "end_date", "status", "spend_type", "need_vs_want", "justification", "notes"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        if (body?.budgeted_amount !== undefined) patch.budgeted_amount = body.budgeted_amount;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("trips").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(TRIP_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, trip: updated });
+      }
+
+      case "delete_trip": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trips").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("trips")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      case "add_trip_expense": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const trip_id = body?.trip_id ? String(body.trip_id) : "";
+        const label = body?.label ? String(body.label).trim() : "";
+        const amount = Number(body?.amount ?? NaN);
+        if (!trip_id) return json({ ok: false, error: "trip_id_required" }, 400);
+        if (!label) return json({ ok: false, error: "label_required" }, 400);
+        if (!Number.isFinite(amount)) return json({ ok: false, error: "amount_required" }, 400);
+
+        const { data: trip, error: tripErr } = await supabase
+          .from("trips").select("id, destination, spend_type")
+          .eq("id", trip_id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (tripErr) return json({ ok: false, error: tripErr.message }, 500);
+        if (!trip) return json({ ok: false, error: "trip_not_found" }, 404);
+
+        const expense_date = body?.expense_date ? String(body.expense_date) : new Date().toISOString().slice(0, 10);
+
+        // Always mirror into finance_entries — trip spend never tracked in isolation.
+        const financeEntry = await insertFinanceEntry(supabase, ownerId, {
+          category: "travel",
+          amount,
+          entry_date: expense_date,
+          notes: `Travel (${trip.destination}): ${label}`,
+          source: trip.spend_type === "business" ? "business" : "other",
+        });
+
+        const { data: inserted, error } = await supabase
+          .from("trip_expenses")
+          .insert({
+            user_id: ownerId, trip_id, label, amount, expense_date,
+            trusted_source_id: body?.trusted_source_id ?? null,
+            finance_entry_id: financeEntry?.id ?? null,
+          })
+          .select(TRIP_EXPENSE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trip_expense: inserted });
+      }
+
+      case "update_trip_expense": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trip_expenses").select("id, finance_entry_id")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        const patch: Record<string, unknown> = {};
+        if (typeof body?.label === "string") patch.label = body.label;
+        if (body?.amount !== undefined) patch.amount = Number(body.amount);
+        if (typeof body?.expense_date === "string") patch.expense_date = body.expense_date;
+        if (body?.trusted_source_id !== undefined) patch.trusted_source_id = body.trusted_source_id;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        // Keep the mirrored finance_entries row in sync on amount/date/label edits.
+        if (existing.finance_entry_id && (patch.amount !== undefined || patch.expense_date !== undefined || patch.label !== undefined)) {
+          const financePatch: Record<string, unknown> = {};
+          if (patch.amount !== undefined) financePatch.amount = Math.abs(Number(patch.amount));
+          if (patch.expense_date !== undefined) financePatch.entry_date = patch.expense_date;
+          await supabase.from("finance_entries").update(financePatch).eq("id", existing.finance_entry_id);
+        }
+
+        const { data: updated, error } = await supabase.from("trip_expenses").update(patch)
+          .eq("id", id).select(TRIP_EXPENSE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trip_expense: updated });
+      }
+
+      case "delete_trip_expense": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trip_expenses").select("id, finance_entry_id")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+
+        // Keep Finance in sync — removing the trip expense also removes its mirrored entry.
+        if (existing.finance_entry_id) {
+          await supabase.from("finance_entries")
+            .update({ deleted_at: new Date().toISOString() }).eq("id", existing.finance_entry_id);
+        }
+
+        const { error } = await supabase.from("trip_expenses")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      case "get_trip_budget_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const trip_id = body?.trip_id ? String(body.trip_id) : "";
+        if (!trip_id) return json({ ok: false, error: "trip_id_required" }, 400);
+
+        const { data: trip, error: tripErr } = await supabase
+          .from("trips").select(TRIP_FIELDS)
+          .eq("id", trip_id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (tripErr) return json({ ok: false, error: tripErr.message }, 500);
+        if (!trip) return json({ ok: false, error: "not_found" }, 404);
+
+        const { data: expenses, error: expErr } = await supabase
+          .from("trip_expenses").select(TRIP_EXPENSE_FIELDS)
+          .eq("trip_id", trip_id).eq("user_id", ownerId).is("deleted_at", null).order("expense_date");
+        if (expErr) return json({ ok: false, error: expErr.message }, 500);
+
+        const spent = (expenses ?? []).reduce((s: number, e: any) => s + Number(e.amount), 0);
+        return json({
+          ok: true,
+          trip,
+          expenses: expenses ?? [],
+          spent,
+          budgeted: trip.budgeted_amount !== null ? Number(trip.budgeted_amount) : null,
+          remaining: trip.budgeted_amount !== null ? Number(trip.budgeted_amount) - spent : null,
+        });
+      }
+
+      // =================================================================
+      // Trusted Sources — shared vendor/source list referenced by
+      // Shopping and Travel.
+      // =================================================================
+      case "list_trusted_sources": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        let q = supabase.from("trusted_sources").select(TRUSTED_SOURCE_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("is_preferred", { ascending: false }).order("name");
+        if (category) q = q.eq("category", category);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trusted_sources: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_trusted_source": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("trusted_sources")
+          .insert({
+            user_id: ownerId, name,
+            category: typeof body?.category === "string" ? body.category : "general",
+            notes: typeof body?.notes === "string" ? body.notes : null,
+            url: typeof body?.url === "string" ? body.url : null,
+            is_preferred: body?.is_preferred === true,
+          })
+          .select(TRUSTED_SOURCE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trusted_source: inserted });
+      }
+
+      case "update_trusted_source": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+
+        const patch: Record<string, unknown> = {};
+        for (const f of ["name", "category", "notes", "url"]) {
+          if (typeof body?.[f] === "string") patch[f] = body[f];
+        }
+        if (typeof body?.is_preferred === "boolean") patch.is_preferred = body.is_preferred;
+        if (Object.keys(patch).length === 0) return json({ ok: false, error: "no_updatable_fields_provided" }, 400);
+
+        const { data: updated, error } = await supabase.from("trusted_sources").update(patch)
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null)
+          .select(TRUSTED_SOURCE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        if (!updated) return json({ ok: false, error: "not_found" }, 404);
+        return json({ ok: true, trusted_source: updated });
+      }
+
+      case "delete_trusted_source": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("trusted_sources").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("trusted_sources")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Vitals (wellness_metrics)
+      // =================================================================
+      case "list_wellness_metrics": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const limit = Math.min(Math.max(Number(body?.limit ?? 90), 1), 200);
+        const { data, error } = await supabase.from("wellness_metrics").select(WELLNESS_METRIC_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("recorded_on", { ascending: false }).limit(limit);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, metrics: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_metric": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const recorded_on = body?.recorded_on ? String(body.recorded_on) : new Date().toISOString().slice(0, 10);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_metrics")
+          .insert({
+            user_id: ownerId, recorded_on,
+            weight_kg: body?.weight_kg ?? null,
+            waist_cm: body?.waist_cm ?? null,
+            body_fat_pct: body?.body_fat_pct ?? null,
+            systolic_bp: body?.systolic_bp ?? null,
+            diastolic_bp: body?.diastolic_bp ?? null,
+            resting_hr: body?.resting_hr ?? null,
+            steps: body?.steps ?? null,
+            sleep_hours: body?.sleep_hours ?? null,
+            water_ml: body?.water_ml ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_METRIC_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, metric: inserted });
+      }
+
+      case "delete_wellness_metric": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_metrics").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_metrics")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Exercise (wellness_workouts)
+      // =================================================================
+      case "list_wellness_workouts": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        const limit = Math.min(Math.max(Number(body?.limit ?? 100), 1), 200);
+        let q = supabase.from("wellness_workouts").select(WELLNESS_WORKOUT_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("workout_date", { ascending: false }).limit(limit);
+        if (category) q = q.eq("category", category);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, workouts: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_workout": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const activity = body?.activity ? String(body.activity).trim() : "";
+        if (!activity) return json({ ok: false, error: "activity_required" }, 400);
+        const workout_date = body?.workout_date ? String(body.workout_date) : new Date().toISOString().slice(0, 10);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_workouts")
+          .insert({
+            user_id: ownerId, activity, workout_date,
+            category: typeof body?.category === "string" ? body.category : "other",
+            duration_minutes: body?.duration_minutes ?? null,
+            intensity: typeof body?.intensity === "string" ? body.intensity : null,
+            distance_km: body?.distance_km ?? null,
+            calories_burned: body?.calories_burned ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_WORKOUT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, workout: inserted });
+      }
+
+      case "delete_wellness_workout": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_workouts").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_workouts")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Doctor's Reports (wellness_documents). Metadata only —
+      // file attachment stays a web-UI-only action (see header comment).
+      // =================================================================
+      case "list_wellness_documents": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const category = body?.category ? String(body.category) : null;
+        let q = supabase.from("wellness_documents").select(WELLNESS_DOCUMENT_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("report_date", { ascending: false, nullsFirst: false });
+        if (category) q = q.eq("category", category);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, documents: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_document": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_documents")
+          .insert({
+            user_id: ownerId, title,
+            category: typeof body?.category === "string" ? body.category : "other",
+            doctor_name: typeof body?.doctor_name === "string" ? body.doctor_name : null,
+            facility: typeof body?.facility === "string" ? body.facility : null,
+            report_date: body?.report_date ?? null,
+            follow_up_date: body?.follow_up_date ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_DOCUMENT_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, document: inserted });
+      }
+
+      case "delete_wellness_document": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_documents").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_documents")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Health Profile (wellness_conditions): conditions,
+      // allergies, medications, immunizations.
+      // =================================================================
+      case "list_wellness_conditions": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const item_type = body?.item_type ? String(body.item_type) : null;
+        let q = supabase.from("wellness_conditions").select(WELLNESS_CONDITION_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("item_type").order("name");
+        if (item_type) q = q.eq("item_type", item_type);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, conditions: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_condition": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const item_type = body?.item_type ? String(body.item_type) : "";
+        const name = body?.name ? String(body.name).trim() : "";
+        if (!["condition", "allergy", "medication", "immunization"].includes(item_type)) {
+          return json({ ok: false, error: "item_type_required" }, 400);
+        }
+        if (!name) return json({ ok: false, error: "name_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_conditions")
+          .insert({
+            user_id: ownerId, item_type, name,
+            detail: typeof body?.detail === "string" ? body.detail : null,
+            status: typeof body?.status === "string" ? body.status : "active",
+            started_on: body?.started_on ?? null,
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_CONDITION_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, condition: inserted });
+      }
+
+      case "update_wellness_condition_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const status = body?.status ? String(body.status) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!["active", "ongoing", "resolved"].includes(status)) {
+          return json({ ok: false, error: "valid_status_required" }, 400);
+        }
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_conditions").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("wellness_conditions")
+          .update({ status }).eq("id", id).select(WELLNESS_CONDITION_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, condition: updated });
+      }
+
+      case "delete_wellness_condition": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_conditions").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_conditions")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Journal (wellness_journal)
+      // =================================================================
+      case "list_wellness_journal": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const limit = Math.min(Math.max(Number(body?.limit ?? 100), 1), 200);
+        const { data, error } = await supabase.from("wellness_journal").select(WELLNESS_JOURNAL_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("entry_date", { ascending: false }).limit(limit);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entries: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_journal_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const notes = body?.notes ? String(body.notes).trim() : "";
+        if (!notes) return json({ ok: false, error: "notes_required" }, 400);
+        const entry_date = body?.entry_date ? String(body.entry_date) : new Date().toISOString().slice(0, 10);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_journal")
+          .insert({
+            user_id: ownerId, notes, entry_date,
+            mood: typeof body?.mood === "string" ? body.mood : null,
+            energy_level: body?.energy_level ?? null,
+            stress_level: body?.stress_level ?? null,
+            sleep_quality: body?.sleep_quality ?? null,
+            meditation_minutes: body?.meditation_minutes ?? null,
+            gratitude: typeof body?.gratitude === "string" ? body.gratitude : null,
+            goal_focus: typeof body?.goal_focus === "string" ? body.goal_focus : null,
+          })
+          .select(WELLNESS_JOURNAL_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, entry: inserted });
+      }
+
+      case "delete_wellness_journal_entry": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_journal").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_journal")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // Wellness — Goals (wellness_goals)
+      // =================================================================
+      case "list_wellness_goals": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const status = body?.status ? String(body.status) : null;
+        let q = supabase.from("wellness_goals").select(WELLNESS_GOAL_FIELDS)
+          .eq("user_id", ownerId).is("deleted_at", null)
+          .order("status").order("target_date", { ascending: true, nullsFirst: false });
+        if (status) q = q.eq("status", status);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, goals: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "add_wellness_goal": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const title = body?.title ? String(body.title).trim() : "";
+        if (!title) return json({ ok: false, error: "title_required" }, 400);
+
+        const { data: inserted, error } = await supabase
+          .from("wellness_goals")
+          .insert({
+            user_id: ownerId, title,
+            domain: typeof body?.domain === "string" ? body.domain : "body",
+            target_metric: typeof body?.target_metric === "string" ? body.target_metric : null,
+            target_value: body?.target_value ?? null,
+            starting_value: body?.starting_value ?? null,
+            target_date: body?.target_date ?? null,
+            status: "active",
+            notes: typeof body?.notes === "string" ? body.notes : null,
+          })
+          .select(WELLNESS_GOAL_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, goal: inserted });
+      }
+
+      case "update_wellness_goal_status": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const status = body?.status ? String(body.status) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!["active", "achieved", "abandoned"].includes(status)) {
+          return json({ ok: false, error: "valid_status_required" }, 400);
+        }
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_goals").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { data: updated, error } = await supabase.from("wellness_goals")
+          .update({ status }).eq("id", id).select(WELLNESS_GOAL_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, goal: updated });
+      }
+
+      case "delete_wellness_goal": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        const { data: existing, error: fetchErr } = await supabase
+          .from("wellness_goals").select("id").eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fetchErr) return json({ ok: false, error: fetchErr.message }, 500);
+        if (!existing) return json({ ok: false, error: "not_found" }, 404);
+        const { error } = await supabase.from("wellness_goals")
+          .update({ deleted_at: new Date().toISOString() }).eq("id", id);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, deleted_id: id });
+      }
+
+      // =================================================================
+      // TRADING (paper trading course module)
+      // Human-only in the app, deliberately NOT exposed here: risk_percent,
+      // learning_mode, mentor_reviewed, paper balance (changes only via
+      // close_paper_trade), verifying key levels, deleting trades / levels /
+      // plans, and anything touching real money or a broker.
+      // Writes go through the shared DB functions (open_paper_trade,
+      // close_paper_trade, save_trading_plan, set_lesson_progress,
+      // trading_stats) that the Trading page also calls, so calculations
+      // can never drift. DB trigger/function messages are returned as-is.
+      // =================================================================
+      case "get_trading_overview": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const [s, prog, closed, open] = await Promise.all([
+          supabase.from("trading_settings").select("paper_account_balance_zar,risk_percent,learning_mode,mentor_reviewed,course_video_url,updated_at").eq("user_id", ownerId).maybeSingle(),
+          supabase.from("trading_course_progress").select("lesson_no,status").eq("user_id", ownerId),
+          supabase.from("invest_paper_trades").select("id", { count: "exact", head: true }).eq("user_id", ownerId).eq("is_legacy", false).eq("status", "closed").is("deleted_at", null),
+          supabase.from("invest_paper_trades").select(TRADE_FIELDS).eq("user_id", ownerId).eq("is_legacy", false).eq("status", "open").is("deleted_at", null).order("occurred_at", { ascending: false }),
+        ]);
+        const err = s.error || prog.error || closed.error || open.error;
+        if (err) return json({ ok: false, error: err.message }, 500);
+        const done = new Set((prog.data ?? []).filter((p: any) => p.status === "completed").map((p: any) => p.lesson_no));
+        let current = 13;
+        for (let i = 1; i <= 12; i++) if (!done.has(i)) { current = i; break; }
+        const closedCount = closed.count ?? 0;
+        return json({
+          ok: true,
+          settings: s.data ?? { paper_account_balance_zar: 10000, risk_percent: 1, learning_mode: true, mentor_reviewed: false, course_video_url: null, note: "defaults — no settings row yet" },
+          current_lesson: current <= 12 ? { lesson_no: current, title: LESSON_TITLES[current - 1] } : { lesson_no: null, title: "All 12 lessons completed" },
+          closed_trades: closedCount, closed_target: 30,
+          live_trading_unlocked: closedCount >= 30 && !!s.data?.mentor_reviewed,
+          open_trades: open.data ?? [], open_count: open.data?.length ?? 0,
+        });
+      }
+
+      case "get_trading_stats": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("trading_stats", {
+          p_user_id: ownerId, p_from: body?.from ? String(body.from) : null, p_to: body?.to ? String(body.to) : null,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, stats: data });
+      }
+
+      case "list_paper_trades": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const limit = Math.min(Math.max(Number(body?.limit ?? 50), 1), 100);
+        let q = supabase.from("invest_paper_trades").select(TRADE_FIELDS).eq("user_id", ownerId).is("deleted_at", null)
+          .order("occurred_at", { ascending: false }).limit(limit);
+        if (body?.include_legacy !== true) q = q.eq("is_legacy", false);
+        if (body?.status === "open" || body?.status === "closed") q = q.eq("status", body.status);
+        if (body?.symbol) q = q.ilike("symbol", String(body.symbol));
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        return json({ ok: true, trades: data ?? [], count: data?.length ?? 0 });
+      }
+
+      case "get_trading_plan": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data: plan, error } = await supabase.from("trading_plans").select("*").eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 500);
+        let versions: unknown[] | undefined;
+        if (body?.include_versions === true && plan) {
+          const v = await supabase.from("trading_plan_versions").select("id,snapshot,created_at").eq("plan_id", plan.id).eq("user_id", ownerId).order("created_at", { ascending: false }).limit(50);
+          if (v.error) return json({ ok: false, error: v.error.message }, 500);
+          versions = v.data ?? [];
+        }
+        return json({ ok: true, plan, last_updated: plan?.updated_at ?? null, ...(versions ? { versions } : {}) });
+      }
+
+      case "list_course_progress": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.from("trading_course_progress").select("lesson_no,status,notes,updated_at").eq("user_id", ownerId);
+        if (error) return json({ ok: false, error: error.message }, 500);
+        const by = new Map((data ?? []).map((p: any) => [p.lesson_no, p]));
+        const lessons = LESSON_TITLES.map((title, i) => {
+          const no = i + 1; const p: any = by.get(no);
+          const prevDone = no === 1 || (by.get(no - 1) as any)?.status === "completed";
+          return { lesson_no: no, title, status: p?.status ?? "not_started", notes: p?.notes ?? null, locked: !prevDone, updated_at: p?.updated_at ?? null };
+        });
+        return json({ ok: true, lessons, count: 12 });
+      }
+
+      case "list_watchlist": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const [w, it] = await Promise.all([
+          supabase.from("invest_watchlists").select("id,name,created_at").eq("user_id", ownerId).is("deleted_at", null).order("created_at"),
+          supabase.from("invest_watchlist_items").select("id,watchlist_id,symbol,asset_type,tradingview_symbol,created_at").eq("user_id", ownerId).is("deleted_at", null).order("created_at"),
+        ]);
+        if (w.error || it.error) return json({ ok: false, error: (w.error || it.error)!.message }, 500);
+        const watchlists = (w.data ?? []).map((l: any) => ({ ...l, items: (it.data ?? []).filter((x: any) => x.watchlist_id === l.id) }));
+        return json({ ok: true, watchlists, count: watchlists.length });
+      }
+
+      case "list_key_levels": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        let itemIds: string[] = [];
+        if (body?.watchlist_item_id) itemIds = [String(body.watchlist_item_id)];
+        else if (body?.symbol) {
+          const { data, error } = await supabase.from("invest_watchlist_items").select("id").eq("user_id", ownerId).is("deleted_at", null).ilike("symbol", String(body.symbol));
+          if (error) return json({ ok: false, error: error.message }, 500);
+          itemIds = (data ?? []).map((r: any) => r.id);
+          if (!itemIds.length) return json({ ok: true, levels: [], count: 0 });
+        }
+        let q = supabase.from("trading_key_levels").select("id,watchlist_item_id,zone_low,zone_high,level_type,timeframe,note,source,verified,created_at")
+          .eq("user_id", ownerId).is("deleted_at", null).order("zone_low", { ascending: false }).limit(200);
+        if (itemIds.length) q = q.in("watchlist_item_id", itemIds);
+        const { data, error } = await q;
+        if (error) return json({ ok: false, error: error.message }, 500);
+        const levels = (data ?? []).map((l: any) => ({ ...l, badge: l.verified ? "verified" : "draft — verify" }));
+        return json({ ok: true, levels, count: levels.length });
+      }
+
+      case "get_market_pulse": {
+        const { data, error } = await supabase.from("market_prices_cache").select("symbol,asset_type,price,change_1d,currency,asof").order("symbol");
+        if (error) return json({ ok: false, error: error.message }, 500);
+        const zar = (data ?? []).find((r: any) => r.symbol === "USD/ZAR");
+        const zarChange = zar?.change_1d === null || zar?.change_1d === undefined ? null : Number(zar.change_1d);
+        const risk_mood = zarChange === null ? "Unknown" : zarChange > 0.5 ? "Risk-Off" : zarChange < -0.5 ? "Risk-On" : "Neutral";
+        return json({
+          ok: true, prices: data ?? [], risk_mood,
+          note: "Currency prices update about once a day — use TradingView for live charts. change_1d null means no real figure is available.",
+        });
+      }
+
+      case "log_paper_trade": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("open_paper_trade", {
+          p_user_id: ownerId, p_symbol: String(body?.symbol ?? ""), p_tradingview_symbol: body?.tradingview_symbol ? String(body.tradingview_symbol) : null,
+          p_direction: String(body?.direction ?? ""), p_entry: Number(body?.entry_price), p_stop: Number(body?.stop_loss),
+          p_target: Number(body?.target_price), p_timeframe: body?.timeframe ? String(body.timeframe) : null,
+          p_setup_name: body?.setup_name ? String(body.setup_name) : null, p_reason: body?.reason ? String(body.reason) : null,
+          p_calendar_checked: body?.calendar_checked === true,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, trade: data });
+      }
+
+      case "move_stop_loss": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const id = body?.id ? String(body.id) : "";
+        const stop = Number(body?.stop_loss);
+        if (!id) return json({ ok: false, error: "id_required" }, 400);
+        if (!(stop > 0)) return json({ ok: false, error: "stop_loss_must_be_positive" }, 400);
+        const { data: t, error: fe } = await supabase.from("invest_paper_trades").select("id,status,is_legacy")
+          .eq("id", id).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+        if (fe) return json({ ok: false, error: fe.message }, 500);
+        if (!t || t.is_legacy) return json({ ok: false, error: "not_found" }, 404);
+        if (t.status !== "open") return json({ ok: false, error: "trade_not_open" }, 400);
+        const { data, error } = await supabase.from("invest_paper_trades").update({ stop_loss: stop }).eq("id", id).select(TRADE_FIELDS).maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, trade: data });
+      }
+
+      case "close_paper_trade": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("close_paper_trade", {
+          p_user_id: ownerId, p_trade_id: String(body?.id ?? ""), p_exit_price: Number(body?.exit_price),
+          p_exit_date: body?.exit_date ? String(body.exit_date) : null,
+          p_rule_followed: typeof body?.rule_followed === "boolean" ? body.rule_followed : null,
+          p_lesson: body?.lesson ? String(body.lesson) : null,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, trade: data });
+      }
+
+      case "update_trading_plan": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const patch: Record<string, string | null> = {};
+        for (const f of PLAN_SECTIONS) if (f in (body ?? {})) patch[f] = body[f] === null ? null : String(body[f]);
+        if (!Object.keys(patch).length) return json({ ok: false, error: "no_sections_given" }, 400);
+        const { data, error } = await supabase.rpc("save_trading_plan", { p_user_id: ownerId, p_patch: patch });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, plan: data, updated_sections: Object.keys(patch) });
+      }
+
+      case "update_lesson_progress": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const { data, error } = await supabase.rpc("set_lesson_progress", {
+          p_user_id: ownerId, p_lesson_no: Number(body?.lesson_no), p_status: String(body?.status ?? ""),
+          p_notes: typeof body?.notes === "string" ? body.notes : null,
+        });
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, lesson: data });
+      }
+
+      case "add_key_level": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const zl = Number(body?.zone_low), zh = Number(body?.zone_high);
+        if (!(zl > 0 && zh > 0)) return json({ ok: false, error: "zone_low_and_zone_high_required" }, 400);
+        if (zh < zl) return json({ ok: false, error: "zone_high_must_be_at_least_zone_low" }, 400);
+        const type = String(body?.level_type ?? "");
+        if (!["support", "resistance"].includes(type)) return json({ ok: false, error: "level_type_must_be_support_or_resistance" }, 400);
+        let itemId: string | null = null;
+        if (body?.watchlist_item_id) {
+          const { data } = await supabase.from("invest_watchlist_items").select("id").eq("id", String(body.watchlist_item_id)).eq("user_id", ownerId).is("deleted_at", null).maybeSingle();
+          itemId = data?.id ?? null;
+        } else if (body?.symbol) {
+          const { data } = await supabase.from("invest_watchlist_items").select("id").eq("user_id", ownerId).is("deleted_at", null).ilike("symbol", String(body.symbol)).order("created_at").limit(1);
+          itemId = data?.[0]?.id ?? null;
+        }
+        if (!itemId) return json({ ok: false, error: "watchlist_item_not_found — add the symbol to a watchlist first" }, 404);
+        const { data, error } = await supabase.from("trading_key_levels").insert({
+          user_id: ownerId, watchlist_item_id: itemId, zone_low: zl, zone_high: zh, level_type: type,
+          timeframe: body?.timeframe ? String(body.timeframe) : null, note: body?.note ? String(body.note) : null,
+          source: "claude", verified: false,
+        }).select("*").maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, level: data });
+      }
+
+      case "add_watchlist_item": {
+        const ownerId = requireOwner();
+        if (!ownerId) return json({ ok: false, error: "owner_not_configured" }, 500);
+        const symbol = String(body?.symbol ?? "").trim().toUpperCase();
+        if (!symbol) return json({ ok: false, error: "symbol_required" }, 400);
+        let q = supabase.from("invest_watchlists").select("id,name").eq("user_id", ownerId).is("deleted_at", null);
+        if (body?.watchlist_id) q = q.eq("id", String(body.watchlist_id));
+        else if (body?.watchlist_name) q = q.ilike("name", String(body.watchlist_name));
+        else return json({ ok: false, error: "watchlist_id_or_watchlist_name_required" }, 400);
+        const { data: lists, error: le } = await q.limit(1);
+        if (le) return json({ ok: false, error: le.message }, 500);
+        const list = lists?.[0];
+        if (!list) return json({ ok: false, error: "watchlist_not_found" }, 404);
+        const { data: dup } = await supabase.from("invest_watchlist_items").select("id").eq("user_id", ownerId).eq("watchlist_id", list.id).is("deleted_at", null).ilike("symbol", symbol).limit(1);
+        if (dup?.length) return json({ ok: false, error: "already_on_watchlist" }, 409);
+        const { data, error } = await supabase.from("invest_watchlist_items").insert({
+          user_id: ownerId, watchlist_id: list.id, symbol, asset_type: body?.asset_type ? String(body.asset_type) : "fx",
+          tradingview_symbol: body?.tradingview_symbol ? String(body.tradingview_symbol) : null,
+        }).select("id,watchlist_id,symbol,asset_type,tradingview_symbol,created_at").maybeSingle();
+        if (error) return json({ ok: false, error: error.message }, 400);
+        return json({ ok: true, item: data, watchlist: list });
+      }
+
+      default:
+        return json({ ok: false, error: `unknown_action:${action}` }, 400);
+    }
+      default:
+        return json({ ok: false, error: `unknown_action:${action}` }, 400);
+    }
+  } catch (e) {
+    return json({ ok: false, error: (e as Error).message }, 500);
+  }
+}
