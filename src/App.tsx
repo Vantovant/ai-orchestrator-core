@@ -55,6 +55,8 @@ import ContactPage from "@/pages/marketing/ContactPage";
 import PrivacyPage from "@/pages/marketing/PrivacyPage";
 import TermsPage from "@/pages/marketing/TermsPage";
 import EmailSignaturePage from "@/pages/marketing/EmailSignaturePage";
+import OAuthConsent from "@/pages/OAuthConsent";
+import { oauthReturnPath } from "@/lib/oauth-return-path";
 
 const queryClient = new QueryClient();
 
@@ -86,7 +88,11 @@ function LoadingScreen() {
 function SignInRoute() {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (user) return <Navigate to="/app" replace />;
+  if (user) {
+    const raw = new URLSearchParams(window.location.search).get("next");
+    const next = raw ? oauthReturnPath(raw) : "/app";
+    return <Navigate to={next === "/" ? "/app" : next} replace />;
+  }
   return <AuthPage />;
 }
 
@@ -130,6 +136,7 @@ function AppRoutes() {
 
       {/* Auth entry */}
       <Route path="/signin" element={<SignInRoute />} />
+      <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
       <Route path="/auth" element={<Navigate to="/signin" replace />} />
       <Route path="/login" element={<Navigate to="/signin" replace />} />
 

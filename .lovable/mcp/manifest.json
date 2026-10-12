@@ -1,0 +1,3420 @@
+{
+  "version": 1,
+  "sdk_version": "3.0.5",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://zsvaqtlomgofwqkpwxeh.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "vantoos",
+      "version": "2.0.0",
+      "title": "VantoOS"
+    },
+    "tools": [
+      {
+        "name": "list_contacts",
+        "title": "List Contacts",
+        "description": "Filter VantoOS hub contacts by contact_type, lead_type, temperature, tag, or free-text search (matches name/email/phone). Returns up to 100 results. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "search": {
+              "type": "string",
+              "description": "Free-text search across name, email, phone"
+            },
+            "contact_type": {
+              "type": "string",
+              "enum": [
+                "mlm",
+                "email_marketing",
+                "personal",
+                "mixed"
+              ]
+            },
+            "lead_type": {
+              "type": "string"
+            },
+            "temperature": {
+              "type": "string"
+            },
+            "tag": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_contact",
+        "title": "Get Contact",
+        "description": "Full detail for one VantoOS hub contact, by id, phone, or email. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_contact",
+        "title": "Update Contact",
+        "description": "Edit a VantoOS hub contact's name, email, lead_type, temperature, tags, or consent flags. Only the fields you provide are changed — everything else is left untouched.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "hub_contacts.id — required"
+            },
+            "full_name": {
+              "type": "string"
+            },
+            "first_name": {
+              "type": "string"
+            },
+            "last_name": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string"
+            },
+            "lead_type": {
+              "type": "string"
+            },
+            "temperature": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "consent_whatsapp": {
+              "type": "boolean"
+            },
+            "consent_email": {
+              "type": "boolean"
+            },
+            "consent_sms": {
+              "type": "boolean"
+            },
+            "unsubscribed_channels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_contact_note",
+        "title": "Add Contact Note",
+        "description": "Append a timestamped note to a VantoOS hub contact. Strictly additive — never overwrites existing notes.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "hub_contacts.id — required"
+            },
+            "note": {
+              "type": "string",
+              "description": "Note text to append"
+            }
+          },
+          "required": [
+            "id",
+            "note"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_projects",
+        "title": "List Projects",
+        "description": "List your VantoOS projects (pinned first, then most recently updated). Use this to resolve a project name to its id before attaching a task, reminder, meeting, or note to it. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Filter by project status, e.g. 'active'"
+            },
+            "search": {
+              "type": "string",
+              "description": "Free-text match on project name"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_project_note",
+        "title": "Add Project Note",
+        "description": "Add a note to a specific project's daily note (get project_id from list_projects first). If a note already exists for that project on that day, this appends to it rather than overwriting. Defaults to today if note_date is omitted.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string",
+              "description": "projects.id — required"
+            },
+            "content": {
+              "type": "string",
+              "description": "Note text — required"
+            },
+            "note_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            }
+          },
+          "required": [
+            "project_id",
+            "content"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_diary_entry",
+        "title": "Add Diary Entry",
+        "description": "Add an entry to your VantoOS Voice Diary. This is a personal log, distinct from project notes — optionally tag it to one or more projects via linked_project_ids (get ids from list_projects).",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "description": "Entry text — required"
+            },
+            "title": {
+              "type": "string"
+            },
+            "mood": {
+              "type": "string"
+            },
+            "linked_project_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Project ids this entry relates to"
+            }
+          },
+          "required": [
+            "content"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_task",
+        "title": "Create Task",
+        "description": "Create a new VantoOS task, optionally attached to a project via project_id (get one from list_projects first). Duplicate titles within the same project scope are merged rather than creating a second task.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Task title — required"
+            },
+            "project_id": {
+              "type": "string",
+              "description": "Attach this task to a project"
+            },
+            "priority": {
+              "type": "string",
+              "enum": [
+                "critical",
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "description": {
+              "type": "string"
+            },
+            "due_date": {
+              "type": "string",
+              "description": "ISO 8601 date/time"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_tasks",
+        "title": "List Tasks",
+        "description": "List your VantoOS tasks — powers 'what's on my plate today' style questions (Dashboard / Plan Hub 'Tasks' tab). Filter by project_id, status, and/or a single calendar day via date (YYYY-MM-DD, matches due_date). Set include_undated to also surface tasks with no due date alongside that day's results. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "description": "e.g. 'pending', 'done'"
+            },
+            "date": {
+              "type": "string",
+              "description": "YYYY-MM-DD — filters to tasks due on this day"
+            },
+            "include_undated": {
+              "type": "boolean",
+              "description": "Also include tasks with no due_date"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "complete_task",
+        "title": "Complete Task",
+        "description": "Mark a VantoOS task as done (sets status to 'done'). Use list_tasks first to find the task id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "tasks.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_task",
+        "title": "Delete Task",
+        "description": "Delete a VantoOS task. This is a soft delete (the task is hidden from list_tasks and future dedupe checks but not physically removed). Use list_tasks first to find the task id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "tasks.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_reminder",
+        "title": "Create Reminder",
+        "description": "Create a new VantoOS reminder, optionally attached to a project via project_id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Reminder title — required"
+            },
+            "reminder_time": {
+              "type": "string",
+              "description": "ISO 8601 date/time — required"
+            },
+            "project_id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "reminder_time"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_reminders",
+        "title": "List Reminders",
+        "description": "List your VantoOS reminders — powers 'what's on my plate today' style questions (Dashboard / Plan Hub 'Reminders' tab). Filter by project_id, is_done, and/or a single calendar day via date (YYYY-MM-DD, matches reminder_time). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "is_done": {
+              "type": "boolean"
+            },
+            "date": {
+              "type": "string",
+              "description": "YYYY-MM-DD — filters to reminders on this day"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "complete_reminder",
+        "title": "Complete Reminder",
+        "description": "Mark a VantoOS reminder as done (sets is_done to true). Use list_reminders first to find the reminder id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "reminders.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_reminder",
+        "title": "Delete Reminder",
+        "description": "Permanently delete a VantoOS reminder. This is a hard delete — there is no undo. Use list_reminders first to find the reminder id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "reminders.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_meeting",
+        "title": "Create Meeting",
+        "description": "Create a new VantoOS meeting, optionally attached to a project via project_id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Meeting title — required"
+            },
+            "start_time": {
+              "type": "string",
+              "description": "ISO 8601 date/time — required"
+            },
+            "end_time": {
+              "type": "string",
+              "description": "ISO 8601 date/time — required"
+            },
+            "project_id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "attendees": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "title",
+            "start_time",
+            "end_time"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_meetings",
+        "title": "List Meetings",
+        "description": "List your VantoOS meetings — powers 'what's on my plate today' style questions (Dashboard / Plan Hub 'Meetings' tab). Filter by project_id, is_done, and/or a single calendar day via date (YYYY-MM-DD, matches start_time). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "is_done": {
+              "type": "boolean"
+            },
+            "date": {
+              "type": "string",
+              "description": "YYYY-MM-DD — filters to meetings on this day"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "complete_meeting",
+        "title": "Complete Meeting",
+        "description": "Mark a VantoOS meeting as done (sets is_done to true). Use list_meetings first to find the meeting id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "meetings.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_meeting",
+        "title": "Delete Meeting",
+        "description": "Permanently delete a VantoOS meeting. This is a hard delete — there is no undo. Use list_meetings first to find the meeting id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "meetings.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_finance_snapshot",
+        "title": "Get Finance Snapshot",
+        "description": "Curated Finance summary: last-30-days income/expense/net, top expense categories, debt summary (count + total outstanding), income streams (target vs actual), and upcoming budget events. The right first call for a budget review. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_finance_entries",
+        "title": "List Finance Entries",
+        "description": "List Finance ledger entries (income or expense). Filter by type, category, and/or a date range via from/to (YYYY-MM-DD, matches entry_date). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "income",
+                "expense"
+              ]
+            },
+            "category": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "to": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_finance_entry",
+        "title": "Create Finance Entry",
+        "description": "Log a new Finance ledger entry (income or expense).",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "income",
+                "expense"
+              ],
+              "description": "Defaults to 'expense'"
+            },
+            "category": {
+              "type": "string",
+              "description": "Defaults to 'general'"
+            },
+            "amount": {
+              "type": "number",
+              "description": "Required"
+            },
+            "entry_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string",
+              "description": "Defaults to 'claude-mcp'"
+            }
+          },
+          "required": [
+            "amount"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_finance_entry",
+        "title": "Update Finance Entry",
+        "description": "Edit a Finance ledger entry. Use list_finance_entries first to find the entry id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "finance_entries.id — required"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "income",
+                "expense"
+              ]
+            },
+            "category": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            },
+            "entry_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_finance_entry",
+        "title": "Delete Finance Entry",
+        "description": "Delete a Finance ledger entry. Soft delete — same as the app's own delete button, fully recoverable in the database if needed. Use list_finance_entries first to find the entry id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "finance_entries.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_debts",
+        "title": "List Debts",
+        "description": "List debts. Filter by status (e.g. 'active', 'settled'). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_debt",
+        "title": "Create Debt",
+        "description": "Add a new debt.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "lender_name": {
+              "type": "string",
+              "description": "Required"
+            },
+            "principal": {
+              "type": "number",
+              "description": "Outstanding balance — required"
+            },
+            "interest_rate": {
+              "type": "number",
+              "description": "Annual %"
+            },
+            "repayment_amount": {
+              "type": "number",
+              "description": "Monthly"
+            },
+            "due_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "lender_name",
+            "principal"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_debt",
+        "title": "Update Debt",
+        "description": "Edit a debt — balance, rate, repayment, due day, status, or notes. Use list_debts first to find the debt id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "debts.id — required"
+            },
+            "lender_name": {
+              "type": "string"
+            },
+            "principal": {
+              "type": "number"
+            },
+            "interest_rate": {
+              "type": "number"
+            },
+            "repayment_amount": {
+              "type": "number"
+            },
+            "due_day": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "status": {
+              "type": "string",
+              "description": "e.g. 'active', 'settled'"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_debt",
+        "title": "Delete Debt",
+        "description": "Delete a debt. Soft delete. Use list_debts first to find the debt id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "debts.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_income_streams",
+        "title": "List Income Streams",
+        "description": "List income streams with monthly target vs actual. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_income_stream",
+        "title": "Create Income Stream",
+        "description": "Add a new income stream.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string",
+              "description": "User-friendly name — required"
+            },
+            "stream_type": {
+              "type": "string",
+              "description": "e.g. salary, business, network_marketing, side_hustle"
+            },
+            "monthly_target": {
+              "type": "number",
+              "description": "Required"
+            },
+            "current_month_income": {
+              "type": "number"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "label",
+            "monthly_target"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_income_stream",
+        "title": "Update Income Stream",
+        "description": "Edit an income stream. Use list_income_streams first to find the id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "income_streams.id — required"
+            },
+            "stream_type": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "monthly_target": {
+              "type": "number"
+            },
+            "current_month_income": {
+              "type": "number"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_income_stream",
+        "title": "Delete Income Stream",
+        "description": "Delete an income stream. Soft delete. Use list_income_streams first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "income_streams.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_opportunities",
+        "title": "List Opportunities",
+        "description": "List savings/income/funding/compliance opportunities. Filter by status. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "e.g. 'open', 'in_progress', 'done', 'dismissed'"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_opportunity",
+        "title": "Create Opportunity",
+        "description": "Add a new opportunity (a savings idea, income idea, funding lead, or compliance item).",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Required"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "savings",
+                "income",
+                "funding",
+                "compliance"
+              ]
+            },
+            "estimated_value": {
+              "type": "number"
+            },
+            "difficulty": {
+              "type": "string",
+              "enum": [
+                "easy",
+                "medium",
+                "hard"
+              ]
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_opportunity",
+        "title": "Update Opportunity",
+        "description": "Edit an opportunity. Use list_opportunities first to find the id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "opportunities.id — required"
+            },
+            "title": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "savings",
+                "income",
+                "funding",
+                "compliance"
+              ]
+            },
+            "estimated_value": {
+              "type": "number"
+            },
+            "difficulty": {
+              "type": "string",
+              "enum": [
+                "easy",
+                "medium",
+                "hard"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "in_progress",
+                "done",
+                "dismissed"
+              ]
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_opportunity",
+        "title": "Delete Opportunity",
+        "description": "Delete an opportunity. Soft delete. Use list_opportunities first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "opportunities.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_budget_items",
+        "title": "List Budget Items",
+        "description": "List recurring bills/subscriptions. Filter by status. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "e.g. 'active', 'paused', 'cancelled'"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_budget_item",
+        "title": "Create Budget Item",
+        "description": "Add a new recurring bill/subscription.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Required"
+            },
+            "amount": {
+              "type": "number",
+              "description": "Required"
+            },
+            "type": {
+              "type": "string",
+              "description": "Defaults to 'subscription'"
+            },
+            "description": {
+              "type": "string"
+            },
+            "cadence": {
+              "type": "string",
+              "description": "Defaults to 'monthly'"
+            },
+            "due_day_of_month": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "due_month_of_year": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "due_date_custom": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "category": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": "string"
+            },
+            "autopay": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "amount"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_budget_item",
+        "title": "Update Budget Item",
+        "description": "Edit a recurring bill/subscription. Use list_budget_items first to find the id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "finance_budget_items.id — required"
+            },
+            "name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            },
+            "cadence": {
+              "type": "string"
+            },
+            "due_day_of_month": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            },
+            "due_month_of_year": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "due_date_custom": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "category": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "autopay": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_budget_item",
+        "title": "Delete Budget Item",
+        "description": "Delete a recurring bill/subscription. Soft delete. Use list_budget_items first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "finance_budget_items.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_upcoming_budget_events",
+        "title": "List Upcoming Budget Events",
+        "description": "List individual bill instances (due dates) in a date range. Defaults to today onward if from is omitted. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "to": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "mark_budget_event_paid",
+        "title": "Mark Budget Event Paid",
+        "description": "Mark a bill instance as paid. Use list_upcoming_budget_events first to find the event id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "finance_budget_events.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_budget_event_status",
+        "title": "Update Budget Event Status",
+        "description": "Change a bill instance's status directly (e.g. back to 'upcoming', or to 'skipped'). Use list_upcoming_budget_events first to find the event id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "finance_budget_events.id — required"
+            },
+            "status": {
+              "type": "string",
+              "description": "Required"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_shopping_items",
+        "title": "List Shopping Items",
+        "description": "List shopping list items. Filter by category, spend_type, and/or done status. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string"
+            },
+            "spend_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "business",
+                "mixed"
+              ]
+            },
+            "is_done": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_shopping_item",
+        "title": "Add Shopping Item",
+        "description": "Add a shopping list item. Capture need_vs_want and a short justification up front — that's the buy-decision framework applied at entry, not left for later.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Required"
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Defaults to 1"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "groceries",
+                "household",
+                "personal",
+                "other"
+              ]
+            },
+            "spend_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "business",
+                "mixed"
+              ],
+              "description": "Defaults to 'personal'"
+            },
+            "need_vs_want": {
+              "type": "string",
+              "enum": [
+                "need",
+                "want"
+              ]
+            },
+            "justification": {
+              "type": "string",
+              "description": "Why it's needed, or how it profits you"
+            },
+            "unit_cost_estimate": {
+              "type": "number"
+            },
+            "is_recurring": {
+              "type": "boolean"
+            },
+            "trusted_source_id": {
+              "type": "string",
+              "description": "From list_trusted_sources"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_shopping_item",
+        "title": "Update Shopping Item",
+        "description": "Edit a shopping list item. Use list_shopping_items first to find the item id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "shopping_items.id — required"
+            },
+            "name": {
+              "type": "string"
+            },
+            "quantity": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "category": {
+              "type": "string"
+            },
+            "spend_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "business",
+                "mixed"
+              ]
+            },
+            "need_vs_want": {
+              "type": "string",
+              "enum": [
+                "need",
+                "want"
+              ]
+            },
+            "justification": {
+              "type": "string"
+            },
+            "unit_cost_estimate": {
+              "type": "number"
+            },
+            "actual_cost": {
+              "type": "number"
+            },
+            "is_recurring": {
+              "type": "boolean"
+            },
+            "trusted_source_id": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "complete_shopping_item",
+        "title": "Complete Shopping Item",
+        "description": "Mark a shopping item bought. Pass actual_cost if it differs from the original estimate. Set log_to_finance:true to also create the matching Finance expense (category = the item's category, business/personal split from the item's spend_type) — needs either actual_cost here or an existing unit_cost_estimate on the item to have an amount to log.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "shopping_items.id — required"
+            },
+            "actual_cost": {
+              "type": "number"
+            },
+            "log_to_finance": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_shopping_item",
+        "title": "Delete Shopping Item",
+        "description": "Delete a shopping list item. Soft delete. Use list_shopping_items first to find the item id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "shopping_items.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_trips",
+        "title": "List Trips",
+        "description": "List trips. Filter by status and/or spend_type. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "upcoming",
+                "in-progress",
+                "completed",
+                "cancelled"
+              ]
+            },
+            "spend_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "business",
+                "mixed"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_trip",
+        "title": "Create Trip",
+        "description": "Add a trip. Capture need_vs_want and a short justification up front (the buy-decision framework applied at entry) — especially worth using here since trips tend to be bigger, less frequent spends than shopping items.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "destination": {
+              "type": "string",
+              "description": "Required"
+            },
+            "start_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD — required"
+            },
+            "end_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD — required"
+            },
+            "spend_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "business",
+                "mixed"
+              ],
+              "description": "Defaults to 'personal'"
+            },
+            "need_vs_want": {
+              "type": "string",
+              "enum": [
+                "need",
+                "want"
+              ]
+            },
+            "justification": {
+              "type": "string",
+              "description": "Purpose / expected return on this trip"
+            },
+            "budgeted_amount": {
+              "type": "number"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "destination",
+            "start_date",
+            "end_date"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_trip",
+        "title": "Update Trip",
+        "description": "Edit a trip, including its status (upcoming/in-progress/completed/cancelled). Use list_trips first to find the trip id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "trips.id — required"
+            },
+            "destination": {
+              "type": "string"
+            },
+            "start_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "end_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "upcoming",
+                "in-progress",
+                "completed",
+                "cancelled"
+              ]
+            },
+            "spend_type": {
+              "type": "string",
+              "enum": [
+                "personal",
+                "business",
+                "mixed"
+              ]
+            },
+            "need_vs_want": {
+              "type": "string",
+              "enum": [
+                "need",
+                "want"
+              ]
+            },
+            "justification": {
+              "type": "string"
+            },
+            "budgeted_amount": {
+              "type": "number"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_trip",
+        "title": "Delete Trip",
+        "description": "Delete a trip. Soft delete. Use list_trips first to find the trip id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "trips.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_trip_expense",
+        "title": "Add Trip Expense",
+        "description": "Add an expense to a trip (flights, hotel, fuel...). Always also creates the matching Finance expense (category 'travel', business/personal split from the trip's spend_type) so trip cost never drifts out of sync with Finance. Use list_trips first to get the trip_id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string",
+              "description": "trips.id — required"
+            },
+            "label": {
+              "type": "string",
+              "description": "e.g. 'flights', 'hotel' — required"
+            },
+            "amount": {
+              "type": "number",
+              "description": "Required"
+            },
+            "expense_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "trusted_source_id": {
+              "type": "string",
+              "description": "From list_trusted_sources"
+            }
+          },
+          "required": [
+            "trip_id",
+            "label",
+            "amount"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_trip_expense",
+        "title": "Update Trip Expense",
+        "description": "Edit a trip expense. Amount/date/label edits also update the mirrored Finance entry. Use get_trip_budget_status first to find the expense id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "trip_expenses.id — required"
+            },
+            "label": {
+              "type": "string"
+            },
+            "amount": {
+              "type": "number"
+            },
+            "expense_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "trusted_source_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_trip_expense",
+        "title": "Delete Trip Expense",
+        "description": "Delete a trip expense. Soft delete — also soft-deletes the mirrored Finance entry, so the two never drift apart. Use get_trip_budget_status first to find the expense id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "trip_expenses.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_trip_budget_status",
+        "title": "Get Trip Budget Status",
+        "description": "Get one trip plus all its expenses, total spent, and (if budgeted_amount was set) how much budget remains. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string",
+              "description": "trips.id — required"
+            }
+          },
+          "required": [
+            "trip_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_trusted_sources",
+        "title": "List Trusted Sources",
+        "description": "List trusted vendors/sources (places you trust for good value). Filter by category. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_trusted_source",
+        "title": "Add Trusted Source",
+        "description": "Add a trusted vendor/source.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Required"
+            },
+            "category": {
+              "type": "string",
+              "description": "e.g. groceries, electronics, household, business_supplies, travel, general"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Why it's trusted — price, quality, reliability"
+            },
+            "url": {
+              "type": "string"
+            },
+            "is_preferred": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_trusted_source",
+        "title": "Update Trusted Source",
+        "description": "Edit a trusted vendor/source. Use list_trusted_sources first to find the id. Only the fields you provide are changed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "trusted_sources.id — required"
+            },
+            "name": {
+              "type": "string"
+            },
+            "category": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "is_preferred": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_trusted_source",
+        "title": "Delete Trusted Source",
+        "description": "Delete a trusted vendor/source. Soft delete. Use list_trusted_sources first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "trusted_sources.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_wellness_metrics",
+        "title": "List Wellness Metrics",
+        "description": "List Wellness vitals entries (weight, body fat %, waist, blood pressure, resting HR, steps, sleep hours, water intake). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "description": "Defaults to 90"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_wellness_metric",
+        "title": "Add Wellness Metric",
+        "description": "Log a Wellness vitals entry for a given day. Every field is optional except the date (which defaults to today) — log just the ones you have.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "recorded_on": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "weight_kg": {
+              "type": "number"
+            },
+            "waist_cm": {
+              "type": "number"
+            },
+            "body_fat_pct": {
+              "type": "number"
+            },
+            "systolic_bp": {
+              "type": "integer"
+            },
+            "diastolic_bp": {
+              "type": "integer"
+            },
+            "resting_hr": {
+              "type": "integer"
+            },
+            "steps": {
+              "type": "integer"
+            },
+            "sleep_hours": {
+              "type": "number"
+            },
+            "water_ml": {
+              "type": "integer"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_wellness_metric",
+        "title": "Delete Wellness Metric",
+        "description": "Delete a Wellness vitals entry. Soft delete. Use list_wellness_metrics first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_metrics.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_wellness_workouts",
+        "title": "List Wellness Workouts",
+        "description": "List logged workouts. Filter by category. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "cardio",
+                "strength",
+                "flexibility",
+                "sports",
+                "mind_body",
+                "other"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "description": "Defaults to 100"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_wellness_workout",
+        "title": "Add Wellness Workout",
+        "description": "Log a workout — a run, a lift, a yoga class, anything.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "activity": {
+              "type": "string",
+              "description": "e.g. 'Morning run', 'Leg day' — required"
+            },
+            "workout_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "cardio",
+                "strength",
+                "flexibility",
+                "sports",
+                "mind_body",
+                "other"
+              ]
+            },
+            "duration_minutes": {
+              "type": "integer"
+            },
+            "intensity": {
+              "type": "string",
+              "enum": [
+                "low",
+                "moderate",
+                "high"
+              ]
+            },
+            "distance_km": {
+              "type": "number"
+            },
+            "calories_burned": {
+              "type": "integer"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "activity"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_wellness_workout",
+        "title": "Delete Wellness Workout",
+        "description": "Delete a logged workout. Soft delete. Use list_wellness_workouts first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_workouts.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_wellness_documents",
+        "title": "List Wellness Documents",
+        "description": "List doctor's reports (lab results, consultations, imaging, prescriptions). Metadata only — does not include any attached file content. Filter by category. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "category": {
+              "type": "string",
+              "enum": [
+                "lab_results",
+                "consultation",
+                "imaging",
+                "prescription",
+                "other"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_wellness_document",
+        "title": "Add Wellness Document",
+        "description": "Add a doctor's report — metadata only (title, category, doctor, dates, notes). This tool cannot attach a file; use the Wellness page in the app to upload the actual PDF/image.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "e.g. 'Annual bloodwork' — required"
+            },
+            "category": {
+              "type": "string",
+              "enum": [
+                "lab_results",
+                "consultation",
+                "imaging",
+                "prescription",
+                "other"
+              ]
+            },
+            "doctor_name": {
+              "type": "string"
+            },
+            "facility": {
+              "type": "string"
+            },
+            "report_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "follow_up_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_wellness_document",
+        "title": "Delete Wellness Document",
+        "description": "Delete a doctor's report. Soft delete. Use list_wellness_documents first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_documents.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_wellness_conditions",
+        "title": "List Wellness Conditions",
+        "description": "List Health Profile entries — ongoing conditions, allergies, medications, and immunizations. Filter by item_type. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "item_type": {
+              "type": "string",
+              "enum": [
+                "condition",
+                "allergy",
+                "medication",
+                "immunization"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_wellness_condition",
+        "title": "Add Wellness Condition",
+        "description": "Add an entry to the Health Profile — a condition, allergy, medication, or immunization.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "item_type": {
+              "type": "string",
+              "enum": [
+                "condition",
+                "allergy",
+                "medication",
+                "immunization"
+              ],
+              "description": "Required"
+            },
+            "name": {
+              "type": "string",
+              "description": "e.g. 'Penicillin', 'Hypertension', 'Metformin 500mg' — required"
+            },
+            "detail": {
+              "type": "string",
+              "description": "Dosage, frequency, or severity"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "ongoing",
+                "resolved"
+              ],
+              "description": "Defaults to 'active'"
+            },
+            "started_on": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "item_type",
+            "name"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_wellness_condition_status",
+        "title": "Update Wellness Condition Status",
+        "description": "Change a Health Profile entry's status (e.g. mark a condition resolved). Use list_wellness_conditions first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_conditions.id — required"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "ongoing",
+                "resolved"
+              ],
+              "description": "Required"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_wellness_condition",
+        "title": "Delete Wellness Condition",
+        "description": "Delete a Health Profile entry. Soft delete. Use list_wellness_conditions first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_conditions.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_wellness_journal",
+        "title": "List Wellness Journal",
+        "description": "List Wellness journal entries. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "description": "Defaults to 100"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_wellness_journal_entry",
+        "title": "Add Wellness Journal Entry",
+        "description": "Add a Wellness journal entry — how you're feeling, energy, sleep, progress toward goals.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "notes": {
+              "type": "string",
+              "description": "Entry text — required"
+            },
+            "entry_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "mood": {
+              "type": "string"
+            },
+            "energy_level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "stress_level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "sleep_quality": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "meditation_minutes": {
+              "type": "integer"
+            },
+            "gratitude": {
+              "type": "string"
+            },
+            "goal_focus": {
+              "type": "string",
+              "enum": [
+                "weight_loss",
+                "strength",
+                "mental_health",
+                "general_wellness",
+                "recovery"
+              ]
+            }
+          },
+          "required": [
+            "notes"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_wellness_journal_entry",
+        "title": "Delete Wellness Journal Entry",
+        "description": "Delete a Wellness journal entry. Soft delete. Use list_wellness_journal first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_journal.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_wellness_goals",
+        "title": "List Wellness Goals",
+        "description": "List Wellness goals across Body, Mind, and Health domains. Filter by status. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "achieved",
+                "abandoned"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_wellness_goal",
+        "title": "Add Wellness Goal",
+        "description": "Set a new Wellness goal. If target_metric is 'weight_kg' with both starting_value and target_value set, the app computes a live progress bar from logged vitals.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "e.g. 'Get to 80kg', 'Meditate daily' — required"
+            },
+            "domain": {
+              "type": "string",
+              "enum": [
+                "body",
+                "mind",
+                "health"
+              ],
+              "description": "Defaults to 'body'"
+            },
+            "target_metric": {
+              "type": "string",
+              "description": "e.g. 'weight_kg' — only 'weight_kg' drives a progress bar today"
+            },
+            "target_value": {
+              "type": "number"
+            },
+            "starting_value": {
+              "type": "number"
+            },
+            "target_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD"
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_wellness_goal_status",
+        "title": "Update Wellness Goal Status",
+        "description": "Mark a Wellness goal achieved or abandoned. Use list_wellness_goals first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_goals.id — required"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "achieved",
+                "abandoned"
+              ],
+              "description": "Required"
+            }
+          },
+          "required": [
+            "id",
+            "status"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_wellness_goal",
+        "title": "Delete Wellness Goal",
+        "description": "Delete a Wellness goal. Soft delete. Use list_wellness_goals first to find the id.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "wellness_goals.id — required"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_trading_overview",
+        "title": "Get Trading Overview",
+        "description": "Trading overview: paper balance, risk %, learning mode, mentor review, course video, current lesson, closed non-legacy paper trades toward the 30 needed, and open trades. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_trading_stats",
+        "title": "Get Trading Stats",
+        "description": "Paper trading stats (same as the app's stats card): closed count, win rate, total R, avg R, avg win/loss in R, % rules followed, largest losing streak. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "from": {
+              "type": "string",
+              "description": "YYYY-MM-DD, filters on exit date"
+            },
+            "to": {
+              "type": "string",
+              "description": "YYYY-MM-DD, filters on exit date"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_paper_trades",
+        "title": "List Paper Trades",
+        "description": "List paper trades. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed"
+              ]
+            },
+            "symbol": {
+              "type": "string"
+            },
+            "include_legacy": {
+              "type": "boolean",
+              "description": "Defaults to false"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "description": "Defaults to 50"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_trading_plan",
+        "title": "Get Trading Plan",
+        "description": "Get the written Trading Plan (8 sections) and when it was last updated. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "include_versions": {
+              "type": "boolean",
+              "description": "Include up to 50 previous versions"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_course_progress",
+        "title": "List Course Progress",
+        "description": "List the 12 trading course lessons with status, notes and whether each is locked. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_watchlist",
+        "title": "List Watchlist",
+        "description": "List watchlists and their items, including TradingView symbols. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_key_levels",
+        "title": "List Key Levels",
+        "description": "List support/resistance key levels for a symbol or watchlist item, with the verified flag. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string"
+            },
+            "watchlist_item_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_market_pulse",
+        "title": "Get Market Pulse",
+        "description": "Cached market prices with as-of time and real 1-day change (null when unknown — never invented), plus the risk mood computed the same way as the app. Prices update about once a day. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "log_paper_trade",
+        "title": "Log Paper Trade",
+        "description": "Log a new PAPER trade (no real money). Risk % comes from the user's settings and cannot be set here; risk amount and position size are calculated by the database exactly as in the app.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tradingview_symbol": {
+              "type": "string",
+              "minLength": 1,
+              "description": "e.g. FX:USDZAR"
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "long",
+                "short"
+              ]
+            },
+            "entry_price": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "stop_loss": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "target_price": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "timeframe": {
+              "type": "string",
+              "minLength": 1
+            },
+            "setup_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "calendar_checked": {
+              "type": "boolean",
+              "const": true,
+              "description": "Must be true — the economic calendar was checked"
+            }
+          },
+          "required": [
+            "symbol",
+            "tradingview_symbol",
+            "direction",
+            "entry_price",
+            "stop_loss",
+            "target_price",
+            "timeframe",
+            "setup_name",
+            "reason",
+            "calendar_checked"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "move_stop_loss",
+        "title": "Move Stop Loss",
+        "description": "Move the stop loss on an open paper trade. Moving it further from entry is refused.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "invest_paper_trades.id"
+            },
+            "stop_loss": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "stop_loss"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "close_paper_trade",
+        "title": "Close Paper Trade",
+        "description": "Close an open paper trade. R-multiple, P/L and the paper balance are calculated by the database exactly as in the app.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "invest_paper_trades.id"
+            },
+            "exit_price": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "exit_date": {
+              "type": "string",
+              "description": "YYYY-MM-DD, defaults to today"
+            },
+            "rule_followed": {
+              "type": "boolean"
+            },
+            "lesson": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "exit_price",
+            "rule_followed",
+            "lesson"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_trading_plan",
+        "title": "Update Trading Plan",
+        "description": "Update named Trading Plan sections only; sections not passed stay unchanged. The previous version is kept in history.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "markets": {
+              "type": "string"
+            },
+            "timeframes": {
+              "type": "string"
+            },
+            "entry_rules": {
+              "type": "string"
+            },
+            "stop_rules": {
+              "type": "string"
+            },
+            "target_rules": {
+              "type": "string"
+            },
+            "no_trade_rules": {
+              "type": "string"
+            },
+            "risk_rules": {
+              "type": "string"
+            },
+            "daily_routine": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "update_lesson_progress",
+        "title": "Update Lesson Progress",
+        "description": "Set a course lesson's status and notes. Lesson N can only be started or completed after lesson N-1 is completed.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "lesson_no": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "not_started",
+                "in_progress",
+                "completed"
+              ]
+            },
+            "notes": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "lesson_no",
+            "status"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_key_level",
+        "title": "Add Key Level",
+        "description": "Add a support/resistance zone to a watchlist symbol. Always saved as a Claude draft (unverified) — the user verifies it on the chart.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "watchlist_item_id": {
+              "type": "string"
+            },
+            "symbol": {
+              "type": "string",
+              "description": "Used when watchlist_item_id is not given"
+            },
+            "zone_low": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "zone_high": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "level_type": {
+              "type": "string",
+              "enum": [
+                "support",
+                "resistance"
+              ]
+            },
+            "timeframe": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "zone_low",
+            "zone_high",
+            "level_type"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "add_watchlist_item",
+        "title": "Add Watchlist Item",
+        "description": "Add a symbol to an existing watchlist (by id or name).",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "watchlist_id": {
+              "type": "string"
+            },
+            "watchlist_name": {
+              "type": "string"
+            },
+            "symbol": {
+              "type": "string",
+              "minLength": 1
+            },
+            "asset_type": {
+              "type": "string",
+              "description": "e.g. fx, crypto, commodity, index, stock. Defaults to fx"
+            },
+            "tradingview_symbol": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,217 @@
+import { defineTool } from "@lovable.dev/mcp-js";
+import { z } from "zod";
+import { runTool } from "../run";
+
+// Ported from mcp-server/src/index.js (same names, descriptions, schemas).
+export default [
+  defineTool({
+    name: "get_finance_snapshot",
+    title: "Get Finance Snapshot",
+    description: "Curated Finance summary: last-30-days income/expense/net, top expense categories, debt " +
+      "summary (count + total outstanding), income streams (target vs actual), and upcoming budget " +
+      "events. The right first call for a budget review. Read-only.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("get_finance_snapshot", args, ctx),
+  }),
+  defineTool({
+    name: "list_finance_entries",
+    title: "List Finance Entries",
+    description: "List Finance ledger entries (income or expense). Filter by type, category, and/or a date " +
+      "range via from/to (YYYY-MM-DD, matches entry_date). Read-only.",
+    inputSchema: {
+      type: z.enum(["income", "expense"]).optional(),
+      category: z.string().optional(),
+      from: z.string().optional().describe("YYYY-MM-DD"),
+      to: z.string().optional().describe("YYYY-MM-DD"),
+      limit: z.number().int().min(1).max(100).optional(),
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("list_finance_entries", args, ctx),
+  }),
+  defineTool({
+    name: "create_finance_entry",
+    title: "Create Finance Entry",
+    description: "Log a new Finance ledger entry (income or expense).",
+    inputSchema: {
+      type: z.enum(["income", "expense"]).optional().describe("Defaults to 'expense'"),
+      category: z.string().optional().describe("Defaults to 'general'"),
+      amount: z.number().describe("Required"),
+      entry_date: z.string().optional().describe("YYYY-MM-DD, defaults to today"),
+      notes: z.string().optional(),
+      source: z.string().optional().describe("Defaults to 'claude-mcp'"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("create_finance_entry", args, ctx),
+  }),
+  defineTool({
+    name: "update_finance_entry",
+    title: "Update Finance Entry",
+    description: "Edit a Finance ledger entry. Use list_finance_entries first to find the entry id. Only the " +
+      "fields you provide are changed.",
+    inputSchema: {
+      id: z.string().describe("finance_entries.id — required"),
+      type: z.enum(["income", "expense"]).optional(),
+      category: z.string().optional(),
+      amount: z.number().optional(),
+      entry_date: z.string().optional().describe("YYYY-MM-DD"),
+      notes: z.string().optional(),
+      source: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("update_finance_entry", args, ctx),
+  }),
+  defineTool({
+    name: "delete_finance_entry",
+    title: "Delete Finance Entry",
+    description: "Delete a Finance ledger entry. Soft delete — same as the app's own delete button, fully " +
+      "recoverable in the database if needed. Use list_finance_entries first to find the entry id.",
+    inputSchema: {
+      id: z.string().describe("finance_entries.id — required"),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (args, ctx) => runTool("delete_finance_entry", args, ctx),
+  }),
+  defineTool({
+    name: "list_debts",
+    title: "List Debts",
+    description: "List debts. Filter by status (e.g. 'active', 'settled'). Read-only.",
+    inputSchema: { status: z.string().optional() },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("list_debts", args, ctx),
+  }),
+  defineTool({
+    name: "create_debt",
+    title: "Create Debt",
+    description: "Add a new debt.",
+    inputSchema: {
+      lender_name: z.string().describe("Required"),
+      principal: z.number().describe("Outstanding balance — required"),
+      interest_rate: z.number().optional().describe("Annual %"),
+      repayment_amount: z.number().optional().describe("Monthly"),
+      due_day: z.number().int().min(1).max(31).optional(),
+      notes: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("create_debt", args, ctx),
+  }),
+  defineTool({
+    name: "update_debt",
+    title: "Update Debt",
+    description: "Edit a debt — balance, rate, repayment, due day, status, or notes. Use list_debts first to " +
+      "find the debt id. Only the fields you provide are changed.",
+    inputSchema: {
+      id: z.string().describe("debts.id — required"),
+      lender_name: z.string().optional(),
+      principal: z.number().optional(),
+      interest_rate: z.number().optional(),
+      repayment_amount: z.number().optional(),
+      due_day: z.number().int().min(1).max(31).optional(),
+      status: z.string().optional().describe("e.g. 'active', 'settled'"),
+      notes: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("update_debt", args, ctx),
+  }),
+  defineTool({
+    name: "delete_debt",
+    title: "Delete Debt",
+    description: "Delete a debt. Soft delete. Use list_debts first to find the debt id.",
+    inputSchema: { id: z.string().describe("debts.id — required") },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (args, ctx) => runTool("delete_debt", args, ctx),
+  }),
+  defineTool({
+    name: "list_income_streams",
+    title: "List Income Streams",
+    description: "List income streams with monthly target vs actual. Read-only.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("list_income_streams", args, ctx),
+  }),
+  defineTool({
+    name: "create_income_stream",
+    title: "Create Income Stream",
+    description: "Add a new income stream.",
+    inputSchema: {
+      label: z.string().describe("User-friendly name — required"),
+      stream_type: z.string().optional().describe("e.g. salary, business, network_marketing, side_hustle"),
+      monthly_target: z.number().describe("Required"),
+      current_month_income: z.number().optional(),
+      notes: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("create_income_stream", args, ctx),
+  }),
+  defineTool({
+    name: "update_income_stream",
+    title: "Update Income Stream",
+    description: "Edit an income stream. Use list_income_streams first to find the id. Only the fields you " +
+      "provide are changed.",
+    inputSchema: {
+      id: z.string().describe("income_streams.id — required"),
+      stream_type: z.string().optional(),
+      label: z.string().optional(),
+      monthly_target: z.number().optional(),
+      current_month_income: z.number().optional(),
+      notes: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("update_income_stream", args, ctx),
+  }),
+  defineTool({
+    name: "delete_income_stream",
+    title: "Delete Income Stream",
+    description: "Delete an income stream. Soft delete. Use list_income_streams first to find the id.",
+    inputSchema: { id: z.string().describe("income_streams.id — required") },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (args, ctx) => runTool("delete_income_stream", args, ctx),
+  }),
+  defineTool({
+    name: "list_opportunities",
+    title: "List Opportunities",
+    description: "List savings/income/funding/compliance opportunities. Filter by status. Read-only.",
+    inputSchema: { status: z.string().optional().describe("e.g. 'open', 'in_progress', 'done', 'dismissed'") },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("list_opportunities", args, ctx),
+  }),
+  defineTool({
+    name: "create_opportunity",
+    title: "Create Opportunity",
+    description: "Add a new opportunity (a savings idea, income idea, funding lead, or compliance item).",
+    inputSchema: {
+      title: z.string().describe("Required"),
+      type: z.enum(["savings", "income", "funding", "compliance"]).optional(),
+      estimated_value: z.number().optional(),
+      difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+      notes: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("create_opportunity", args, ctx),
+  }),
+  defineTool({
+    name: "update_opportunity",
+    title: "Update Opportunity",
+    description: "Edit an opportunity. Use list_opportunities first to find the id. Only the fields you " +
+      "provide are changed.",
+    inputSchema: {
+      id: z.string().describe("opportunities.id — required"),
+      title: z.string().optional(),
+      type: z.enum(["savings", "income", "funding", "compliance"]).optional(),
+      estimated_value: z.number().optional(),
+      difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+      status: z.enum(["open", "in_progress", "done", "dismissed"]).optional(),
+      notes: z.string().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    handler: (args, ctx) => runTool("update_opportunity", args, ctx),
+  }),
+  defineTool({
+    name: "delete_opportunity",
+    title: "Delete Opportunity",
+    description: "Delete an opportunity. Soft delete. Use list_opportunities first to find the id.",
+    inputSchema: { id: z.string().describe("opportunities.id — required") },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (args, ctx) => runTool("delete_opportunity", args, ctx),
+  }),
+];
