@@ -95,13 +95,4 @@ export default [
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     handler: (args, ctx) => runTool("update_budget_event_status", args, ctx),
   }),
-  defineTool({
-    name: "get_trip_budget_status",
-    title: "Get Trip Budget Status",
-    description: "Get one trip plus all its expenses, total spent, and (if budgeted_amount was set) how much " +
-      "budget remains. Read-only.",
-    inputSchema: { trip_id: z.string().describe("trips.id — required") },
-    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-    handler: (args, ctx) => runTool("get_trip_budget_status", args, ctx),
-  }),
 ];
