@@ -2260,9 +2260,6 @@ export async function runAction(supabase: any, userId: string, action: string, b
       default:
         return json({ ok: false, error: `unknown_action:${action}` }, 400);
     }
-      default:
-        return json({ ok: false, error: `unknown_action:${action}` }, 400);
-    }
   } catch (e) {
     return json({ ok: false, error: (e as Error).message }, 500);
   }
