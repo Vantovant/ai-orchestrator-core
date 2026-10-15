@@ -22,6 +22,13 @@
       "when": 1791234534268,
       "tag": "0002_trading_shared_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792051220722,
+      "tag": "0003_personal_contacts",
+      "breakpoints": true
     }
   ]
 }

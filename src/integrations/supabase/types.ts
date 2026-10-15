@@ -2681,6 +2681,75 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_contacts: {
+        Row: {
+          branch: string | null
+          business_name: string | null
+          category: string
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          full_name: string
+          google_account_id: string | null
+          google_etag: string | null
+          google_last_synced_at: string | null
+          google_resource_name: string | null
+          google_sync_error: string | null
+          google_sync_status: string
+          id: string
+          linked_task_ids: string[]
+          notes: string | null
+          phones: string[]
+          primary_phone_e164: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          branch?: string | null
+          business_name?: string | null
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          full_name: string
+          google_account_id?: string | null
+          google_etag?: string | null
+          google_last_synced_at?: string | null
+          google_resource_name?: string | null
+          google_sync_error?: string | null
+          google_sync_status?: string
+          id?: string
+          linked_task_ids?: string[]
+          notes?: string | null
+          phones?: string[]
+          primary_phone_e164?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          branch?: string | null
+          business_name?: string | null
+          category?: string
+          created_at?: string
+          deleted_at?: string | null
+          email?: string | null
+          full_name?: string
+          google_account_id?: string | null
+          google_etag?: string | null
+          google_last_synced_at?: string | null
+          google_resource_name?: string | null
+          google_sync_error?: string | null
+          google_sync_status?: string
+          id?: string
+          linked_task_ids?: string[]
+          notes?: string | null
+          phones?: string[]
+          primary_phone_e164?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       portfolio_partner_messages: {
         Row: {
           attachments_json: Json | null
@@ -6466,6 +6535,10 @@ export type Database = {
         Args: { duplicate_ids: string[]; primary_id: string }
         Returns: Json
       }
+      normalize_phone_e164: {
+        Args: { default_cc?: string; p: string }
+        Returns: string
+      }
       open_paper_trade: {
         Args: {
           p_calendar_checked: boolean
@@ -6580,6 +6653,37 @@ export type Database = {
       trading_stats: {
         Args: { p_from?: string; p_to?: string; p_user_id: string }
         Returns: Json
+      }
+      upsert_personal_contact: {
+        Args: { p: Json }
+        Returns: {
+          branch: string | null
+          business_name: string | null
+          category: string
+          created_at: string
+          deleted_at: string | null
+          email: string | null
+          full_name: string
+          google_account_id: string | null
+          google_etag: string | null
+          google_last_synced_at: string | null
+          google_resource_name: string | null
+          google_sync_error: string | null
+          google_sync_status: string
+          id: string
+          linked_task_ids: string[]
+          notes: string | null
+          phones: string[]
+          primary_phone_e164: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "personal_contacts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       vos_compute_source_chain_hash: {
         Args: { approval_id: string }
