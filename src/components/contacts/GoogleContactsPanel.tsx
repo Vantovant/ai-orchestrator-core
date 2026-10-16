@@ -150,7 +150,7 @@ export default function GoogleContactsPanel({ onImported }: { onImported?: () =>
   const pushAll = async () => {
     setPushing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("google-contacts-push", { body: {} });
+      const { data, error } = await supabase.functions.invoke("google-contacts-push", { body: { bulk: true } });
       if (error) throw error;
       if ((data as any).error) throw new Error((data as any).error);
       const { created, updated, failed } = data as any;
