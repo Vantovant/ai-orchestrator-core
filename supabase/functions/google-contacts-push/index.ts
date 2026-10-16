@@ -20,7 +20,10 @@ serve(async (req) => {
     if (authErr || !user) return json({ error: "AUTH_MISSING" }, 401);
 
     const body = await req.json().catch(() => ({}));
-    const contactId: string | undefined = body.contact_id;
+    const contactId: string | undefined = typeof body.contact_id === "string" ? body.contact_id : undefined;
+    const bulk = body.bulk === true;
+    // Single-contact by default; bulk only when explicitly requested.
+    if (!contactId && !bulk) return json({ error: "contact_id_required" }, 400);
     const maxBatch: number = Math.min(body.max ?? 200, 500);
 
     const db = createClient(supabaseUrl, serviceKey);
@@ -29,10 +32,10 @@ serve(async (req) => {
     const token = await getValidAccessToken(db, account);
     if (!token) return json({ error: "reconnect_needed" }, 401);
 
-    // Load candidates
+    // hub_contacts is the shared merged record (no owner column); the Google
+    // account used is the caller's own connected account.
     let q = db.from("hub_contacts")
       .select("*, hub_contact_links(app_key, remote_id)")
-      .eq("user_id", user.id)
       .eq("is_deleted", false)
       .limit(maxBatch);
     if (contactId) q = q.eq("id", contactId);

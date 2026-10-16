@@ -66,8 +66,8 @@ serve(async (req) => {
         .maybeSingle();
 
       let hubId: string;
+      // hub_contacts is the shared merged record (no owner column).
       const contactPayload = {
-        user_id: user.id,
         full_name,
         first_name: name?.givenName ?? null,
         last_name: name?.familyName ?? null,
@@ -86,7 +86,7 @@ serve(async (req) => {
         const { error: upErr } = await db.from("hub_contacts").update({
           ...contactPayload,
           updated_at: new Date().toISOString(),
-        }).eq("id", existingLink.hub_contact_id).eq("user_id", user.id);
+        }).eq("id", existingLink.hub_contact_id);
         if (upErr) { skipped++; continue; }
         hubId = existingLink.hub_contact_id;
         await db.from("hub_contact_links").update({
