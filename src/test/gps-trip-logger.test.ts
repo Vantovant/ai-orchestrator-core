@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { tomtomStatic } from "../../supabase/functions/_shared/location-process";
 import {
   parsePayload, detectStops, detectLegs, toZonedIso, formatLocalShort, routeSegments, classifyQuality,
@@ -12,6 +12,8 @@ const at = (min: number) => new Date(T0 + min * 60000).toISOString();
 const pt = (min: number, lat: number, lon = 28.0, acc = 10) => ({ recorded_at: at(min), latitude: lat, longitude: lon, accuracy_m: acc });
 
 describe("optional TomTom drive-time estimates", () => {
+  // jsdom lacks the Edge runtime's AbortSignal.timeout implementation.
+  beforeEach(() => vi.stubGlobal("AbortSignal", { timeout: () => new AbortController().signal }));
   afterEach(() => vi.unstubAllGlobals());
   const a = { lat: -26, lon: 28 }, b = { lat: -26.1, lon: 28.1 };
 
