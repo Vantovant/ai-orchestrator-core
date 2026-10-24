@@ -30,7 +30,7 @@ export default function TripMap({ points, stops }: { points: LocationPoint[]; st
         <MapContainer bounds={bounds} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
           <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
           {segments.map((seg, i) => (
-            <Polyline key={`s${i}`} positions={seg.map((p) => [p.latitude, p.longitude])} pathOptions={{ color: primary, weight: 4 }} />
+            <Polyline key={`s${i}`} positions={seg.map((p) => [p.latitude, p.longitude] as [number, number])} pathOptions={{ color: primary, weight: 4 }} />
           ))}
           {segments.slice(1).map((seg, i) => {
             const prev = segments[i][segments[i].length - 1];

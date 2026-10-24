@@ -46,7 +46,7 @@ function newToken() {
   return "vtl_" + btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-const must = <T,>(r: { data: T; error: any }) => { if (r.error) throw r.error; return r.data; };
+const must = (r: { data: any; error: any }): any => { if (r.error) throw r.error; return r.data; };
 
 export const locationService = {
   async devices(): Promise<LocationDevice[]> {
