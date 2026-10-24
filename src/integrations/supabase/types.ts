@@ -2334,6 +2334,116 @@ export type Database = {
         }
         Relationships: []
       }
+      location_devices: {
+        Row: {
+          created_at: string
+          display_name: string
+          enabled: boolean
+          id: string
+          last_seen_at: string | null
+          rate_count: number
+          rate_window_start: string | null
+          revoked_at: string | null
+          source: string
+          token_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          enabled?: boolean
+          id?: string
+          last_seen_at?: string | null
+          rate_count?: number
+          rate_window_start?: string | null
+          revoked_at?: string | null
+          source?: string
+          token_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          enabled?: boolean
+          id?: string
+          last_seen_at?: string | null
+          rate_count?: number
+          rate_window_start?: string | null
+          revoked_at?: string | null
+          source?: string
+          token_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      location_processing_runs: {
+        Row: {
+          algorithm_version: string
+          error_summary: string | null
+          finished_at: string | null
+          id: string
+          point_count: number
+          started_at: string
+          status: string
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          algorithm_version: string
+          error_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          point_count?: number
+          started_at?: string
+          status?: string
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          algorithm_version?: string
+          error_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          point_count?: number
+          started_at?: string
+          status?: string
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_processing_runs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      location_settings: {
+        Row: {
+          auto_delete_enabled: boolean
+          created_at: string
+          raw_point_retention_days: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_delete_enabled?: boolean
+          created_at?: string
+          raw_point_retention_days?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_delete_enabled?: boolean
+          created_at?: string
+          raw_point_retention_days?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       market_news_cache: {
         Row: {
           created_at: string
@@ -4335,6 +4445,42 @@ export type Database = {
         }
         Relationships: []
       }
+      trip_expense_stop_links: {
+        Row: {
+          created_at: string
+          trip_expense_id: string
+          trip_stop_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          trip_expense_id: string
+          trip_stop_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          trip_expense_id?: string
+          trip_stop_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_expense_stop_links_trip_expense_id_fkey"
+            columns: ["trip_expense_id"]
+            isOneToOne: false
+            referencedRelation: "trip_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_expense_stop_links_trip_stop_id_fkey"
+            columns: ["trip_stop_id"]
+            isOneToOne: false
+            referencedRelation: "trip_stops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_expenses: {
         Row: {
           amount: number
@@ -4395,6 +4541,315 @@ export type Database = {
             columns: ["trusted_source_id"]
             isOneToOne: false
             referencedRelation: "trusted_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_legs: {
+        Row: {
+          actual_seconds: number | null
+          comparison_basis: string
+          confidence: number
+          coverage_ratio: number | null
+          created_at: string
+          delay_seconds: number | null
+          detection_version: string
+          ended_at: string | null
+          expected_distance_km: number | null
+          expected_seconds: number | null
+          from_stop_id: string | null
+          id: string
+          missing_intervals: Json
+          observed_distance_km: number | null
+          routing_provider: string | null
+          routing_requested_at: string | null
+          seq: number
+          started_at: string | null
+          to_stop_id: string | null
+          travel_mode: string
+          trip_id: string
+          user_id: string
+        }
+        Insert: {
+          actual_seconds?: number | null
+          comparison_basis?: string
+          confidence?: number
+          coverage_ratio?: number | null
+          created_at?: string
+          delay_seconds?: number | null
+          detection_version: string
+          ended_at?: string | null
+          expected_distance_km?: number | null
+          expected_seconds?: number | null
+          from_stop_id?: string | null
+          id?: string
+          missing_intervals?: Json
+          observed_distance_km?: number | null
+          routing_provider?: string | null
+          routing_requested_at?: string | null
+          seq?: number
+          started_at?: string | null
+          to_stop_id?: string | null
+          travel_mode?: string
+          trip_id: string
+          user_id: string
+        }
+        Update: {
+          actual_seconds?: number | null
+          comparison_basis?: string
+          confidence?: number
+          coverage_ratio?: number | null
+          created_at?: string
+          delay_seconds?: number | null
+          detection_version?: string
+          ended_at?: string | null
+          expected_distance_km?: number | null
+          expected_seconds?: number | null
+          from_stop_id?: string | null
+          id?: string
+          missing_intervals?: Json
+          observed_distance_km?: number | null
+          routing_provider?: string | null
+          routing_requested_at?: string | null
+          seq?: number
+          started_at?: string | null
+          to_stop_id?: string | null
+          travel_mode?: string
+          trip_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_legs_from_stop_id_fkey"
+            columns: ["from_stop_id"]
+            isOneToOne: false
+            referencedRelation: "trip_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_legs_to_stop_id_fkey"
+            columns: ["to_stop_id"]
+            isOneToOne: false
+            referencedRelation: "trip_stops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_legs_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_location_points: {
+        Row: {
+          accuracy_m: number | null
+          altitude_m: number | null
+          created_at: string
+          dedupe_fingerprint: string
+          device_id: string
+          heading_deg: number | null
+          id: string
+          latitude: number
+          longitude: number
+          payload_version: string | null
+          quality_status: string
+          received_at: string
+          recorded_at: string
+          source: string
+          source_event_id: string | null
+          speed_kmh: number | null
+          trip_id: string | null
+          user_id: string
+        }
+        Insert: {
+          accuracy_m?: number | null
+          altitude_m?: number | null
+          created_at?: string
+          dedupe_fingerprint: string
+          device_id: string
+          heading_deg?: number | null
+          id?: string
+          latitude: number
+          longitude: number
+          payload_version?: string | null
+          quality_status?: string
+          received_at?: string
+          recorded_at: string
+          source?: string
+          source_event_id?: string | null
+          speed_kmh?: number | null
+          trip_id?: string | null
+          user_id: string
+        }
+        Update: {
+          accuracy_m?: number | null
+          altitude_m?: number | null
+          created_at?: string
+          dedupe_fingerprint?: string
+          device_id?: string
+          heading_deg?: number | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          payload_version?: string | null
+          quality_status?: string
+          received_at?: string
+          recorded_at?: string
+          source?: string
+          source_event_id?: string | null
+          speed_kmh?: number | null
+          trip_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_location_points_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "location_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_location_points_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_stops: {
+        Row: {
+          arrival_at: string
+          arrival_uncertainty_seconds: number
+          centroid_lat: number
+          centroid_lon: number
+          confidence: number
+          created_at: string
+          departure_at: string | null
+          departure_uncertainty_seconds: number
+          detection_version: string
+          dwell_seconds: number | null
+          id: string
+          label_override: string | null
+          mean_accuracy_m: number | null
+          place_name: string | null
+          place_provider: string | null
+          place_provider_id: string | null
+          point_count: number
+          radius_m: number | null
+          seq: number
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          arrival_at: string
+          arrival_uncertainty_seconds?: number
+          centroid_lat: number
+          centroid_lon: number
+          confidence?: number
+          created_at?: string
+          departure_at?: string | null
+          departure_uncertainty_seconds?: number
+          detection_version: string
+          dwell_seconds?: number | null
+          id?: string
+          label_override?: string | null
+          mean_accuracy_m?: number | null
+          place_name?: string | null
+          place_provider?: string | null
+          place_provider_id?: string | null
+          point_count?: number
+          radius_m?: number | null
+          seq?: number
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          arrival_at?: string
+          arrival_uncertainty_seconds?: number
+          centroid_lat?: number
+          centroid_lon?: number
+          confidence?: number
+          created_at?: string
+          departure_at?: string | null
+          departure_uncertainty_seconds?: number
+          detection_version?: string
+          dwell_seconds?: number | null
+          id?: string
+          label_override?: string | null
+          mean_accuracy_m?: number | null
+          place_name?: string | null
+          place_provider?: string | null
+          place_provider_id?: string | null
+          point_count?: number
+          radius_m?: number | null
+          seq?: number
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_stops_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_tracking_sessions: {
+        Row: {
+          actual_ended_at: string | null
+          actual_started_at: string
+          created_at: string
+          device_id: string
+          id: string
+          status: string
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          actual_ended_at?: string | null
+          actual_started_at?: string
+          created_at?: string
+          device_id: string
+          id?: string
+          status?: string
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          actual_ended_at?: string | null
+          actual_started_at?: string
+          created_at?: string
+          device_id?: string
+          id?: string
+          status?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_tracking_sessions_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "location_devices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trip_tracking_sessions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
             referencedColumns: ["id"]
           },
         ]
