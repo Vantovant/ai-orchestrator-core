@@ -3414,6 +3414,294 @@
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
+      },
+      {
+        "name": "list_location_devices",
+        "title": "List Location Devices",
+        "description": "List GPS devices registered for trip tracking (no tokens). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_location_capture_status",
+        "title": "Get Location Capture Status",
+        "description": "Devices, open tracking sessions, last GPS fix and unassigned point count. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string",
+              "description": "IANA timezone for *_local fields, default Africa/Johannesburg (+02:00)"
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_trip_timeline",
+        "title": "Get Trip Timeline",
+        "description": "Stops and legs for a trip with UTC and local timestamps, dwell, delays, confidence and observed/inferred/unknown markers. Says 'No GPS recorded' when empty. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string",
+              "description": "trips.id — required"
+            },
+            "timezone": {
+              "type": "string",
+              "description": "IANA timezone for *_local fields, default Africa/Johannesburg (+02:00)"
+            }
+          },
+          "required": [
+            "trip_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_trip_stops",
+        "title": "List Trip Stops",
+        "description": "Paginated detected stops for a trip. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string",
+              "description": "trips.id — required"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "cursor": {
+              "type": "string",
+              "description": "next_cursor from a previous call"
+            },
+            "timezone": {
+              "type": "string",
+              "description": "IANA timezone for *_local fields, default Africa/Johannesburg (+02:00)"
+            }
+          },
+          "required": [
+            "trip_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_trip_route",
+        "title": "Get Trip Route",
+        "description": "Observed route as segments split at missing intervals (gaps are never drawn as roads). Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string",
+              "description": "trips.id — required"
+            },
+            "simplify": {
+              "type": "boolean",
+              "description": "Default true (~25 m)"
+            }
+          },
+          "required": [
+            "trip_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "compare_leg_to_expected",
+        "title": "Compare Leg To Expected",
+        "description": "Compare one leg's actual time with its expected time, stating the comparison basis honestly. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string"
+            },
+            "leg_id": {
+              "type": "string"
+            },
+            "timezone": {
+              "type": "string",
+              "description": "IANA timezone for *_local fields, default Africa/Johannesburg (+02:00)"
+            }
+          },
+          "required": [
+            "trip_id",
+            "leg_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "link_trip_expense_to_stop",
+        "title": "Link Trip Expense To Stop",
+        "description": "Record that a trip expense happened at a stop. Reference only — never creates or changes finance entries.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_expense_id": {
+              "type": "string"
+            },
+            "trip_stop_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "trip_expense_id",
+            "trip_stop_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "set_trip_stop_label",
+        "title": "Set Trip Stop Label",
+        "description": "Set your own name for a stop. Survives recomputation. Empty label clears it.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "stop_id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "stop_id",
+            "label"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "export_trip_location_data",
+        "title": "Export Trip Location Data",
+        "description": "Export a trip's points (up to 5000), stops and legs as JSON. Read-only.",
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "trip_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "delete_trip_location_data",
+        "title": "Delete Trip Location Data",
+        "description": "Permanently delete a trip's GPS data. scope: points | derived (stops+legs) | all. Requires confirm=true after the user explicitly agrees. Never touches the trip, expenses or finance.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "trip_id": {
+              "type": "string"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "points",
+                "derived",
+                "all"
+              ]
+            },
+            "confirm": {
+              "type": "boolean",
+              "description": "Must be true"
+            }
+          },
+          "required": [
+            "trip_id",
+            "scope",
+            "confirm"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
       }
     ]
   }

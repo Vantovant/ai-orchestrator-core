@@ -209,3 +209,6 @@ verify_jwt = false
 
 [functions.kairos-link]
 verify_jwt = false
+
+[functions.location-ingest]
+verify_jwt = false

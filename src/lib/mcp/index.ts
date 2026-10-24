@@ -11,6 +11,7 @@ import travel from "./tools/travel";
 import trustedSources from "./tools/trusted-sources";
 import wellness from "./tools/wellness";
 import trading from "./tools/trading";
+import location from "./tools/location";
 
 // Vite inlines the stable ref; the published SUPABASE_URL may be a proxy.
 const projectRef = import.meta.env["VITE_SUPABASE_PROJECT_ID"] ?? "project-ref-unset";
@@ -23,13 +24,13 @@ export default defineMcp({
   title: "VantoOS",
   version: "2.0.0",
   instructions:
-    "VantoOS executive command center. Tools act as the signed-in user: contacts (admins only), projects, notes, voice diary, tasks, reminders, meetings, finance, budget, shopping, travel, trusted sources, wellness and paper-only trading.",
+    "VantoOS executive command center. Tools act as the signed-in user: contacts (admins only), projects, notes, voice diary, tasks, reminders, meetings, finance, budget, shopping, travel, trusted sources, wellness, paper-only trading and GPS trip timelines (stops, legs, delays).",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
   }),
   tools: [
     ...contacts, ...projects, ...tasks, ...reminders, ...meetings, ...finance,
-    ...budget, ...shopping, ...travel, ...trustedSources, ...wellness, ...trading,
+    ...budget, ...shopping, ...travel, ...trustedSources, ...wellness, ...trading, ...location,
   ],
 });
