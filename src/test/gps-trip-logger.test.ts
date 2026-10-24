@@ -1,4 +1,5 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { tomtomStatic } from "../../supabase/functions/_shared/location-process";
 import {
   parsePayload, detectStops, detectLegs, toZonedIso, formatLocalShort, routeSegments, classifyQuality,
   computeDelay, fingerprintInput, MAX_BATCH,
@@ -9,6 +10,35 @@ const T0 = Date.parse("2026-10-24T08:00:00Z");
 const at = (min: number) => new Date(T0 + min * 60000).toISOString();
 // ~111 m per 0.001 deg latitude
 const pt = (min: number, lat: number, lon = 28.0, acc = 10) => ({ recorded_at: at(min), latitude: lat, longitude: lon, accuracy_m: acc });
+
+describe("optional TomTom drive-time estimates", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const a = { lat: -26, lon: 28 }, b = { lat: -26.1, lon: 28.1 };
+
+  it("does not request an estimate without a configured key", async () => {
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    expect(await tomtomStatic(null, a, b)).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("requests a traffic-free car estimate, not historical traffic", async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ routes: [{ summary: { travelTimeInSeconds: 600, lengthInMeters: 5000 } }] })));
+    vi.stubGlobal("fetch", request);
+    expect(await tomtomStatic("test-only", a, b)).toEqual({ seconds: 600, km: 5 });
+    const url = new URL(request.mock.calls[0][0]);
+    expect(url.searchParams.get("traffic")).toBe("false");
+    expect(url.searchParams.get("travelMode")).toBe("car");
+    expect(url.searchParams.has("departAt")).toBe(false);
+  });
+
+  it("leaves expected time unknown on invalid or failed routing responses", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ routes: [{ summary: { travelTimeInSeconds: null, lengthInMeters: 5000 } }] }))));
+    expect(await tomtomStatic("test-only", a, b)).toBeNull();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 403 })));
+    expect(await tomtomStatic("test-only", a, b)).toBeNull();
+  });
+});
 
 describe("ingest parsing", () => {
   it("accepts a valid OwnTracks location and converts tst to UTC", () => {

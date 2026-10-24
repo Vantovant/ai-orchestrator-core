@@ -23,16 +23,22 @@ async function reverseGeocode(lat: number, lon: number): Promise<{ name: string;
   } catch { return null; }
 }
 
-async function tomtomStatic(key: string, a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  // TomTom does not accept a departAt in the past, so past legs are compared
-  // against the static (traffic=false) route and labelled "static_route".
+export async function tomtomStatic(key: string | null, a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
+  // Optional, traffic-free drive-time ESTIMATE, never historical traffic.
+  // The stored static_route basis distinguishes this baseline from observed GPS.
+  // No configured key means no external request and no expected time.
+  if (!key?.trim()) return null;
   try {
     const url = `https://api.tomtom.com/routing/1/calculateRoute/${a.lat},${a.lon}:${b.lat},${b.lon}/json?traffic=false&travelMode=car&key=${encodeURIComponent(key)}`;
     const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!r.ok) return null;
     const s = (await r.json())?.routes?.[0]?.summary;
     if (!s) return null;
-    return { seconds: Number(s.travelTimeInSeconds), km: Number(s.lengthInMeters) / 1000 };
+    const seconds = s.travelTimeInSeconds;
+    const meters = s.lengthInMeters;
+    if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0 ||
+        typeof meters !== "number" || !Number.isFinite(meters) || meters < 0) return null;
+    return { seconds, km: meters / 1000 };
   } catch { return null; }
 }
 
