@@ -35,7 +35,7 @@ export default function TripDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Trip dates are provisional plans; assignment window is start 00:00 to end+1 day 00:00 SAST.
-  const window = useMemo(() => {
+  const range = useMemo(() => {
     if (!trip) return null;
     const from = new Date(`${trip.start_date}T00:00:00+02:00`).toISOString();
     const to = new Date(new Date(`${trip.end_date}T00:00:00+02:00`).getTime() + 86400000).toISOString();
@@ -191,7 +191,7 @@ export default function TripDetailPage() {
               )}
               <p className="text-xs text-muted-foreground">While paused, fixes are still received but not attached to this trip. If two trips track the same phone at once, fixes stay unassigned.</p>
               {unassigned > 0 && (
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => window && act(() => locationService.assignUnassigned(trip.id, window.from, window.to), "Fixes assigned")}>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => range && act(() => locationService.assignUnassigned(trip.id, range.from, range.to), "Fixes assigned")}>
                   Assign {unassigned} unassigned fixes from the trip dates
                 </Button>
               )}
