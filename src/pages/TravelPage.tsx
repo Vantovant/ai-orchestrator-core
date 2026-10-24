@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -153,7 +154,7 @@ export default function TravelPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-primary" />
-                      <CardTitle className="text-base">{trip.destination}</CardTitle>
+                      <CardTitle className="text-base"><Link to={`/travel/${trip.id}`} className="hover:underline">{trip.destination}</Link></CardTitle>
                     </div>
                     <div className="flex items-center gap-1">
                       <Badge variant="secondary" className={statusColor[trip.status]}>{trip.status}</Badge>
@@ -193,6 +194,9 @@ export default function TravelPage() {
                       onClick={() => setExpenseTripId(trip.id)}
                     >
                       <Receipt className="h-3.5 w-3.5" /> Add expense
+                    </Button>
+                    <Button asChild variant="ghost" size="sm" className="mt-2 h-7 gap-1 text-xs">
+                      <Link to={`/travel/${trip.id}`}><MapPin className="h-3.5 w-3.5" /> GPS timeline</Link>
                     </Button>
                   </div>
                 </CardContent>

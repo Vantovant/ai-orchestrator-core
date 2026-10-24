@@ -22,6 +22,7 @@ function FinanceRoute() {
   return <FinancePage />;
 }
 import TravelPage from "@/pages/TravelPage";
+import TripDetailPage from "@/pages/TripDetailPage";
 import ShoppingPage from "@/pages/ShoppingPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import SettingsPage from "@/pages/SettingsPage";
@@ -155,6 +156,7 @@ function AppRoutes() {
         <Route path="/invest" element={<Navigate to="/trading" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/travel" element={<TravelPage />} />
+        <Route path="/travel/:tripId" element={<TripDetailPage />} />
         <Route path="/shopping" element={<ShoppingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/weekly-report" element={<WeeklyReportPage />} />
