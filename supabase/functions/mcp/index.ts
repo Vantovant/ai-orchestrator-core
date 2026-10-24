@@ -3035,13 +3035,424 @@ var trading_default = [
   })
 ];
 
+// src/lib/mcp/tools/location.ts
+import { defineTool as defineTool13 } from "npm:@lovable.dev/mcp-js@3.0.5";
+import { z as z13 } from "npm:zod@^3.25.76";
+
+// supabase/functions/_shared/location-detect.ts
+var LOW_ACCURACY_M = 100;
+var SUSPECT_SPEED_KMH = 250;
+var GAP_SECONDS = 600;
+var MAX_BODY_BYTES = 256 * 1024;
+var MAX_FUTURE_SKEW_MS = 10 * 60 * 1e3;
+var MAX_PAST_AGE_MS = 30 * 24 * 3600 * 1e3;
+function haversineM(aLat, aLon, bLat, bLon) {
+  const R = 63710088e-1, rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad, dLon = (bLon - aLon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+var ms = (p) => Date.parse(p.recorded_at);
+function sortPoints(points) {
+  return [...points].sort((a, b) => ms(a) - ms(b));
+}
+function classifyQuality(points) {
+  const sorted = sortPoints(points);
+  const out = [];
+  let lastGood = null;
+  for (const p of sorted) {
+    let q = "accepted";
+    if (p.accuracy_m !== null && p.accuracy_m > LOW_ACCURACY_M) q = "low_accuracy";
+    else if (lastGood) {
+      const dt = (ms(p) - ms(lastGood)) / 1e3;
+      const d = haversineM(lastGood.latitude, lastGood.longitude, p.latitude, p.longitude);
+      if (dt > 0 && dt < GAP_SECONDS && d / dt * 3.6 > SUSPECT_SPEED_KMH) q = "suspect";
+      if (dt <= 0 && d > 50) q = "suspect";
+    }
+    if (q === "accepted") lastGood = p;
+    out.push({ ...p, quality_status: q });
+  }
+  return out;
+}
+function findGaps(reliable) {
+  const gaps = [];
+  for (let i = 1; i < reliable.length; i++) {
+    const s = (ms(reliable[i]) - ms(reliable[i - 1])) / 1e3;
+    if (s > GAP_SECONDS) gaps.push({ from: reliable[i - 1].recorded_at, to: reliable[i].recorded_at, seconds: Math.round(s) });
+  }
+  return gaps;
+}
+function routeSegments(reliable) {
+  const segs = [];
+  let cur = [];
+  for (let i = 0; i < reliable.length; i++) {
+    if (i > 0 && (ms(reliable[i]) - ms(reliable[i - 1])) / 1e3 > GAP_SECONDS) {
+      if (cur.length) segs.push(cur);
+      cur = [];
+    }
+    cur.push(reliable[i]);
+  }
+  if (cur.length) segs.push(cur);
+  return segs;
+}
+var DEFAULT_TZ = "Africa/Johannesburg";
+function offsetMinutes(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(date);
+  const g = (t) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"), g("second"));
+  return Math.round((asUtc - Math.floor(date.getTime() / 1e3) * 1e3) / 6e4);
+}
+function toZonedIso(iso, timeZone = DEFAULT_TZ) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  const off = offsetMinutes(d, timeZone);
+  const local = new Date(Math.floor(d.getTime() / 1e3) * 1e3 + off * 6e4);
+  const sign = off >= 0 ? "+" : "-";
+  const abs = Math.abs(off);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0"), mm = String(abs % 60).padStart(2, "0");
+  return `${local.toISOString().slice(0, 19)}${sign}${hh}:${mm}`;
+}
+function formatDuration(seconds) {
+  if (seconds === null || !Number.isFinite(seconds)) return "unknown";
+  const s = Math.abs(Math.round(seconds));
+  const h = Math.floor(s / 3600), m = Math.round(s % 3600 / 60);
+  return `${seconds < 0 ? "-" : ""}${h ? `${h}h ` : ""}${m}m`;
+}
+
+// src/lib/mcp/location-core.ts
+var NO_GPS = "No GPS recorded";
+async function ownTrip(sb, userId, tripId) {
+  const { data } = await sb.from("trips").select("id, destination, start_date, end_date, status").eq("id", tripId).eq("user_id", userId).is("deleted_at", null).maybeSingle();
+  return data;
+}
+function stopView(s, tz2) {
+  return {
+    id: s.id,
+    seq: s.seq,
+    label: s.label_override ?? s.place_name ?? null,
+    label_source: s.label_override ? "user" : s.place_name ? "inferred_reverse_geocode_candidate" : "unknown",
+    arrival_at: s.arrival_at,
+    arrival_local: toZonedIso(s.arrival_at, tz2),
+    arrival_marker: s.arrival_uncertainty_seconds ? "inferred_interval" : "observed",
+    arrival_window_seconds: s.arrival_uncertainty_seconds,
+    departure_at: s.departure_at,
+    departure_local: toZonedIso(s.departure_at, tz2),
+    departure_marker: !s.departure_at ? "unknown" : s.departure_uncertainty_seconds ? "inferred_interval" : "observed",
+    departure_window_seconds: s.departure_uncertainty_seconds,
+    dwell_seconds: s.dwell_seconds,
+    dwell: s.dwell_seconds === null ? "unknown (departure not observed)" : formatDuration(s.dwell_seconds),
+    centroid: { lat: s.centroid_lat, lon: s.centroid_lon },
+    radius_m: s.radius_m,
+    mean_accuracy_m: s.mean_accuracy_m,
+    point_count: s.point_count,
+    confidence: s.confidence
+  };
+}
+function legView(l, tz2) {
+  return {
+    id: l.id,
+    seq: l.seq,
+    from_stop_id: l.from_stop_id,
+    to_stop_id: l.to_stop_id,
+    started_at: l.started_at,
+    started_local: toZonedIso(l.started_at, tz2),
+    ended_at: l.ended_at,
+    ended_local: toZonedIso(l.ended_at, tz2),
+    actual_seconds: l.actual_seconds,
+    actual: formatDuration(l.actual_seconds),
+    actual_marker: "observed",
+    observed_distance_km: l.observed_distance_km,
+    travel_mode: l.travel_mode,
+    missing_intervals: l.missing_intervals,
+    coverage_ratio: l.coverage_ratio,
+    expected_seconds: l.expected_seconds,
+    expected_distance_km: l.expected_distance_km,
+    comparison_basis: l.comparison_basis,
+    routing_provider: l.routing_provider,
+    delay_seconds: l.delay_seconds,
+    delay_marker: l.delay_seconds === null ? "unknown" : "inferred",
+    confidence: l.confidence
+  };
+}
+async function runLocationAction(sb, userId, action, a) {
+  const tz2 = typeof a?.timezone === "string" && a.timezone ? a.timezone : DEFAULT_TZ;
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: tz2 });
+  } catch {
+    return { ok: false, error: "invalid_timezone" };
+  }
+  switch (action) {
+    case "list_location_devices": {
+      const { data, error } = await sb.from("location_devices").select("id, display_name, source, enabled, last_seen_at, created_at, revoked_at").eq("user_id", userId).order("created_at");
+      if (error) return { ok: false, error: error.message };
+      return { ok: true, devices: data ?? [], note: "Register devices in the VantoOS app (Travel \u2192 trip \u2192 Tracking). Tokens are never shown here." };
+    }
+    case "get_location_capture_status": {
+      const [{ data: devices }, { data: sessions }, { count: unassigned }, { data: lastPt }] = await Promise.all([
+        sb.from("location_devices").select("id, display_name, enabled, last_seen_at, revoked_at").eq("user_id", userId),
+        sb.from("trip_tracking_sessions").select("id, trip_id, device_id, status, actual_started_at, actual_ended_at").eq("user_id", userId).neq("status", "ended"),
+        sb.from("trip_location_points").select("id", { count: "exact", head: true }).eq("user_id", userId).is("trip_id", null),
+        sb.from("trip_location_points").select("recorded_at, received_at, accuracy_m, trip_id").eq("user_id", userId).order("recorded_at", { ascending: false }).limit(1).maybeSingle()
+      ]);
+      return {
+        ok: true,
+        now: (/* @__PURE__ */ new Date()).toISOString(),
+        timezone: tz2,
+        devices: devices ?? [],
+        open_tracking_sessions: sessions ?? [],
+        unassigned_point_count: unassigned ?? 0,
+        last_fix: lastPt ? { ...lastPt, recorded_local: toZonedIso(lastPt.recorded_at, tz2) } : null,
+        message: lastPt ? void 0 : NO_GPS
+      };
+    }
+    case "get_trip_timeline": {
+      const trip = await ownTrip(sb, userId, String(a.trip_id ?? ""));
+      if (!trip) return { ok: false, error: "not_found" };
+      const [{ data: stops }, { data: legs }, { data: sessions }, { count }] = await Promise.all([
+        sb.from("trip_stops").select("*").eq("user_id", userId).eq("trip_id", trip.id).order("seq"),
+        sb.from("trip_legs").select("*").eq("user_id", userId).eq("trip_id", trip.id).order("seq"),
+        sb.from("trip_tracking_sessions").select("status, actual_started_at, actual_ended_at").eq("user_id", userId).eq("trip_id", trip.id),
+        sb.from("trip_location_points").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("trip_id", trip.id)
+      ]);
+      const base = {
+        trip: { ...trip, end_date_marker: "planned (provisional \u2014 not a confirmed end time)" },
+        tracking_sessions: sessions ?? [],
+        timezone: tz2,
+        point_count: count ?? 0
+      };
+      if (!count) return { ok: true, ...base, message: NO_GPS, stops: [], legs: [] };
+      return { ok: true, ...base, stops: (stops ?? []).map((s) => stopView(s, tz2)), legs: (legs ?? []).map((l) => legView(l, tz2)) };
+    }
+    case "list_trip_stops": {
+      const trip = await ownTrip(sb, userId, String(a.trip_id ?? ""));
+      if (!trip) return { ok: false, error: "not_found" };
+      const limit = Math.min(Math.max(Number(a.limit ?? 25), 1), 100);
+      const after = Number(a.cursor ?? 0) || 0;
+      const { data, error } = await sb.from("trip_stops").select("*").eq("user_id", userId).eq("trip_id", trip.id).gt("seq", after).order("seq").limit(limit + 1);
+      if (error) return { ok: false, error: error.message };
+      const rows = data ?? [];
+      const page = rows.slice(0, limit);
+      return {
+        ok: true,
+        timezone: tz2,
+        stops: page.map((s) => stopView(s, tz2)),
+        next_cursor: rows.length > limit ? String(page[page.length - 1].seq) : null,
+        message: page.length || after ? void 0 : "No stops detected (or No GPS recorded)."
+      };
+    }
+    case "get_trip_route": {
+      const trip = await ownTrip(sb, userId, String(a.trip_id ?? ""));
+      if (!trip) return { ok: false, error: "not_found" };
+      const { data: pts } = await sb.from("trip_location_points").select("id, recorded_at, latitude, longitude, accuracy_m, quality_status").eq("user_id", userId).eq("trip_id", trip.id).order("recorded_at").limit(2e4);
+      if (!pts?.length) return { ok: true, message: NO_GPS, segments: [], missing_intervals: [] };
+      const reliable = classifyQuality(pts).filter((p) => p.quality_status === "accepted");
+      const simplifyM = a.simplify === false ? 0 : 25;
+      const segments = routeSegments(reliable).map((seg) => {
+        const out = [seg[0]];
+        for (const p of seg.slice(1)) {
+          const l = out[out.length - 1];
+          if (haversineM(l.latitude, l.longitude, p.latitude, p.longitude) >= simplifyM) out.push(p);
+        }
+        if (out[out.length - 1] !== seg[seg.length - 1]) out.push(seg[seg.length - 1]);
+        return {
+          from: seg[0].recorded_at,
+          to: seg[seg.length - 1].recorded_at,
+          marker: "observed",
+          points: out.map((p) => [Number(p.latitude.toFixed(6)), Number(p.longitude.toFixed(6)), p.recorded_at, p.accuracy_m])
+        };
+      });
+      return {
+        ok: true,
+        point_format: "[lat, lon, recorded_at, accuracy_m]",
+        total_points: pts.length,
+        excluded_low_quality: pts.length - reliable.length,
+        segments,
+        missing_intervals: findGaps(reliable).map((g) => ({ ...g, marker: "unknown \u2014 no GPS, not drawn" }))
+      };
+    }
+    case "compare_leg_to_expected": {
+      const trip = await ownTrip(sb, userId, String(a.trip_id ?? ""));
+      if (!trip) return { ok: false, error: "not_found" };
+      const { data: leg } = await sb.from("trip_legs").select("*").eq("user_id", userId).eq("trip_id", trip.id).eq("id", String(a.leg_id ?? "")).maybeSingle();
+      if (!leg) return { ok: false, error: "leg_not_found" };
+      const v = legView(leg, tz2);
+      let verdict;
+      if (leg.travel_mode === "flight") verdict = "Flight leg \u2014 not compared with a car route.";
+      else if (leg.delay_seconds === null) verdict = `No comparable expected time (basis: ${leg.comparison_basis}).`;
+      else verdict = leg.delay_seconds > 300 ? `Ran about ${formatDuration(leg.delay_seconds)} longer than the ${leg.comparison_basis.replace("_", " ")} estimate.` : "Within 5 minutes of the estimate.";
+      if (leg.coverage_ratio !== null && leg.coverage_ratio < 0.7) verdict += " Low GPS coverage on this leg \u2014 treat as indicative.";
+      return { ok: true, leg: v, verdict };
+    }
+    case "link_trip_expense_to_stop": {
+      const { error } = await sb.from("trip_expense_stop_links").insert({
+        trip_expense_id: String(a.trip_expense_id ?? ""),
+        trip_stop_id: String(a.trip_stop_id ?? ""),
+        user_id: userId
+      });
+      if (error && error.code !== "23505") return { ok: false, error: error.message };
+      return { ok: true, linked: true, note: "Reference only \u2014 no finance entry was created or changed." };
+    }
+    case "set_trip_stop_label": {
+      const label = String(a.label ?? "").trim().slice(0, 200);
+      const { data, error } = await sb.from("trip_stops").update({ label_override: label || null, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("user_id", userId).eq("id", String(a.stop_id ?? "")).select("id, label_override").maybeSingle();
+      if (error) return { ok: false, error: error.message };
+      if (!data) return { ok: false, error: "stop_not_found" };
+      return { ok: true, stop: data, note: "Your label survives recomputation." };
+    }
+    case "export_trip_location_data": {
+      const trip = await ownTrip(sb, userId, String(a.trip_id ?? ""));
+      if (!trip) return { ok: false, error: "not_found" };
+      const [{ data: points }, { data: stops }, { data: legs }] = await Promise.all([
+        sb.from("trip_location_points").select("recorded_at, latitude, longitude, accuracy_m, speed_kmh, heading_deg, altitude_m, source, quality_status").eq("user_id", userId).eq("trip_id", trip.id).order("recorded_at").limit(5e3),
+        sb.from("trip_stops").select("*").eq("user_id", userId).eq("trip_id", trip.id).order("seq"),
+        sb.from("trip_legs").select("*").eq("user_id", userId).eq("trip_id", trip.id).order("seq")
+      ]);
+      return { ok: true, exported_at: (/* @__PURE__ */ new Date()).toISOString(), trip, points: points ?? [], points_capped_at: 5e3, stops: stops ?? [], legs: legs ?? [], message: points?.length ? void 0 : NO_GPS };
+    }
+    case "delete_trip_location_data": {
+      if (a.confirm !== true) return { ok: false, error: "confirm_required: pass confirm=true after the user explicitly agrees" };
+      const trip = await ownTrip(sb, userId, String(a.trip_id ?? ""));
+      if (!trip) return { ok: false, error: "not_found" };
+      const scope = a.scope === "points" || a.scope === "derived" ? a.scope : "all";
+      const deleted = {};
+      if (scope !== "points") {
+        const l = await sb.from("trip_legs").delete({ count: "exact" }).eq("user_id", userId).eq("trip_id", trip.id);
+        const s = await sb.from("trip_stops").delete({ count: "exact" }).eq("user_id", userId).eq("trip_id", trip.id);
+        deleted.legs = l.count ?? 0;
+        deleted.stops = s.count ?? 0;
+      }
+      if (scope !== "derived") {
+        const p = await sb.from("trip_location_points").delete({ count: "exact" }).eq("user_id", userId).eq("trip_id", trip.id);
+        if (p.error) return { ok: false, error: p.error.message };
+        deleted.points = p.count ?? 0;
+      }
+      return { ok: true, scope, deleted, note: "Trip, expenses and finance entries were not touched." };
+    }
+  }
+  return { ok: false, error: `unknown_action: ${action}` };
+}
+
+// src/lib/mcp/tools/location.ts
+async function run(action, args, ctx) {
+  const fail2 = (text) => ({ content: [{ type: "text", text }], isError: true });
+  if (!ctx.isAuthenticated()) return fail2("Not authenticated");
+  const userId = ctx.getUserId();
+  if (!userId) return fail2("Not authenticated");
+  const res = await runLocationAction(supabaseForUser(ctx), userId, action, { ...args ?? {} });
+  if (!res.ok) return fail2(String(res.error ?? "error"));
+  return { content: [{ type: "text", text: JSON.stringify(res, null, 2) }] };
+}
+var ro = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
+var tz = z13.string().optional().describe("IANA timezone for *_local fields, default Africa/Johannesburg (+02:00)");
+var location_default = [
+  defineTool13({
+    name: "list_location_devices",
+    title: "List Location Devices",
+    description: "List GPS devices registered for trip tracking (no tokens). Read-only.",
+    inputSchema: {},
+    annotations: ro,
+    handler: (args, ctx) => run("list_location_devices", args, ctx)
+  }),
+  defineTool13({
+    name: "get_location_capture_status",
+    title: "Get Location Capture Status",
+    description: "Devices, open tracking sessions, last GPS fix and unassigned point count. Read-only.",
+    inputSchema: { timezone: tz },
+    annotations: ro,
+    handler: (args, ctx) => run("get_location_capture_status", args, ctx)
+  }),
+  defineTool13({
+    name: "get_trip_timeline",
+    title: "Get Trip Timeline",
+    description: "Stops and legs for a trip with UTC and local timestamps, dwell, delays, confidence and observed/inferred/unknown markers. Says 'No GPS recorded' when empty. Read-only.",
+    inputSchema: { trip_id: z13.string().describe("trips.id \u2014 required"), timezone: tz },
+    annotations: ro,
+    handler: (args, ctx) => run("get_trip_timeline", args, ctx)
+  }),
+  defineTool13({
+    name: "list_trip_stops",
+    title: "List Trip Stops",
+    description: "Paginated detected stops for a trip. Read-only.",
+    inputSchema: {
+      trip_id: z13.string().describe("trips.id \u2014 required"),
+      limit: z13.number().int().min(1).max(100).optional(),
+      cursor: z13.string().optional().describe("next_cursor from a previous call"),
+      timezone: tz
+    },
+    annotations: ro,
+    handler: (args, ctx) => run("list_trip_stops", args, ctx)
+  }),
+  defineTool13({
+    name: "get_trip_route",
+    title: "Get Trip Route",
+    description: "Observed route as segments split at missing intervals (gaps are never drawn as roads). Read-only.",
+    inputSchema: { trip_id: z13.string().describe("trips.id \u2014 required"), simplify: z13.boolean().optional().describe("Default true (~25 m)") },
+    annotations: ro,
+    handler: (args, ctx) => run("get_trip_route", args, ctx)
+  }),
+  defineTool13({
+    name: "compare_leg_to_expected",
+    title: "Compare Leg To Expected",
+    description: "Compare one leg's actual time with its expected time, stating the comparison basis honestly. Read-only.",
+    inputSchema: { trip_id: z13.string(), leg_id: z13.string(), timezone: tz },
+    annotations: ro,
+    handler: (args, ctx) => run("compare_leg_to_expected", args, ctx)
+  }),
+  defineTool13({
+    name: "link_trip_expense_to_stop",
+    title: "Link Trip Expense To Stop",
+    description: "Record that a trip expense happened at a stop. Reference only \u2014 never creates or changes finance entries.",
+    inputSchema: { trip_expense_id: z13.string(), trip_stop_id: z13.string() },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: (args, ctx) => run("link_trip_expense_to_stop", args, ctx)
+  }),
+  defineTool13({
+    name: "set_trip_stop_label",
+    title: "Set Trip Stop Label",
+    description: "Set your own name for a stop. Survives recomputation. Empty label clears it.",
+    inputSchema: { stop_id: z13.string(), label: z13.string().max(200) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    handler: (args, ctx) => run("set_trip_stop_label", args, ctx)
+  }),
+  defineTool13({
+    name: "export_trip_location_data",
+    title: "Export Trip Location Data",
+    description: "Export a trip's points (up to 5000), stops and legs as JSON. Read-only.",
+    inputSchema: { trip_id: z13.string() },
+    annotations: ro,
+    handler: (args, ctx) => run("export_trip_location_data", args, ctx)
+  }),
+  defineTool13({
+    name: "delete_trip_location_data",
+    title: "Delete Trip Location Data",
+    description: "Permanently delete a trip's GPS data. scope: points | derived (stops+legs) | all. Requires confirm=true after the user explicitly agrees. Never touches the trip, expenses or finance.",
+    inputSchema: {
+      trip_id: z13.string(),
+      scope: z13.enum(["points", "derived", "all"]),
+      confirm: z13.boolean().describe("Must be true")
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    handler: (args, ctx) => run("delete_trip_location_data", args, ctx)
+  })
+];
+
 // src/lib/mcp/index.ts
 var projectRef = "zsvaqtlomgofwqkpwxeh";
 var mcp_default = defineMcp({
   name: "vantoos",
   title: "VantoOS",
   version: "2.0.0",
-  instructions: "VantoOS executive command center. Tools act as the signed-in user: contacts (admins only), projects, notes, voice diary, tasks, reminders, meetings, finance, budget, shopping, travel, trusted sources, wellness and paper-only trading.",
+  instructions: "VantoOS executive command center. Tools act as the signed-in user: contacts (admins only), projects, notes, voice diary, tasks, reminders, meetings, finance, budget, shopping, travel, trusted sources, wellness, paper-only trading and GPS trip timelines (stops, legs, delays).",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -3058,7 +3469,8 @@ var mcp_default = defineMcp({
     ...travel_default,
     ...trusted_sources_default,
     ...wellness_default,
-    ...trading_default
+    ...trading_default,
+    ...location_default
   ]
 });
 
